@@ -3,15 +3,16 @@ build-backend = "hatchling.build"
 requires = [ "hatch-vcs", "hatchling" ]
 
 [project]
-name = "xdsltemplate"  # TODO: Change this
-description = "A template project using xDSL."  # TODO: Change this
+name = "projxdsl"
+description = "Quantum programming with projective predicates"
 readme = "README.md"
 license = { text = "Apache License v2.0 with LLVM Exceptions" }
-authors = []  # TODO: Change this
-requires-python = ">=3.10"
+authors = [
+  { name = "Alex Rice", email = "alexrice999@hotmail.co.uk" },
+]
+requires-python = ">=3.11"
 classifiers = [
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
@@ -23,10 +24,9 @@ dynamic = [ "version" ]
 dependencies = [
   "xdsl~=0.73.0",
 ]
-urls."Issue Tracker" = "https://github.com/xdslproject/xdsl-template/issues"  # TODO: Change this
-urls."Source Code" = "https://github.com/xdslproject/xdsl-template"  # TODO: Change this
-urls.Homepage = "https://xdsl.dev/xdsl-template"  # TODO: Change this
-entry-points."xdsl.universe".xdsl_template = "xdsltemplate.universe:UNIVERSE"  # TODO: Change this
+urls."Issue Tracker" = "https://github.com/alexarice/proj-paper/issues"
+urls."Source Code" = "https://github.com/alexarice/proj-paper"
+entry-points."xdsl.universe".projxdsl = "projxdsl.universe:UNIVERSE"
 
 [dependency-groups]
 dev = [
