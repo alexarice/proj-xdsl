@@ -9,7 +9,7 @@ This document specifies the type system for a quantum programming language based
 ## Core Types
 
 ```
-Q           - Qubit (unborrowed)
+Q           - Qubit
 Q<B>        - Qubit borrowed in basis B, where B ∈ {X, Y, Z}
 P           - Projection (opaque type)
 B           - Classical boolean (subtype of P)
