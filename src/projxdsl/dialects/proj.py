@@ -171,10 +171,29 @@ class NotOp(IRDLOperation):
     assembly_format = "$input attr-dict `:` type($input)"
 
 
+@irdl_op_definition
+class AndOp(IRDLOperation):
+    """
+    Conjunction operation for projections or booleans.
+    Takes two operands of the same type (P or i1) and returns the same type.
+    """
+
+    name = "proj.and"
+
+    T: ClassVar = VarConstraint("T", ProjectionOrBoolConstr)
+
+    lhs = operand_def(T)
+    rhs = operand_def(T)
+    result = result_def(T)
+
+    assembly_format = "$lhs `,` $rhs attr-dict `:` type($result)"
+
+
 Proj = Dialect(
     "proj",
     [
         NotOp,
+        AndOp,
     ],
     [
         BasisAttr,
