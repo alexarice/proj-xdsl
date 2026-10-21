@@ -35,3 +35,16 @@ func.func @test_from_bool(%arg0: i1) -> !proj.projection {
   %0 = proj.from_bool %arg0
   func.return %0 : !proj.projection
 }
+
+// Test proj.eq with different states
+func.func @test_eq_zero(%arg0: !proj.qubit) -> !proj.projection {
+  // CHECK: %0 = proj.eq %arg0, <zero> : !proj.qubit
+  %0 = proj.eq %arg0, <zero> : !proj.qubit
+  func.return %0 : !proj.projection
+}
+
+func.func @test_eq_plus(%arg0: !proj.qubit<x>) -> !proj.projection {
+  // CHECK: %0 = proj.eq %arg0, <plus> : !proj.qubit<x>
+  %0 = proj.eq %arg0, <plus> : !proj.qubit<x>
+  func.return %0 : !proj.projection
+}

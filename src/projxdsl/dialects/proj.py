@@ -11,6 +11,7 @@ from xdsl.irdl import (
     irdl_op_definition,
     irdl_to_attr_constraint,
     operand_def,
+    prop_def,
     result_def,
 )
 from xdsl.parser import AttrParser
@@ -229,6 +230,23 @@ class FromBoolOp(IRDLOperation):
     assembly_format = "$input attr-dict"
 
 
+@irdl_op_definition
+class EqOp(IRDLOperation):
+    """
+    Projection creation operation.
+    Creates a projection by comparing a qubit to a ket state.
+    The state determines the basis (ZERO/ONE=Z, PLUS/MINUS=X, LEFT/RIGHT=Y).
+    """
+
+    name = "proj.eq"
+
+    qubit = operand_def(QubitType)
+    state = prop_def(StateAttr)
+    result = result_def(ProjectionType)
+
+    assembly_format = "$qubit `,` $state attr-dict `:` type($qubit)"
+
+
 Proj = Dialect(
     "proj",
     [
@@ -237,6 +255,7 @@ Proj = Dialect(
         OrOp,
         XorOp,
         FromBoolOp,
+        EqOp,
     ],
     [
         BasisAttr,
