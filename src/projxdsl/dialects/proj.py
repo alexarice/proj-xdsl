@@ -51,6 +51,61 @@ class BasisAttr(EnumAttribute[Basis]):
             super().print_parameter(printer)
 
 
+class State(StrEnum):
+    """
+    State enum for ket states.
+    """
+
+    ZERO = auto()
+    ONE = auto()
+    PLUS = auto()
+    MINUS = auto()
+    LEFT = auto()
+    RIGHT = auto()
+
+
+@irdl_attr_definition
+class StateAttr(EnumAttribute[State]):
+    """
+    State attribute for ket states (|0>, |1>, |+>, |->, |L>, |R>).
+    """
+
+    name = "proj.state"
+
+    @classmethod
+    def ZERO(cls) -> StateAttr:
+        return StateAttr(State.ZERO)
+
+    @classmethod
+    def ONE(cls) -> StateAttr:
+        return StateAttr(State.ONE)
+
+    @classmethod
+    def PLUS(cls) -> StateAttr:
+        return StateAttr(State.PLUS)
+
+    @classmethod
+    def MINUS(cls) -> StateAttr:
+        return StateAttr(State.MINUS)
+
+    @classmethod
+    def LEFT(cls) -> StateAttr:
+        return StateAttr(State.LEFT)
+
+    @classmethod
+    def RIGHT(cls) -> StateAttr:
+        return StateAttr(State.RIGHT)
+
+    @classmethod
+    def parse_parameter(cls, parser: AttrParser) -> State:
+        with parser.in_angle_brackets():
+            return super().parse_parameter(parser)
+
+    def print_parameter(self, printer: Printer) -> None:
+        with printer.in_angle_brackets():
+            super().print_parameter(printer)
+
+
 @irdl_attr_definition
 class ProjectionType(ParametrizedAttribute, TypeAttribute):
     """
@@ -72,8 +127,7 @@ class QubitType(ParametrizedAttribute, TypeAttribute):
 
     def print_parameters(self, printer: Printer) -> None:
         if isinstance(self.borrow_type, BasisAttr):
-            with printer.in_angle_brackets():
-                printer.print_identifier_or_string_literal(self.borrow_type.data.value)
+            self.borrow_type.print_parameter(printer)
 
     @classmethod
     def parse_parameters(cls, parser: AttrParser) -> tuple[BasisAttr | NoneAttr]:
@@ -92,6 +146,7 @@ Proj = Dialect(
     [],
     [
         BasisAttr,
+        StateAttr,
         QubitType,
         ProjectionType,
     ],
