@@ -15,6 +15,20 @@ func.func @test_and(%arg0: !proj.projection, %arg1: !proj.projection) -> !proj.p
   func.return %0 : !proj.projection
 }
 
+func.func @test_or(%arg0: !proj.projection, %arg1: !proj.projection) -> !proj.projection {
+  // CHECK: %0 = proj.or %arg0, %arg1
+  // CHECK-GENERIC: %[[O0:.*]] = "proj.or"(%[[OP2:.*]], %[[OP3:.*]]) : (!proj.projection, !proj.projection) -> !proj.projection
+  %0 = proj.or %arg0, %arg1
+  func.return %0 : !proj.projection
+}
+
+func.func @test_xor(%arg0: !proj.projection, %arg1: !proj.projection) -> !proj.projection {
+  // CHECK: %0 = proj.xor %arg0, %arg1
+  // CHECK-GENERIC: %[[X0:.*]] = "proj.xor"(%[[OP4:.*]], %[[OP5:.*]]) : (!proj.projection, !proj.projection) -> !proj.projection
+  %0 = proj.xor %arg0, %arg1
+  func.return %0 : !proj.projection
+}
+
 func.func @test_from_bool(%arg0: i1) -> !proj.projection {
   // CHECK: %0 = proj.from_bool %arg0
   // CHECK-GENERIC: %[[F0:.*]] = "proj.from_bool"(%[[B0:.*]]) : (i1) -> !proj.projection

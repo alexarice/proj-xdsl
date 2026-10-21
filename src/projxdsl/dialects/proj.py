@@ -183,6 +183,38 @@ class AndOp(IRDLOperation):
 
 
 @irdl_op_definition
+class OrOp(IRDLOperation):
+    """
+    Disjunction operation for projections.
+    Takes two projections and returns a projection.
+    """
+
+    name = "proj.or"
+
+    lhs = operand_def(ProjectionType)
+    rhs = operand_def(ProjectionType)
+    result = result_def(ProjectionType)
+
+    assembly_format = "$lhs `,` $rhs attr-dict"
+
+
+@irdl_op_definition
+class XorOp(IRDLOperation):
+    """
+    Exclusive-or operation for projections.
+    Takes two projections and returns a projection.
+    """
+
+    name = "proj.xor"
+
+    lhs = operand_def(ProjectionType)
+    rhs = operand_def(ProjectionType)
+    result = result_def(ProjectionType)
+
+    assembly_format = "$lhs `,` $rhs attr-dict"
+
+
+@irdl_op_definition
 class FromBoolOp(IRDLOperation):
     """
     Cast operation from boolean to projection.
@@ -202,6 +234,8 @@ Proj = Dialect(
     [
         NotOp,
         AndOp,
+        OrOp,
+        XorOp,
         FromBoolOp,
     ],
     [
