@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from enum import auto
 
+from xdsl.dialects.builtin import NoneAttr
 from xdsl.dialects.utils import EnumAttribute
 from xdsl.ir import Dialect, ParametrizedAttribute, TypeAttribute
 from xdsl.irdl import irdl_attr_definition
@@ -62,10 +63,28 @@ class ProjectionType(ParametrizedAttribute, TypeAttribute):
 @irdl_attr_definition
 class QubitType(ParametrizedAttribute, TypeAttribute):
     """
-    Q - Qubit type
+    Q - Qubit type with optional basis borrow annotation.
     """
 
     name = "proj.qubit"
+
+    borrow_type: BasisAttr | NoneAttr
+
+    def print_parameters(self, printer: Printer) -> None:
+        if isinstance(self.borrow_type, BasisAttr):
+            with printer.in_angle_brackets():
+                printer.print_identifier_or_string_literal(self.borrow_type.data.value)
+
+    @classmethod
+    def parse_parameters(cls, parser: AttrParser) -> tuple[BasisAttr | NoneAttr]:
+        if parser.parse_optional_characters("<") is None:
+            return (NoneAttr(),)
+        basis = parser.parse_str_enum(Basis)
+        parser.parse_characters(">", " to close proj.qubit parameters")
+        return (BasisAttr(basis),)
+
+    def __init__(self, borrow_type: BasisAttr | NoneAttr = NoneAttr()):
+        super().__init__(borrow_type)
 
 
 Proj = Dialect(
