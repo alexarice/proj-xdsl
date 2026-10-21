@@ -1,7 +1,53 @@
 from __future__ import annotations
 
+from enum import auto
+
+from xdsl.dialects.utils import EnumAttribute
 from xdsl.ir import Dialect, ParametrizedAttribute, TypeAttribute
 from xdsl.irdl import irdl_attr_definition
+from xdsl.parser import AttrParser
+from xdsl.printer import Printer
+from xdsl.utils.str_enum import StrEnum
+
+
+class Basis(StrEnum):
+    """
+    Basis enum for qubit borrow annotations.
+    """
+
+    X = auto()
+    Y = auto()
+    Z = auto()
+
+
+@irdl_attr_definition
+class BasisAttr(EnumAttribute[Basis]):
+    """
+    Basis attribute (B ∈ {X, Y, Z}).
+    """
+
+    name = "proj.basis"
+
+    @classmethod
+    def X(cls) -> BasisAttr:
+        return BasisAttr(Basis.X)
+
+    @classmethod
+    def Y(cls) -> BasisAttr:
+        return BasisAttr(Basis.Y)
+
+    @classmethod
+    def Z(cls) -> BasisAttr:
+        return BasisAttr(Basis.Z)
+
+    @classmethod
+    def parse_parameter(cls, parser: AttrParser) -> Basis:
+        with parser.in_angle_brackets():
+            return super().parse_parameter(parser)
+
+    def print_parameter(self, printer: Printer) -> None:
+        with printer.in_angle_brackets():
+            super().print_parameter(printer)
 
 
 @irdl_attr_definition
@@ -26,6 +72,7 @@ Proj = Dialect(
     "proj",
     [],
     [
+        BasisAttr,
         QubitType,
         ProjectionType,
     ],
