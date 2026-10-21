@@ -1,11 +1,20 @@
 from __future__ import annotations
 
 from enum import auto
+from typing import ClassVar
 
-from xdsl.dialects.builtin import NoneAttr
+from xdsl.dialects.builtin import IntegerType, NoneAttr
 from xdsl.dialects.utils import EnumAttribute
 from xdsl.ir import Dialect, ParametrizedAttribute, TypeAttribute
-from xdsl.irdl import irdl_attr_definition
+from xdsl.irdl import (
+    IRDLOperation,
+    VarConstraint,
+    irdl_attr_definition,
+    irdl_op_definition,
+    irdl_to_attr_constraint,
+    operand_def,
+    result_def,
+)
 from xdsl.parser import AttrParser
 from xdsl.printer import Printer
 from xdsl.utils.str_enum import StrEnum
@@ -141,9 +150,32 @@ class QubitType(ParametrizedAttribute, TypeAttribute):
         super().__init__(borrow_type)
 
 
+ProjectionOrBool = ProjectionType | IntegerType[1]
+ProjectionOrBoolConstr = irdl_to_attr_constraint(ProjectionOrBool)
+
+
+@irdl_op_definition
+class NotOp(IRDLOperation):
+    """
+    Negation operation for projections or booleans.
+    Takes a projection (P) or boolean (i1) and returns the same type.
+    """
+
+    name = "proj.not"
+
+    T: ClassVar = VarConstraint("T", ProjectionOrBoolConstr)
+
+    input = operand_def(T)
+    result = result_def(T)
+
+    assembly_format = "$input attr-dict `:` type($input)"
+
+
 Proj = Dialect(
     "proj",
-    [],
+    [
+        NotOp,
+    ],
     [
         BasisAttr,
         StateAttr,
