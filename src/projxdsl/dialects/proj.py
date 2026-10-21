@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 from enum import auto
-from typing import ClassVar
 
-from xdsl.dialects.builtin import IntegerType, NoneAttr
+from xdsl.dialects.builtin import NoneAttr, i1
 from xdsl.dialects.utils import EnumAttribute
 from xdsl.ir import Dialect, ParametrizedAttribute, TypeAttribute
 from xdsl.irdl import (
     IRDLOperation,
-    VarConstraint,
     irdl_attr_definition,
     irdl_op_definition,
     irdl_to_attr_constraint,
@@ -150,43 +148,53 @@ class QubitType(ParametrizedAttribute, TypeAttribute):
         super().__init__(borrow_type)
 
 
-ProjectionOrBool = ProjectionType | IntegerType[1]
-ProjectionOrBoolConstr = irdl_to_attr_constraint(ProjectionOrBool)
+ProjectionConstr = irdl_to_attr_constraint(ProjectionType)
 
 
 @irdl_op_definition
 class NotOp(IRDLOperation):
     """
-    Negation operation for projections or booleans.
-    Takes a projection (P) or boolean (i1) and returns the same type.
+    Negation operation for projections.
+    Takes a projection (P) and returns a projection.
     """
 
     name = "proj.not"
 
-    T: ClassVar = VarConstraint("T", ProjectionOrBoolConstr)
+    input = operand_def(ProjectionType)
+    result = result_def(ProjectionType)
 
-    input = operand_def(T)
-    result = result_def(T)
-
-    assembly_format = "$input attr-dict `:` type($input)"
+    assembly_format = "$input attr-dict"
 
 
 @irdl_op_definition
 class AndOp(IRDLOperation):
     """
-    Conjunction operation for projections or booleans.
-    Takes two operands of the same type (P or i1) and returns the same type.
+    Conjunction operation for projections.
+    Takes two projections and returns a projection.
     """
 
     name = "proj.and"
 
-    T: ClassVar = VarConstraint("T", ProjectionOrBoolConstr)
+    lhs = operand_def(ProjectionType)
+    rhs = operand_def(ProjectionType)
+    result = result_def(ProjectionType)
 
-    lhs = operand_def(T)
-    rhs = operand_def(T)
-    result = result_def(T)
+    assembly_format = "$lhs `,` $rhs attr-dict"
 
-    assembly_format = "$lhs `,` $rhs attr-dict `:` type($result)"
+
+@irdl_op_definition
+class FromBoolOp(IRDLOperation):
+    """
+    Cast operation from boolean to projection.
+    Takes a boolean (i1) and returns a projection.
+    """
+
+    name = "proj.from_bool"
+
+    input = operand_def(i1)
+    result = result_def(ProjectionType)
+
+    assembly_format = "$input attr-dict"
 
 
 Proj = Dialect(
@@ -194,6 +202,7 @@ Proj = Dialect(
     [
         NotOp,
         AndOp,
+        FromBoolOp,
     ],
     [
         BasisAttr,
