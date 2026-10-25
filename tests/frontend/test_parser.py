@@ -26,20 +26,20 @@ class TestTypeParsing:
     """Test parsing of types."""
 
     def test_qubit_unborrowed(self):
-        result = parse_type("Q")
+        result = parse_type("qubit")
         assert isinstance(result, QubitType)
         assert isinstance(result.borrow_type, NoneAttr)
 
     def test_projection(self):
-        result = parse_type("P")
+        result = parse_type("proj")
         assert isinstance(result, ProjectionType)
 
     def test_boolean(self):
-        result = parse_type("B")
+        result = parse_type("bool")
         assert result == i1
 
     def test_angle(self):
-        result = parse_type("A")
+        result = parse_type("angle")
         assert isinstance(result, AngleType)
 
 
@@ -47,34 +47,34 @@ class TestQubitWithBasis:
     """Test parsing of qubit types with basis annotations (uppercase only)."""
 
     def test_qubit_x_upper(self):
-        result = parse_type("Q<X>")
+        result = parse_type("qubit<X>")
         assert isinstance(result, QubitType)
         assert isinstance(result.borrow_type, BasisAttr)
         assert result.borrow_type.data == Basis.X
 
     def test_qubit_y_upper(self):
-        result = parse_type("Q<Y>")
+        result = parse_type("qubit<Y>")
         assert isinstance(result, QubitType)
         assert isinstance(result.borrow_type, BasisAttr)
         assert result.borrow_type.data == Basis.Y
 
     def test_qubit_z_upper(self):
-        result = parse_type("Q<Z>")
+        result = parse_type("qubit<Z>")
         assert isinstance(result, QubitType)
         assert isinstance(result.borrow_type, BasisAttr)
         assert result.borrow_type.data == Basis.Z
 
     def test_qubit_x_lower_invalid(self):
         with pytest.raises(ParseError, match="uppercase only"):
-            parse_type("Q<x>")
+            parse_type("qubit<x>")
 
     def test_qubit_y_lower_invalid(self):
         with pytest.raises(ParseError, match="uppercase only"):
-            parse_type("Q<y>")
+            parse_type("qubit<y>")
 
     def test_qubit_z_lower_invalid(self):
         with pytest.raises(ParseError, match="uppercase only"):
-            parse_type("Q<z>")
+            parse_type("qubit<z>")
 
 
 class TestErrorHandling:
@@ -86,22 +86,22 @@ class TestErrorHandling:
             parser.parse_type()
 
     def test_missing_basis(self):
-        parser = ProjParser("Q<")
+        parser = ProjParser("qubit<")
         with pytest.raises(ParseError, match="Expected basis"):
             parser.parse_type()
 
     def test_invalid_basis(self):
-        parser = ProjParser("Q<Invalid>")
+        parser = ProjParser("qubit<Invalid>")
         with pytest.raises(ParseError, match="Invalid basis"):
             parser.parse_type()
 
     def test_missing_closing_bracket(self):
-        parser = ProjParser("Q<X")
+        parser = ProjParser("qubit<X")
         with pytest.raises(ParseError, match="Expected '>'"):
             parser.parse_type()
 
     def test_unexpected_token_after_type(self):
-        parser = ProjParser("Q foo")
+        parser = ProjParser("qubit foo")
         parser.parse_type()
         with pytest.raises(ParseError, match="Unexpected token"):
             parser.expect_eof()
@@ -121,7 +121,7 @@ class TestMixedCase:
             ("Y", Basis.Y),
             ("Z", Basis.Z),
         ]:
-            result = parse_type(f"Q<{basis_char}>")
+            result = parse_type(f"qubit<{basis_char}>")
             assert isinstance(result, QubitType)
             assert isinstance(result.borrow_type, BasisAttr)
             assert result.borrow_type.data == expected_basis
@@ -129,4 +129,4 @@ class TestMixedCase:
     def test_lowercase_basis_rejected(self):
         for basis_char in ["x", "y", "z"]:
             with pytest.raises(ParseError, match="uppercase only"):
-                parse_type(f"Q<{basis_char}>")
+                parse_type(f"qubit<{basis_char}>")

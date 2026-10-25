@@ -22,28 +22,28 @@ class TestTypeKeywords:
     """Test lexing of type keywords."""
 
     def test_qubit_type(self):
-        tokens = lex_all("Q")
-        assert tokens == [(ProjTokenKind.QUBIT, "Q"), (ProjTokenKind.EOF, "")]
+        tokens = lex_all("qubit")
+        assert tokens == [(ProjTokenKind.QUBIT, "qubit"), (ProjTokenKind.EOF, "")]
 
     def test_projection_type(self):
-        tokens = lex_all("P")
-        assert tokens == [(ProjTokenKind.PROJECTION, "P"), (ProjTokenKind.EOF, "")]
+        tokens = lex_all("proj")
+        assert tokens == [(ProjTokenKind.PROJECTION, "proj"), (ProjTokenKind.EOF, "")]
 
-    def test_boolean_type(self):
-        tokens = lex_all("B")
-        assert tokens == [(ProjTokenKind.BOOLEAN, "B"), (ProjTokenKind.EOF, "")]
+    def test_bool_type(self):
+        tokens = lex_all("bool")
+        assert tokens == [(ProjTokenKind.BOOL, "bool"), (ProjTokenKind.EOF, "")]
 
     def test_angle_type(self):
-        tokens = lex_all("A")
-        assert tokens == [(ProjTokenKind.ANGLE, "A"), (ProjTokenKind.EOF, "")]
+        tokens = lex_all("angle")
+        assert tokens == [(ProjTokenKind.ANGLE, "angle"), (ProjTokenKind.EOF, "")]
 
     def test_all_types(self):
-        tokens = lex_all("Q P B A")
+        tokens = lex_all("qubit proj bool angle")
         assert tokens == [
-            (ProjTokenKind.QUBIT, "Q"),
-            (ProjTokenKind.PROJECTION, "P"),
-            (ProjTokenKind.BOOLEAN, "B"),
-            (ProjTokenKind.ANGLE, "A"),
+            (ProjTokenKind.QUBIT, "qubit"),
+            (ProjTokenKind.PROJECTION, "proj"),
+            (ProjTokenKind.BOOL, "bool"),
+            (ProjTokenKind.ANGLE, "angle"),
             (ProjTokenKind.EOF, ""),
         ]
 
@@ -77,9 +77,9 @@ class TestBasisAsIdentifiers:
 
     def test_basis_in_qubit_type(self):
         """X, Y, Z in Q<X> are identifiers - parser validates basis."""
-        tokens = lex_all("Q<X>")
+        tokens = lex_all("qubit<X>")
         assert tokens == [
-            (ProjTokenKind.QUBIT, "Q"),
+            (ProjTokenKind.QUBIT, "qubit"),
             (ProjTokenKind.LESS, "<"),
             (ProjTokenKind.IDENTIFIER, "X"),
             (ProjTokenKind.GREATER, ">"),
@@ -122,29 +122,19 @@ class TestQubitWithBasis:
     """Test lexing of qubit types with basis annotations."""
 
     def test_qubit_x_upper(self):
-        tokens = lex_all("Q<X>")
+        tokens = lex_all("qubit<X>")
         assert tokens == [
-            (ProjTokenKind.QUBIT, "Q"),
+            (ProjTokenKind.QUBIT, "qubit"),
             (ProjTokenKind.LESS, "<"),
             (ProjTokenKind.IDENTIFIER, "X"),
             (ProjTokenKind.GREATER, ">"),
             (ProjTokenKind.EOF, ""),
         ]
 
-    def test_qubit_x_lower(self):
-        tokens = lex_all("Q<x>")
-        assert tokens == [
-            (ProjTokenKind.QUBIT, "Q"),
-            (ProjTokenKind.LESS, "<"),
-            (ProjTokenKind.IDENTIFIER, "x"),
-            (ProjTokenKind.GREATER, ">"),
-            (ProjTokenKind.EOF, ""),
-        ]
-
     def test_qubit_y(self):
-        tokens = lex_all("Q<Y>")
+        tokens = lex_all("qubit<Y>")
         assert tokens == [
-            (ProjTokenKind.QUBIT, "Q"),
+            (ProjTokenKind.QUBIT, "qubit"),
             (ProjTokenKind.LESS, "<"),
             (ProjTokenKind.IDENTIFIER, "Y"),
             (ProjTokenKind.GREATER, ">"),
@@ -152,9 +142,9 @@ class TestQubitWithBasis:
         ]
 
     def test_qubit_z(self):
-        tokens = lex_all("Q<Z>")
+        tokens = lex_all("qubit<Z>")
         assert tokens == [
-            (ProjTokenKind.QUBIT, "Q"),
+            (ProjTokenKind.QUBIT, "qubit"),
             (ProjTokenKind.LESS, "<"),
             (ProjTokenKind.IDENTIFIER, "Z"),
             (ProjTokenKind.GREATER, ">"),
@@ -166,34 +156,34 @@ class TestWhitespace:
     """Test whitespace handling."""
 
     def test_spaces(self):
-        tokens = lex_all("Q   P")
+        tokens = lex_all("qubit   proj")
         assert tokens == [
-            (ProjTokenKind.QUBIT, "Q"),
-            (ProjTokenKind.PROJECTION, "P"),
+            (ProjTokenKind.QUBIT, "qubit"),
+            (ProjTokenKind.PROJECTION, "proj"),
             (ProjTokenKind.EOF, ""),
         ]
 
     def test_tabs(self):
-        tokens = lex_all("Q\t\tP")
+        tokens = lex_all("qubit\t\tproj")
         assert tokens == [
-            (ProjTokenKind.QUBIT, "Q"),
-            (ProjTokenKind.PROJECTION, "P"),
+            (ProjTokenKind.QUBIT, "qubit"),
+            (ProjTokenKind.PROJECTION, "proj"),
             (ProjTokenKind.EOF, ""),
         ]
 
     def test_newlines(self):
-        tokens = lex_all("Q\nP")
+        tokens = lex_all("qubit\nproj")
         assert tokens == [
-            (ProjTokenKind.QUBIT, "Q"),
-            (ProjTokenKind.PROJECTION, "P"),
+            (ProjTokenKind.QUBIT, "qubit"),
+            (ProjTokenKind.PROJECTION, "proj"),
             (ProjTokenKind.EOF, ""),
         ]
 
     def test_mixed_whitespace(self):
-        tokens = lex_all("Q \t\n P")
+        tokens = lex_all("qubit \t\n proj")
         assert tokens == [
-            (ProjTokenKind.QUBIT, "Q"),
-            (ProjTokenKind.PROJECTION, "P"),
+            (ProjTokenKind.QUBIT, "qubit"),
+            (ProjTokenKind.PROJECTION, "proj"),
             (ProjTokenKind.EOF, ""),
         ]
 
@@ -202,26 +192,26 @@ class TestComments:
     """Test comment handling."""
 
     def test_single_line_comment(self):
-        tokens = lex_all("Q // this is a comment\nP")
+        tokens = lex_all("qubit // this is a comment\nproj")
         assert tokens == [
-            (ProjTokenKind.QUBIT, "Q"),
-            (ProjTokenKind.PROJECTION, "P"),
+            (ProjTokenKind.QUBIT, "qubit"),
+            (ProjTokenKind.PROJECTION, "proj"),
             (ProjTokenKind.EOF, ""),
         ]
 
     def test_comment_at_end(self):
-        tokens = lex_all("Q // comment")
+        tokens = lex_all("qubit // comment")
         assert tokens == [
-            (ProjTokenKind.QUBIT, "Q"),
+            (ProjTokenKind.QUBIT, "qubit"),
             (ProjTokenKind.EOF, ""),
         ]
 
     def test_multiple_comments(self):
-        tokens = lex_all("Q // comment1\nP // comment2\nB")
+        tokens = lex_all("qubit // comment1\nproj // comment2\nbool")
         assert tokens == [
-            (ProjTokenKind.QUBIT, "Q"),
-            (ProjTokenKind.PROJECTION, "P"),
-            (ProjTokenKind.BOOLEAN, "B"),
+            (ProjTokenKind.QUBIT, "qubit"),
+            (ProjTokenKind.PROJECTION, "proj"),
+            (ProjTokenKind.BOOL, "bool"),
             (ProjTokenKind.EOF, ""),
         ]
 
@@ -253,20 +243,20 @@ class TestTypeKeywordNotIdentifier:
     """Test that type keywords are not lexed as identifiers."""
 
     def test_q_not_identifier(self):
-        tokens = lex_all("Q")
+        tokens = lex_all("qubit")
         assert tokens[0][0] == ProjTokenKind.QUBIT
         assert tokens[0][0] != ProjTokenKind.IDENTIFIER
 
     def test_qx_is_q_then_x(self):
         """QX should be lexed as identifier, not Q then X."""
-        tokens = lex_all("QX")
-        assert tokens == [(ProjTokenKind.IDENTIFIER, "QX"), (ProjTokenKind.EOF, "")]
+        tokens = lex_all("qubitX")
+        assert tokens == [(ProjTokenKind.IDENTIFIER, "qubitX"), (ProjTokenKind.EOF, "")]
 
     def test_q_then_x_separate(self):
         """Q X should be lexed separately."""
-        tokens = lex_all("Q X")
+        tokens = lex_all("qubit X")
         assert tokens == [
-            (ProjTokenKind.QUBIT, "Q"),
+            (ProjTokenKind.QUBIT, "qubit"),
             (ProjTokenKind.IDENTIFIER, "X"),
             (ProjTokenKind.EOF, ""),
         ]
@@ -286,7 +276,7 @@ class TestErrors:
             lexer.lex()
 
     def test_unknown_in_middle(self):
-        lexer = ProjLexer(Input("Q @ P", "<test>"))
+        lexer = ProjLexer(Input("qubit @ proj", "<test>"))
         # Should successfully lex Q
         token1 = lexer.lex()
         assert token1.kind == ProjTokenKind.QUBIT

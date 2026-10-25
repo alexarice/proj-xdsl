@@ -40,15 +40,15 @@ class ProjParser(GenericParser[ProjTokenKind]):
         """
         Parse a type from surface syntax.
 
-        type ::= qubit-type | projection-type | boolean-type | angle-type
-        qubit-type ::= "Q" ( "<" basis ">" )?
+        type ::= qubit-type | proj-type | bool-type | angle-type
+        qubit-type ::= "qubit" ( "<" basis ">" )?
         basis ::= "X" | "Y" | "Z" (uppercase only)
-        projection-type ::= "P"
-        boolean-type ::= "B"
-        angle-type ::= "A"
+        proj-type ::= "proj"
+        bool-type ::= "bool"
+        angle-type ::= "angle"
         """
         if self._parse_optional_token(ProjTokenKind.QUBIT) is not None:
-            # Parse qubit type: Q or Q<basis>
+            # Parse qubit type: qubit or qubit<basis>
             if self.parse_optional_punctuation("<") is not None:
                 basis = self._parse_basis()
                 self.parse_punctuation(">", " to close qubit basis")
@@ -56,13 +56,14 @@ class ProjParser(GenericParser[ProjTokenKind]):
             return QubitType(NoneAttr())
         elif self._parse_optional_token(ProjTokenKind.PROJECTION) is not None:
             return ProjectionType()
-        elif self._parse_optional_token(ProjTokenKind.BOOLEAN) is not None:
+        elif self._parse_optional_token(ProjTokenKind.BOOL) is not None:
             return i1
         elif self._parse_optional_token(ProjTokenKind.ANGLE) is not None:
             return AngleType()
         else:
             self.raise_error(
-                f"Expected type (Q, P, B, or A), got {self._current_token.kind.name}"
+                "Expected type (qubit, projection, bool, or angle),"
+                f" got {self._current_token.kind.name}",
             )
 
     def _parse_basis(self) -> Basis:

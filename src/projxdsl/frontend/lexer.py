@@ -16,7 +16,7 @@ class ProjTokenKind(Enum):
     # Type keywords (reserved, cannot be used as identifiers)
     QUBIT = auto()
     PROJECTION = auto()
-    BOOLEAN = auto()
+    BOOL = auto()
     ANGLE = auto()
 
     # Punctuation
@@ -47,10 +47,10 @@ KIND_BY_PUNCTUATION_SPELLING = {
 }
 
 TYPE_KEYWORD_MAP = {
-    "Q": ProjTokenKind.QUBIT,
-    "P": ProjTokenKind.PROJECTION,
-    "B": ProjTokenKind.BOOLEAN,
-    "A": ProjTokenKind.ANGLE,
+    "qubit": ProjTokenKind.QUBIT,
+    "proj": ProjTokenKind.PROJECTION,
+    "bool": ProjTokenKind.BOOL,
+    "angle": ProjTokenKind.ANGLE,
 }
 
 ProjToken = Token[ProjTokenKind]
@@ -130,22 +130,18 @@ class ProjLexer(Lexer[ProjTokenKind]):
         return None
 
     def _try_type_keyword(self) -> ProjToken | None:
-        """Try to lex type keywords (Q, P, B, A)."""
-        char = self._peek_chars()
-        if char is None:
-            return None
-
-        if char in TYPE_KEYWORD_MAP:
-            # Make sure it's not part of a larger identifier
-            if self._is_in_bounds(2):
-                next_chars = self._peek_chars(2)
-                assert next_chars is not None
-                next_char = next_chars[1]
-            else:
-                next_char = None
-            if next_char is None or not (next_char.isalnum() or next_char == "_"):
-                self._consume_chars()
-                return self._form_token(TYPE_KEYWORD_MAP[char], self.pos - 1)
+        """Try to lex type keywords (qubit, proj, bool, angle)."""
+        for keyword, kind in TYPE_KEYWORD_MAP.items():
+            if self._peek_chars(len(keyword)) == keyword:
+                # Make sure it's not part of a larger identifier
+                next_char: str | None = None
+                if self._is_in_bounds(len(keyword) + 1):
+                    peeked = self._peek_chars(len(keyword) + 1)
+                    assert peeked is not None
+                    next_char = peeked[-1]
+                if next_char is None or not (next_char.isalnum() or next_char == "_"):
+                    self._consume_chars(len(keyword))
+                    return self._form_token(kind, self.pos - len(keyword))
         return None
 
     def _try_identifier(self) -> ProjToken | None:

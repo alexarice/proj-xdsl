@@ -9,43 +9,43 @@ This document specifies the type system for a quantum programming language based
 ## Core Types
 
 ```
-Q           - Qubit
-Q<B>        - Qubit borrowed in basis B, where B ∈ {X, Y, Z}
-P           - Projection (opaque type)
-B           - Classical boolean (subtype of P)
-A           - Classical angle (for Phase gates)
+qubit         - Qubit
+qubit<B>      - Qubit borrowed in basis B, where B ∈ {X, Y, Z}
+proj          - Projection (opaque type)
+bool          - Classical boolean (subtype of proj)
+angle         - Classical angle (for Phase gates)
 ```
 
 ### Type Semantics
 
-- **`Q` (unborrowed qubit)**: A qubit that is not currently borrowed. Can be used to create projections in any basis, but projections borrowing this qubit cannot escape the scope. **Function parameters of type `Q` are considered borrowed** - they cannot be returned from the function.
+- **`qubit` (unborrowed qubit)**: a qubit that is not currently borrowed. Can be used to create projections in any basis, but projections borrowing this qubit cannot escape the scope. **Function parameters of type `qubit` are considered borrowed** - they cannot be returned from the function.
 
-- **`Q<B>` (borrowed qubit)**: A qubit that is borrowed in a specific basis. Only projections in that basis (or compatible bases) can be created.
+- **`qubit<B>` (borrowed qubit)**: a qubit that is borrowed in a specific basis. Only projections in that basis (or compatible bases) can be created.
 
-- **`P` (projection)**: A projection value that may borrow one or more qubits. Projections are first-class, copyable values (but cannot be passed to higher-order functions).
+- **`proj` (projection)**: a projection value that may borrow one or more qubits. Projections are first-class, copyable values (but cannot be passed to higher-order functions).
 
-- **`B` (boolean)**: Classical boolean value, used for measurement results and classical control flow. **`B` is a subtype of `P`** - booleans can be used wherever projections are expected (e.g., in `if` statements, with connectives). Can be freely returned from functions (no borrowing).
+- **`bool` (boolean)**: Classical boolean value, used for measurement results and classical control flow. **`bool` is a subtype of `proj`** - booleans can be used wherever projections are expected (e.g., in `if` statements, with connectives). Can be freely returned from functions (no borrowing).
 
-- **`A` (angle)**: Classical angle value, used for Phase gate parameters. Can be freely returned from functions (no borrowing). Supports arithmetic operations and constants.
+- **`angle` (angle)**: Classical angle value, used for Phase gate parameters. Can be freely returned from functions (no borrowing). Supports arithmetic operations and constants.
 
 - **Basis compatibility**:
   - Same basis: Compatible (multiple Z-borrows allowed)
   - Different basis: Incompatible (X and Z on same qubit = error)
   - Total borrow: Control flow disagreement creates a "total borrow" that prevents any new borrows
 
-- **Qubit ownership**: Functions can return qubits, but **only qubits allocated within the function scope**. Function parameters (even `Q`) cannot be returned.
+- **Qubit ownership**: Functions can return qubits, but **only qubits allocated within the function scope**. Function parameters (even `qubit`) cannot be returned.
 
 ## Surface Syntax
 
 ### Type Annotations
 
 ```rust
-fn f(q: Q<Z>, p: P) -> P { ... }      // Q borrowed in Z basis
-fn g(q: Q, p: P) -> P { ... }         // Q unborrowed
-fn h(p: P) -> P { ... }               // Projection parameter (always reborrowed)
+fn f(q: qubit<Z>, p: proj) -> proj { ... }      // qubit borrowed in Z basis
+fn g(q: qubit, p: proj) -> proj { ... }         // qubit unborrowed
+fn h(p: proj) -> proj { ... }                   // Projection parameter (always reborrowed)
 ```
 
-**Notation**: `Q<B>` uses angle bracket syntax for basis annotations. Only one basis annotation is allowed per qubit parameter.
+**Notation**: `qubit<B>` uses angle bracket syntax for basis annotations. Only one basis annotation is allowed per qubit parameter.
 
 ### Expression Syntax
 
@@ -56,14 +56,14 @@ q == |0⟩         // Same as above (Unicode notation)
 q == |+>         // Qubit q projected to |+> state (X basis)
 q == |L>         // Qubit q projected to |L> state (Y basis)
 
-// Connectives (work on P or B, since B <: P)
+// Connectives (work on proj or bool, since bool <: proj)
 p1 && p2         // Conjunction (and)
 p1 || p2         // Disjunction (or)
 p1 ^ p2          // Exclusive-or (xor)
 !p               // Negation (not)
-b1 && b2         // Boolean conjunction (B <: P)
+b1 && b2         // Boolean conjunction (bool <: proj)
 
-// Conditional (accepts P or B, since B <: P)
+// Conditional (accepts proj or bool, since bool <: proj)
 if p {
     phase(PI)    // Phase gate (primitive operation)
 }
@@ -72,8 +72,8 @@ if b {           // Boolean can be used directly
 }
 
 // Measurement
-let b: B = measure(p)    // Returns B
-if b {                   // B can be used in if (subtype of P)
+let b: bool = measure(p)    // Returns bool
+if b {                      // bool can be used in if (subtype of proj)
     phase(PI)
 }
 
@@ -81,11 +81,11 @@ if b {                   // B can be used in if (subtype of P)
 let q = alloc |0>
 
 // Angle arithmetic
-let a1: A = PI + PI/2;           // Addition
-let a2: A = PI - PI/4;           // Subtraction
-let a3: A = 2.0 * PI;            // Scalar multiplication
-let a4: A = PI / 3.0;            // Scalar division
-let a5: A = 0;                   // Zero constant
+let a1: angle = PI + PI/2;           // Addition
+let a2: angle = PI - PI/4;           // Subtraction
+let a3: angle = 2.0 * PI;            // Scalar multiplication
+let a4: angle = PI / 3.0;            // Scalar division
+let a5: angle = 0;                   // Zero constant
 ```
 
 ### Angle Constants
@@ -99,14 +99,14 @@ PI      // π (also accepts unicode: π)
 
 ```rust
 // Basic function
-fn phase_oracle(q1: Q<Z>, q2: Q<Z>, p: P) -> P {
+fn phase_oracle(q1: qubit<Z>, q2: qubit<Z>, p: proj) -> proj {
     if q1 == |0> && q2 == |1> && p {
         phase(PI)
     }
 }
 
 // Function with local variables
-fn example(q: Q) {
+fn example(q: qubit) {
     let proj = q == |0>;
     if proj {
         phase(PI)
@@ -114,7 +114,7 @@ fn example(q: Q) {
 }
 
 // Function returning projection (only from reborrowed params)
-fn identity(p: P) -> P {
+fn identity(p: proj) -> proj {
     p
 }
 ```
@@ -123,9 +123,9 @@ fn identity(p: P) -> P {
 
 ### Core Rules
 
-1. **Projection Reborrowing**: Output projections reborrow from all input projection parameters. If a function takes `p: P` and returns `P`, the returned projection inherits all borrows from `p`.
+1. **Projection Reborrowing**: Output projections reborrow from all input projection parameters. If a function takes `p: proj` and returns `proj`, the returned projection inherits all borrows from `p`.
 
-2. **Local Qubit Borrows**: Functions can create projections on local qubits or bare `Q` parameters, but these projections **cannot be returned**. Only projections that borrow from input `P` parameters may escape.
+2. **Local Qubit Borrows**: Functions can create projections on local qubits or bare `qubit` parameters, but these projections **cannot be returned**. Only projections that borrow from input `proj` parameters may escape.
 
 3. **Basis Compatibility**: At any program point, a qubit cannot be borrowed in incompatible bases simultaneously. Same-basis borrows are compatible.
 
@@ -138,33 +138,33 @@ fn identity(p: P) -> P {
 Every function has an inferred borrow signature:
 
 ```
-fn f(q: Q<Z>, p: P) -> P
+fn f(q: qubit<Z>, p: proj) -> proj
 ```
 
 **Semantics**:
-- `q: Q<Z>` - Caller must provide qubit available in Z basis
-- `p: P` - Projection parameter (always reborrowed)
-- Return `P` - Reborrow from input `p` plus any new borrows created in function body
+- `q: qubit<Z>` - Caller must provide qubit available in Z basis
+- `p: proj` - Projection parameter (always reborrowed)
+- Return `proj` - Reborrow from input `p` plus any new borrows created in function body
 
 **Inference Rules**:
 - Walk function body to determine which qubits are borrowed and in which bases
 - For control flow: union of bases from all paths
 - Multiple bases for same qubit → total borrow
-- Returned projections can only borrow from input `P` parameters
+- Returned projections can only borrow from input `proj` parameters
 
 ## Validation Rules
 
 ### Function Body Validation
 
-1. **Qubit parameter usage**: If `q: Q<B>`, all projections on `q` must be in basis `B` (or compatible)
+1. **Qubit parameter usage**: If `q: qubit<B>`, all projections on `q` must be in basis `bool` (or compatible)
 
-2. **Bare qubit usage**: If `q: Q`, projections can be created in any basis, but cannot be returned
+2. **Bare qubit usage**: If `q: qubit`, projections can be created in any basis, but cannot be returned
 
-3. **Projection reborrowing**: Returned projections must only borrow from input `P` parameters (not from local qubits or bare `Q` params)
+3. **Projection reborrowing**: Returned projections must only borrow from input `proj` parameters (not from local qubits or bare `qubit` params)
 
-4. **Qubit return validation**: Functions can return `Q`, but **only qubits allocated within the function scope**. Function parameters of type `Q` cannot be returned.
+4. **Qubit return validation**: Functions can return `qubit`, but **only qubits allocated within the function scope**. Function parameters of type `qubit` cannot be returned.
 
-5. **Classical return validation**: Functions can freely return `B` and `A` (classical types have no borrowing semantics).
+5. **Classical return validation**: Functions can freely return `bool` and `angle` (classical types have no borrowing semantics).
 
 6. **Borrow compatibility**: No qubit can have incompatible active borrows at any program point
 
@@ -182,7 +182,7 @@ fn f(q: Q<Z>, p: P) -> P
 
 ```rust
 // Example 1: Compatible borrows
-fn phase_oracle(q1: Q<Z>, q2: Q<Z>, p: P) -> P {
+fn phase_oracle(q1: qubit<Z>, q2: qubit<Z>, p: proj) -> proj {
     if q1 == |0> && q2 == |1> && p {
         phase(PI)
     }
@@ -197,18 +197,18 @@ phase_oracle(q1, q2, p);  // ✅ OK
 
 ```rust
 // Example 2: Projection reborrowing
-fn identity(p: P) -> P {
-    p  // ✅ OK - only reborrow from input P
+fn identity(p: proj) -> proj {
+    p  // ✅ OK - only reborrow from input proj
 }
 
-fn extend(q: Q<Z>, p: P) -> P {
+fn extend(q: qubit<Z>, p: proj) -> proj {
     p && (q == |0>  // ✅ OK - reborrow p + new Z borrow on q
 }
 ```
 
 ```rust
 // Example 3: Bare qubit (not returned)
-fn use_local(q: Q) {
+fn use_local(q: qubit) {
     let proj = q == |0>;  // ✅ OK - Z basis projection
     if proj {
         phase(PI)
@@ -219,7 +219,7 @@ fn use_local(q: Q) {
 
 ```rust
 // Example 4: Multiple compatible borrows
-fn multi_borrow(q1: Q<Z>, q2: Q<Z>) {
+fn multi_borrow(q1: qubit<Z>, q2: qubit<Z>) {
     let p1 = q1 == |0>;  // Z borrow on q1
     let p2 = q2 == |1>;  // Z borrow on q2
     if p1 && p2 {
@@ -230,7 +230,7 @@ fn multi_borrow(q1: Q<Z>, q2: Q<Z>) {
 
 ```rust
 // Example 5: Returning locally-allocated qubit
-fn make_qubit() -> Q {
+fn make_qubit() -> qubit {
     let q = alloc |0>;
     q  // ✅ OK - q was allocated in this function
 }
@@ -249,47 +249,47 @@ fn use_returned() {
 
 ```rust
 // Example 7: Returning classical data
-fn measure_qubit(q: Q) -> B {
+fn measure_qubit(q: qubit) -> bool {
     let proj = q == |0>;
-    measure(proj)  // ✅ OK - B can be freely returned
+    measure(proj)  // ✅ OK - bool can be freely returned
 }
 ```
 
 ```rust
 // Example 8: Returning angle
-fn get_phase() -> A {
-    PI  // ✅ OK - A can be freely returned
+fn get_phase() -> angle {
+    PI  // ✅ OK - angle can be freely returned
 }
 ```
 
 ```rust
 // Example 9: Angle arithmetic
-fn custom_phase(q: Q, theta: A) {
+fn custom_phase(q: qubit, theta: angle) {
     let adjusted = theta + PI/2;
     phase(adjusted)  // ✅ OK - angle addition
 }
 
-fn half_phase(q: Q) {
+fn half_phase(q: qubit) {
     phase(PI / 2.0)  // ✅ OK - angle division
 }
 
-fn double_phase(q: Q) {
+fn double_phase(q: qubit) {
     phase(2.0 * PI)  // ✅ OK - scalar multiplication
 }
 ```
 
 ```rust
-// Example 10: Boolean as projection (B <: P)
-fn use_measurement(q: Q) {
-    let b: B = measure(q == |0>);
-    if b {              // ✅ OK - B can be used in if (subtype of P)
+// Example 10: Boolean as projection (bool <: proj)
+fn use_measurement(q: qubit) {
+    let b: bool = measure(q == |0>);
+    if b {              // ✅ OK - bool can be used in if (subtype of proj)
         phase(PI)
     }
 }
 
-fn boolean_ops(q1: Q, q2: Q) {
-    let b1: B = measure(q1 == |0>);
-    let b2: B = measure(q2 == |0>);
+fn boolean_ops(q1: qubit, q2: qubit) {
+    let b1: bool = measure(q1 == |0>);
+    let b2: bool = measure(q2 == |0>);
     if b1 && b2 {       // ✅ OK - boolean conjunction
         phase(PI)
     }
@@ -300,8 +300,8 @@ fn boolean_ops(q1: Q, q2: Q) {
 
 ```rust
 // Example 1: Incompatible bases
-fn bad(q: Q<Z>, p: P) -> P {
-    if q == |+> && p {  // ❌ ERROR - q is Q<Z> but X basis used
+fn bad(q: qubit<Z>, p: proj) -> proj {
+    if q == |+> && p {  // ❌ ERROR - q is qubit<Z> but X basis used
         phase(PI)
     }
 }
@@ -309,14 +309,14 @@ fn bad(q: Q<Z>, p: P) -> P {
 
 ```rust
 // Example 2: Returning local qubit borrow
-fn make_proj(q: Q) -> P {
+fn make_proj(q: qubit) -> proj {
     q == |0>  // ❌ ERROR - cannot return projection borrowing local q
 }
 ```
 
 ```rust
 // Example 3: Call-site conflict
-fn f(q: Q<Z>, p: P) -> P { ... }
+fn f(q: qubit<Z>, p: proj) -> proj { ... }
 
 let q = alloc |0>;
 let p1 = q == |0>;      // q borrowed in Z
@@ -326,7 +326,7 @@ f(q, p1);
 
 ```rust
 // Example 4: Total borrow from control flow
-fn conditional(c: B, q: Q) -> P {
+fn conditional(c: bool, q: qubit) -> proj {
     if c {
         q == |0>    // Z basis
     } else {
@@ -338,22 +338,22 @@ fn conditional(c: B, q: Q) -> P {
 
 ```rust
 // Example 5: Incompatible borrows on same qubit
-fn incompatible(q: Q<Z>, p: P) -> P {
-    let p2 = q == |+>;  // ❌ ERROR - q is Q<Z>, can't borrow in X
+fn incompatible(q: qubit<Z>, p: proj) -> proj {
+    let p2 = q == |+>;  // ❌ ERROR - q is qubit<Z>, can't borrow in X
     p && p2
 }
 ```
 
 ```rust
 // Example 8: Returning parameter qubit
-fn return_param(q: Q) -> Q {
-    q  // ❌ ERROR - cannot return qubit parameter (even if bare Q)
+fn return_param(q: qubit) -> qubit {
+    q  // ❌ ERROR - cannot return qubit parameter (even if bare qubit)
 }
 ```
 
 ```rust
 // Example 9: Cannot return borrowed qubit
-fn return_borrowed(q1: Q, q2: Q) -> Q {
+fn return_borrowed(q1: qubit, q2: qubit) -> qubit {
     let q3 = alloc |0>;
     q1  // ❌ ERROR - q1 is a parameter, cannot return
 }
@@ -374,7 +374,7 @@ For each function:
 
 For each function:
 1. Verify qubit parameter usage matches signature
-2. Verify returned projections only borrow from input `P` parameters
+2. Verify returned projections only borrow from input `proj` parameters
 3. Verify returned qubits are locally allocated (not parameters)
 4. Verify no incompatible borrows at any program point
 5. Verify total borrows don't have new borrows created
@@ -403,32 +403,32 @@ For each call:
 
 | Concept | Syntax | Example |
 |---------|--------|---------|
-| Qubit type | `Q` or `Q<B>` | `q: Q<Z>` |
-| Projection type | `P` | `p: P` |
-| Boolean type | `B` | `b: B` |
-| Angle type | `A` | `theta: A` |
-| Projection | `q == \|B>` | `q == \|0>` or `q == \|0⟩` |
+| Qubit type | `qubit` or `qubit<B>` | `q: qubit<Z>` |
+| Projection type | `proj` | `p: proj` |
+| Boolean type | `bool` | `b: bool` |
+| Angle type | `angle` | `theta: angle` |
+| Projection | `q == \|bool>` | `q == \|0>` or `q == \|0⟩` |
 | Conjunction | `p1 && p2` | `p1 && p2` |
 | Disjunction | `p1 \|\| p2` | `p1 \|\| p2` |
 | XOR | `p1 ^ p2` | `p1 ^ p2` |
 | Negation | `!p` | `!p` |
 | Conditional | `if x { ... }` | `if p { phase(PI) }` or `if b { phase(PI) }` |
-| Measurement | `measure(p)` | `let b: B = measure(p)` |
-| Allocation | `alloc \|B>` | `let q = alloc \|0>` |
+| Measurement | `measure(p)` | `let b: bool = measure(p)` |
+| Allocation | `alloc \|bool>` | `let q = alloc \|0>` |
 | Phase gate | `phase(theta)` | `phase(PI)` |
 | Angle addition | `a1 + a2` | `PI + PI/2` |
 | Angle subtraction | `a1 - a2` | `PI - PI/4` |
 | Scalar mult | `c * a` | `2.0 * PI` |
 | Scalar div | `a / c` | `PI / 3.0` |
 | Angle constants | `PI`, `π`, `0` | `phase(PI)` |
-| Function | `fn name(params) -> ret { ... }` | `fn f(q: Q) { ... }` |
+| Function | `fn name(params) -> ret { ... }` | `fn f(q: qubit) { ... }` |
 
 **Note**: State notation accepts both ASCII (`|0>`) and Unicode (`|0⟩`) syntax. Angle constant `PI` also accepts Unicode `π`.
 
-**Subtyping**: `B <: P` - booleans are a subtype of projections. This means:
+**Subtyping**: `bool <: proj` - booleans are a subtype of projections. This means:
 - Booleans can be used in `if` statements
-- Boolean connectives (`&&`, `||`, `^`, `!`) work on both `B` and `P`
-- Measurement results (`B`) can be used directly in quantum conditionals
+- Boolean connectives (`&&`, `||`, `^`, `!`) work on both `bool` and `proj`
+- Measurement results (`bool`) can be used directly in quantum conditionals
 
 ## References
 
