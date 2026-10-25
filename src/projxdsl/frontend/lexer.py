@@ -33,6 +33,13 @@ class ProjTokenKind(Enum):
             ProjTokenKind.GREATER,
         )
 
+    @staticmethod
+    def get_punctuation_kind_from_spelling(spelling: str) -> ProjTokenKind:
+        """Get the token kind for a punctuation spelling."""
+        if spelling not in KIND_BY_PUNCTUATION_SPELLING:
+            raise ValueError(f"Unknown punctuation: {spelling}")
+        return KIND_BY_PUNCTUATION_SPELLING[spelling]
+
 
 KIND_BY_PUNCTUATION_SPELLING = {
     "<": ProjTokenKind.LESS,
