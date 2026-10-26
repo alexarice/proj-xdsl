@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from xdsl.dialects.builtin import Float64Type
 from xdsl.ir import Dialect, ParametrizedAttribute, SSAValue, TypeAttribute
 from xdsl.irdl import (
     IRDLOperation,
@@ -74,12 +75,32 @@ class AddOp(IRDLOperation):
         super().__init__(operands=[lhs, rhs], result_types=[AngleType()])
 
 
+@irdl_op_definition
+class ScalarMultOp(IRDLOperation):
+    """
+    Scalar multiplication operation.
+    Multiplies an angle by a scalar float value.
+    """
+
+    name = "angle.scalar_mult"
+
+    scalar = operand_def(Float64Type)
+    angle = operand_def(AngleType)
+    result = result_def(AngleType)
+
+    assembly_format = "$scalar `,` $angle attr-dict"
+
+    def __init__(self, scalar: SSAValue, angle: SSAValue):
+        super().__init__(operands=[scalar, angle], result_types=[AngleType()])
+
+
 Angle = Dialect(
     "angle",
     [
         ZeroOp,
         PiOp,
         AddOp,
+        ScalarMultOp,
     ],
     [
         AngleType,
