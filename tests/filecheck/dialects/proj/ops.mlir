@@ -48,3 +48,7 @@ func.func @test_eq_plus(%arg0: !proj.qubit<x>) -> !proj.projection {
   %0 = proj.eq %arg0, <plus> : !proj.qubit<x>
   func.return %0 : !proj.projection
 }
+
+// CHECK: proj.phase %angle
+%angle = angle.zero
+proj.phase %angle

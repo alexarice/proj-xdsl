@@ -18,6 +18,8 @@ from xdsl.parser import AttrParser
 from xdsl.printer import Printer
 from xdsl.utils.str_enum import StrEnum
 
+from projxdsl.dialects.angle import AngleType
+
 
 class Basis(StrEnum):
     """
@@ -279,6 +281,23 @@ class EqOp(IRDLOperation):
         )
 
 
+@irdl_op_definition
+class PhaseOp(IRDLOperation):
+    """
+    Phase operation.
+    Takes an angle operand.
+    """
+
+    name = "proj.phase"
+
+    angle = operand_def(AngleType)
+
+    assembly_format = "$angle attr-dict"
+
+    def __init__(self, angle: SSAValue):
+        super().__init__(operands=[angle])
+
+
 Proj = Dialect(
     "proj",
     [
@@ -288,6 +307,7 @@ Proj = Dialect(
         XorOp,
         FromBoolOp,
         EqOp,
+        PhaseOp,
     ],
     [
         BasisAttr,
