@@ -23,6 +23,9 @@ class ProjTokenKind(Enum):
     LESS = auto()
     GREATER = auto()
 
+    # State (ket states)
+    STATE = auto()
+
     # Identifier (includes X, Y, Z which can be basis or identifiers)
     IDENTIFIER = auto()
 
@@ -103,6 +106,10 @@ class ProjLexer(Lexer[ProjTokenKind]):
         if not self._is_in_bounds():
             return self._form_token(ProjTokenKind.EOF, self.pos)
 
+        # Try state literals (|0>, |1>, |+>, |->, |L>, |R>, |0⟩, etc.)
+        if state := self._try_state():
+            return state
+
         # Try punctuation first
         if punct := self._try_punctuation():
             return punct
@@ -128,6 +135,41 @@ class ProjLexer(Lexer[ProjTokenKind]):
                 self._consume_chars(len(spelling))
                 return self._form_token(kind, start_pos)
         return None
+
+    def _try_state(self) -> ProjToken | None:
+        """
+        Try to lex a state literal: |0>, |1>, |+>, |->, |L>, |R> (or Unicode variants).
+        State literals start with | followed by a state character and end with > or ⟩.
+        """
+        if self._peek_chars() != "|":
+            return None
+
+        start_pos = self.pos
+        self._consume_chars()  # consume |
+
+        # Get the state character
+        state_char = self._get_chars()
+        if state_char is None:
+            self.pos = start_pos
+            return None
+
+        # Get the closing bracket (> or ⟩)
+        closing = self._get_chars()
+        if closing is None:
+            self.pos = start_pos
+            return None
+
+        # Validate it's a proper state ending
+        if closing not in (">", "⟩"):
+            self.pos = start_pos
+            return None
+
+        # Validate state character
+        if state_char not in ("0", "1", "+", "-", "L", "R"):
+            self.pos = start_pos
+            return None
+
+        return self._form_token(ProjTokenKind.STATE, start_pos)
 
     def _try_type_keyword(self) -> ProjToken | None:
         """Try to lex type keywords (qubit, proj, bool, angle)."""

@@ -12,6 +12,8 @@ from projxdsl.dialects.proj import (
     BasisAttr,
     ProjectionType,
     QubitType,
+    State,
+    StateAttr,
 )
 from projxdsl.frontend.lexer import ProjLexer, ProjToken, ProjTokenKind
 
@@ -107,3 +109,45 @@ class ProjParser(GenericParser[ProjTokenKind]):
             self.raise_error(
                 f"Unexpected token after expression: {self._current_token.text}"
             )
+
+    def parse_state(self) -> StateAttr:
+        """
+        Parse a state literal.
+
+        state ::= "|" state-char (">" | "⟩")
+        state-char ::= "0" | "1" | "+" | "-" | "L" | "R"
+        """
+        token = self._parse_token(
+            ProjTokenKind.STATE,
+            "Expected state literal (|0>, |1>, |+>, |->, |L>, |R>)",
+        )
+
+        # Extract state character from token text (e.g., "|0>" -> "0")
+        state_text = token.text
+        if len(state_text) < 2 or state_text[0] != "|":
+            self.raise_error(f"Invalid state literal: {state_text}")
+
+        # Get the character between | and > or ⟩
+        state_char = state_text[1]
+
+        # Map character to State enum
+        match state_char:
+            case "0":
+                state = State.ZERO
+            case "1":
+                state = State.ONE
+            case "+":
+                state = State.PLUS
+            case "-":
+                state = State.MINUS
+            case "L":
+                state = State.LEFT
+            case "R":
+                state = State.RIGHT
+            case _:
+                self.raise_error(
+                    f"Invalid state character '{state_char}',"
+                    " expected 0, 1, +, -, L, or R",
+                )
+
+        return StateAttr(state)

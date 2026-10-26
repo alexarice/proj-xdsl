@@ -262,6 +262,91 @@ class TestTypeKeywordNotIdentifier:
         ]
 
 
+class TestStateLiterals:
+    """Test lexing of state literals (ket states)."""
+
+    def test_state_zero_ascii(self):
+        tokens = lex_all("|0>")
+        assert tokens == [(ProjTokenKind.STATE, "|0>"), (ProjTokenKind.EOF, "")]
+
+    def test_state_one_ascii(self):
+        tokens = lex_all("|1>")
+        assert tokens == [(ProjTokenKind.STATE, "|1>"), (ProjTokenKind.EOF, "")]
+
+    def test_state_plus_ascii(self):
+        tokens = lex_all("|+>")
+        assert tokens == [(ProjTokenKind.STATE, "|+>"), (ProjTokenKind.EOF, "")]
+
+    def test_state_minus_ascii(self):
+        tokens = lex_all("|->")
+        assert tokens == [(ProjTokenKind.STATE, "|->"), (ProjTokenKind.EOF, "")]
+
+    def test_state_left_ascii(self):
+        tokens = lex_all("|L>")
+        assert tokens == [(ProjTokenKind.STATE, "|L>"), (ProjTokenKind.EOF, "")]
+
+    def test_state_right_ascii(self):
+        tokens = lex_all("|R>")
+        assert tokens == [(ProjTokenKind.STATE, "|R>"), (ProjTokenKind.EOF, "")]
+
+    def test_state_zero_unicode(self):
+        tokens = lex_all("|0⟩")
+        assert tokens == [(ProjTokenKind.STATE, "|0⟩"), (ProjTokenKind.EOF, "")]
+
+    def test_state_one_unicode(self):
+        tokens = lex_all("|1⟩")
+        assert tokens == [(ProjTokenKind.STATE, "|1⟩"), (ProjTokenKind.EOF, "")]
+
+    def test_state_plus_unicode(self):
+        tokens = lex_all("|+⟩")
+        assert tokens == [(ProjTokenKind.STATE, "|+⟩"), (ProjTokenKind.EOF, "")]
+
+    def test_state_minus_unicode(self):
+        tokens = lex_all("|-⟩")
+        assert tokens == [(ProjTokenKind.STATE, "|-⟩"), (ProjTokenKind.EOF, "")]
+
+    def test_state_left_unicode(self):
+        tokens = lex_all("|L⟩")
+        assert tokens == [(ProjTokenKind.STATE, "|L⟩"), (ProjTokenKind.EOF, "")]
+
+    def test_state_right_unicode(self):
+        tokens = lex_all("|R⟩")
+        assert tokens == [(ProjTokenKind.STATE, "|R⟩"), (ProjTokenKind.EOF, "")]
+
+    def test_all_states_ascii(self):
+        tokens = lex_all("|0> |1> |+> |-> |L> |R>")
+        assert tokens == [
+            (ProjTokenKind.STATE, "|0>"),
+            (ProjTokenKind.STATE, "|1>"),
+            (ProjTokenKind.STATE, "|+>"),
+            (ProjTokenKind.STATE, "|->"),
+            (ProjTokenKind.STATE, "|L>"),
+            (ProjTokenKind.STATE, "|R>"),
+            (ProjTokenKind.EOF, ""),
+        ]
+
+    def test_all_states_unicode(self):
+        tokens = lex_all("|0⟩ |1⟩ |+⟩ |-⟩ |L⟩ |R⟩")
+        assert tokens == [
+            (ProjTokenKind.STATE, "|0⟩"),
+            (ProjTokenKind.STATE, "|1⟩"),
+            (ProjTokenKind.STATE, "|+⟩"),
+            (ProjTokenKind.STATE, "|-⟩"),
+            (ProjTokenKind.STATE, "|L⟩"),
+            (ProjTokenKind.STATE, "|R⟩"),
+            (ProjTokenKind.EOF, ""),
+        ]
+
+    def test_mixed_ascii_unicode(self):
+        tokens = lex_all("|0> |1⟩ |+>")
+        assert tokens == [
+            (ProjTokenKind.STATE, "|0>"),
+            (ProjTokenKind.STATE, "|1⟩"),
+            (ProjTokenKind.STATE, "|+>"),
+            (ProjTokenKind.EOF, ""),
+        ]
+
+
 class TestErrors:
     """Test error handling."""
 

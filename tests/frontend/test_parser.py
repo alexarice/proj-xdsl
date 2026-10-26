@@ -10,6 +10,8 @@ from projxdsl.dialects.proj import (
     BasisAttr,
     ProjectionType,
     QubitType,
+    State,
+    StateAttr,
 )
 from projxdsl.frontend.parser import ProjParser
 
@@ -18,6 +20,14 @@ def parse_type(code: str):
     """Helper to parse a type and return the TypeAttribute."""
     parser = ProjParser(code)
     result = parser.parse_type()
+    parser.expect_eof()
+    return result
+
+
+def parse_state(code: str):
+    """Helper to parse a state and return the StateAttr."""
+    parser = ProjParser(code)
+    result = parser.parse_state()
     parser.expect_eof()
     return result
 
@@ -130,3 +140,87 @@ class TestMixedCase:
         for basis_char in ["x", "y", "z"]:
             with pytest.raises(ParseError, match="uppercase only"):
                 parse_type(f"qubit<{basis_char}>")
+
+
+class TestStateParsing:
+    """Test parsing of state literals."""
+
+    def test_state_zero_ascii(self):
+        result = parse_state("|0>")
+        assert isinstance(result, StateAttr)
+        assert result.data == State.ZERO
+
+    def test_state_one_ascii(self):
+        result = parse_state("|1>")
+        assert isinstance(result, StateAttr)
+        assert result.data == State.ONE
+
+    def test_state_plus_ascii(self):
+        result = parse_state("|+>")
+        assert isinstance(result, StateAttr)
+        assert result.data == State.PLUS
+
+    def test_state_minus_ascii(self):
+        result = parse_state("|->")
+        assert isinstance(result, StateAttr)
+        assert result.data == State.MINUS
+
+    def test_state_left_ascii(self):
+        result = parse_state("|L>")
+        assert isinstance(result, StateAttr)
+        assert result.data == State.LEFT
+
+    def test_state_right_ascii(self):
+        result = parse_state("|R>")
+        assert isinstance(result, StateAttr)
+        assert result.data == State.RIGHT
+
+    def test_state_zero_unicode(self):
+        result = parse_state("|0⟩")
+        assert isinstance(result, StateAttr)
+        assert result.data == State.ZERO
+
+    def test_state_one_unicode(self):
+        result = parse_state("|1⟩")
+        assert isinstance(result, StateAttr)
+        assert result.data == State.ONE
+
+    def test_state_plus_unicode(self):
+        result = parse_state("|+⟩")
+        assert isinstance(result, StateAttr)
+        assert result.data == State.PLUS
+
+    def test_state_minus_unicode(self):
+        result = parse_state("|-⟩")
+        assert isinstance(result, StateAttr)
+        assert result.data == State.MINUS
+
+    def test_state_left_unicode(self):
+        result = parse_state("|L⟩")
+        assert isinstance(result, StateAttr)
+        assert result.data == State.LEFT
+
+    def test_state_right_unicode(self):
+        result = parse_state("|R⟩")
+        assert isinstance(result, StateAttr)
+        assert result.data == State.RIGHT
+
+    def test_invalid_state_character(self):
+        # Invalid state characters are rejected at lexing time
+        with pytest.raises(ValueError, match="Unexpected character: \\|"):
+            parse_state("|X>")
+
+    def test_missing_pipe(self):
+        # Missing pipe causes lexer error on the digit
+        with pytest.raises(ValueError, match="Unexpected character: 0"):
+            parse_state("0>")
+
+    def test_missing_closing(self):
+        # Lexer will fail to recognize |0 as a state (no closing bracket)
+        with pytest.raises(ValueError, match="Unexpected character: \\|"):
+            parse_state("|0")
+
+    def test_invalid_state_char(self):
+        # Invalid state characters are rejected at lexing time
+        with pytest.raises(ValueError, match="Unexpected character: \\|"):
+            parse_state("|2>")
