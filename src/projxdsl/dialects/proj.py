@@ -4,7 +4,7 @@ from enum import auto
 
 from xdsl.dialects.builtin import NoneAttr, i1
 from xdsl.dialects.utils import EnumAttribute
-from xdsl.ir import Dialect, ParametrizedAttribute, TypeAttribute
+from xdsl.ir import Dialect, ParametrizedAttribute, SSAValue, TypeAttribute
 from xdsl.irdl import (
     IRDLOperation,
     irdl_attr_definition,
@@ -185,6 +185,9 @@ class NotOp(IRDLOperation):
 
     assembly_format = "$input attr-dict"
 
+    def __init__(self, input: SSAValue):
+        super().__init__(operands=[input], result_types=[ProjectionType()])
+
 
 @irdl_op_definition
 class AndOp(IRDLOperation):
@@ -200,6 +203,9 @@ class AndOp(IRDLOperation):
     result = result_def(ProjectionType)
 
     assembly_format = "$lhs `,` $rhs attr-dict"
+
+    def __init__(self, lhs: SSAValue, rhs: SSAValue):
+        super().__init__(operands=[lhs, rhs], result_types=[ProjectionType()])
 
 
 @irdl_op_definition
@@ -217,6 +223,9 @@ class OrOp(IRDLOperation):
 
     assembly_format = "$lhs `,` $rhs attr-dict"
 
+    def __init__(self, lhs: SSAValue, rhs: SSAValue):
+        super().__init__(operands=[lhs, rhs], result_types=[ProjectionType()])
+
 
 @irdl_op_definition
 class XorOp(IRDLOperation):
@@ -233,6 +242,9 @@ class XorOp(IRDLOperation):
 
     assembly_format = "$lhs `,` $rhs attr-dict"
 
+    def __init__(self, lhs: SSAValue, rhs: SSAValue):
+        super().__init__(operands=[lhs, rhs], result_types=[ProjectionType()])
+
 
 @irdl_op_definition
 class FromBoolOp(IRDLOperation):
@@ -247,6 +259,9 @@ class FromBoolOp(IRDLOperation):
     result = result_def(ProjectionType)
 
     assembly_format = "$input attr-dict"
+
+    def __init__(self, input: SSAValue):
+        super().__init__(operands=[input], result_types=[ProjectionType()])
 
 
 @irdl_op_definition
@@ -264,6 +279,13 @@ class EqOp(IRDLOperation):
     result = result_def(ProjectionType)
 
     assembly_format = "$qubit `,` $state attr-dict `:` type($qubit)"
+
+    def __init__(self, qubit: SSAValue, state: StateAttr):
+        super().__init__(
+            operands=[qubit],
+            properties={"state": state},
+            result_types=[ProjectionType()],
+        )
 
 
 Proj = Dialect(

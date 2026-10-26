@@ -225,11 +225,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
                                 f"projected in {state_basis.name} basis"
                             )
 
-                    lhs = EqOp.build(
-                        operands=[lhs],
-                        properties={"state": state},
-                        result_types=[ProjectionType()],
-                    ).result
+                    lhs = EqOp(lhs, state).result
 
                 case ProjTokenKind.AND:
                     left_bp, right_bp = self._INFIX_AND_BP
@@ -294,22 +290,14 @@ class ProjParser(GenericParser[ProjTokenKind]):
             return classical_op(lhs, rhs).result
         elif lhs_is_proj and rhs_is_proj:
             # Both projections: use projection operation
-            return projection_op.build(
-                operands=[lhs, rhs], result_types=[ProjectionType()]
-            ).result
+            return projection_op(lhs, rhs).result
         elif (lhs_is_bool and rhs_is_proj) or (lhs_is_proj and rhs_is_bool):
             # Mixed: convert boolean to projection, then use projection operation
             if lhs_is_bool:
-                lhs = FromBoolOp.build(
-                    operands=[lhs], result_types=[ProjectionType()]
-                ).result
+                lhs = FromBoolOp(lhs).result
             if rhs_is_bool:
-                rhs = FromBoolOp.build(
-                    operands=[rhs], result_types=[ProjectionType()]
-                ).result
-            return projection_op.build(
-                operands=[lhs, rhs], result_types=[ProjectionType()]
-            ).result
+                rhs = FromBoolOp(rhs).result
+            return projection_op(lhs, rhs).result
         else:
             # Invalid types
             self.raise_typing_error(
@@ -353,9 +341,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 operand = self.parse_expression(variables, self._PREFIX_NOT_BP)
 
                 if operand.type == ProjectionType():
-                    return NotOp.build(
-                        operands=[operand], result_types=[ProjectionType()]
-                    ).result
+                    return NotOp(operand).result
                 elif operand.type == i1:
                     const_one = ConstantOp(IntegerAttr(1, 1))
                     return XOrIOp(operand, const_one.result).result
