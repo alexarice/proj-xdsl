@@ -1,8 +1,8 @@
 """Tests for the proj-xdsl expression parser."""
 
 import pytest
-from xdsl.dialects.arith import ConstantOp
-from xdsl.dialects.builtin import IntegerAttr
+from xdsl.dialects.arith import ConstantOp, XOrIOp
+from xdsl.dialects.builtin import IntegerAttr, i1
 from xdsl.ir import SSAValue
 from xdsl.utils.exceptions import ParseError
 
@@ -12,9 +12,10 @@ from projxdsl.dialects.proj import (
     FromBoolOp,
     NotOp,
     OrOp,
+    ProjectionType,
     XorOp,
 )
-from projxdsl.frontend.parser import ProjParser
+from projxdsl.frontend.parser import ProjParser, TypeCheckError
 
 
 def make_bool_var(value: int = 1) -> SSAValue:
@@ -58,34 +59,63 @@ class TestBooleanLiterals:
     def test_true_literal(self):
         """Test parsing true literal."""
         result = parse_expression("true")
-        assert isinstance(result.owner, FromBoolOp)
+        assert result.type == i1
 
     def test_false_literal(self):
         """Test parsing false literal."""
         result = parse_expression("false")
-        assert isinstance(result.owner, FromBoolOp)
+        assert result.type == i1
 
 
 class TestNotOperator:
     """Test parsing of negation operator."""
 
-    def test_not_variable(self):
-        """Test parsing !p."""
+    def test_not_bool_variable(self):
+        """Test parsing !p where p is a boolean."""
         var = make_bool_var()
         result = parse_expression("!p", {"p": var})
-        assert isinstance(result.owner, NotOp)
+        assert isinstance(result.owner, XOrIOp)
+        assert result.type == i1
 
     def test_not_true(self):
         """Test parsing !true."""
         result = parse_expression("!true")
-        assert isinstance(result.owner, NotOp)
+        assert isinstance(result.owner, XOrIOp)
+        assert result.type == i1
 
-    def test_double_not(self):
-        """Test parsing !!p."""
+    def test_not_false(self):
+        """Test parsing !false."""
+        result = parse_expression("!false")
+        assert isinstance(result.owner, XOrIOp)
+        assert result.type == i1
+
+    def test_double_not_bool(self):
+        """Test parsing !!p where p is a boolean."""
         var = make_bool_var()
         result = parse_expression("!!p", {"p": var})
+        assert isinstance(result.owner, XOrIOp)
+        assert isinstance(result.owner.operands[0].owner, XOrIOp)
+
+    def test_not_projection(self):
+        """Test parsing !p where p is a projection."""
+        var = make_qubit_var()
+        # Create a projection: q == |0>
+        parser = ProjParser("q == |0>")
+        proj = parser.parse_expression({"q": var})
+        assert isinstance(proj.type, ProjectionType)
+
+        # Now test !(q == |0>)
+        result = parse_expression("!(q == |0>)", {"q": var})
         assert isinstance(result.owner, NotOp)
-        assert isinstance(result.owner.operands[0].owner, NotOp)
+        assert isinstance(result.type, ProjectionType)
+
+    def test_not_invalid_type(self):
+        """Test that ! raises TypeCheckError for invalid types."""
+        # Create an i32 value (not a valid type for !)
+
+        invalid_var = ConstantOp(IntegerAttr(0, 32)).result
+        with pytest.raises(TypeCheckError, match="Expected projection or boolean"):
+            parse_expression("!x", {"x": invalid_var})
 
 
 class TestAndOperator:
@@ -186,7 +216,11 @@ class TestBindingPower:
         q = make_bool_var()
         result = parse_expression("!p && q", {"p": p, "q": q})
         assert isinstance(result.owner, AndOp)
-        assert isinstance(result.owner.operands[0].owner, NotOp)
+        # !p returns i1, which is then wrapped in FromBoolOp for the && operator
+        from_bool_op = result.owner.operands[0].owner
+        assert isinstance(from_bool_op, FromBoolOp)
+        # The operand of FromBoolOp should be XOrIOp
+        assert isinstance(from_bool_op.operands[0].owner, XOrIOp)
 
     def test_and_binds_tighter_than_or(self):
         """Test that p || q && r parses as p || (q && r)."""
@@ -207,11 +241,12 @@ class TestBindingPower:
         assert isinstance(result.owner.operands[1].owner, XorOp)
 
     def test_eq_binds_tighter_than_not(self):
-        """Test that !q == |0> parses as !(q == |0>)."""
+        """Test that !(q == |0>) parses the projection first, then negates."""
         q = make_qubit_var()
-        result = parse_expression("!q == |0>", {"q": q})
+        result = parse_expression("!(q == |0>)", {"q": q})
         assert isinstance(result.owner, NotOp)
         assert isinstance(result.owner.operands[0].owner, EqOp)
+        assert isinstance(result.type, ProjectionType)
 
 
 class TestParentheses:
@@ -252,7 +287,10 @@ class TestComplexExpressions:
         assert isinstance(result.owner, OrOp)
         and_op = result.owner.operands[0]
         assert isinstance(and_op.owner, AndOp)
-        not_op = and_op.owner.operands[0]
-        assert isinstance(not_op.owner, NotOp)
+        # !p returns i1, which is then wrapped in FromBoolOp for the && operator
+        from_bool_op = and_op.owner.operands[0].owner
+        assert isinstance(from_bool_op, FromBoolOp)
+        # The operand of FromBoolOp should be XOrIOp
+        assert isinstance(from_bool_op.operands[0].owner, XOrIOp)
         eq_op = and_op.owner.operands[1]
         assert isinstance(eq_op.owner, EqOp)

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from xdsl.dialects.arith import ConstantOp
+from typing import NoReturn
+
+from xdsl.dialects.arith import ConstantOp, XOrIOp
 from xdsl.dialects.builtin import IntegerAttr, NoneAttr, i1
 from xdsl.ir import SSAValue, TypeAttribute
 from xdsl.parser.generic_parser import GenericParser, ParserState
+from xdsl.utils.exceptions import ParseError
 from xdsl.utils.lexer import Input
 
 from projxdsl.dialects.proj import (
@@ -24,6 +27,12 @@ from projxdsl.dialects.proj import (
     XorOp,
 )
 from projxdsl.frontend.lexer import ProjLexer, ProjToken, ProjTokenKind
+
+
+class TypeCheckError(ParseError):
+    """Exception raised when type checking fails during parsing."""
+
+    pass
 
 
 class ProjParserState(ParserState[ProjTokenKind]):
@@ -123,6 +132,10 @@ class ProjParser(GenericParser[ProjTokenKind]):
             self.raise_error(
                 f"Unexpected token after expression: {self._current_token.text}"
             )
+
+    def raise_typing_error(self, msg: str) -> NoReturn:
+        """Raise a type checking error."""
+        raise TypeCheckError(self._current_token.span, msg)
 
     def parse_state(self) -> StateAttr:
         """
@@ -302,31 +315,31 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
             case ProjTokenKind.TRUE:
                 self._consume_token()
-
                 bool_const = ConstantOp(IntegerAttr(1, 1))
-                return FromBoolOp.build(
-                    operands=[bool_const.result], result_types=[ProjectionType()]
-                ).result
+                return bool_const.result
 
             case ProjTokenKind.FALSE:
                 self._consume_token()
-
                 bool_const = ConstantOp(IntegerAttr(0, 1))
-                return FromBoolOp.build(
-                    operands=[bool_const.result], result_types=[ProjectionType()]
-                ).result
+                return bool_const.result
 
             case ProjTokenKind.BANG:
                 self._consume_token()
 
                 operand = self.parse_expression(variables, self._PREFIX_NOT_BP)
-                if operand.type == i1:
-                    operand = FromBoolOp.build(
+
+                if isinstance(operand.type, ProjectionType):
+                    return NotOp.build(
                         operands=[operand], result_types=[ProjectionType()]
                     ).result
-                return NotOp.build(
-                    operands=[operand], result_types=[ProjectionType()]
-                ).result
+                elif operand.type == i1:
+                    const_one = ConstantOp(IntegerAttr(1, 1))
+                    return XOrIOp(operand, const_one.result).result
+                else:
+                    self.raise_typing_error(
+                        f"Expected projection or boolean for '!' operator,"
+                        f" got {operand.type}"
+                    )
 
             case ProjTokenKind.LPAREN:
                 self._consume_token()
