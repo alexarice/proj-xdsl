@@ -22,6 +22,21 @@ class ProjTokenKind(Enum):
     # Punctuation
     LESS = auto()
     GREATER = auto()
+    EQUALS = auto()
+    BANG = auto()
+    LPAREN = auto()
+    RPAREN = auto()
+
+    # Operators
+    AND = auto()
+    OR = auto()
+    XOR = auto()
+    NOT = auto()
+    EQ = auto()
+
+    # Boolean literals
+    TRUE = auto()
+    FALSE = auto()
 
     # State (ket states)
     STATE = auto()
@@ -47,6 +62,17 @@ class ProjTokenKind(Enum):
 KIND_BY_PUNCTUATION_SPELLING = {
     "<": ProjTokenKind.LESS,
     ">": ProjTokenKind.GREATER,
+    "=": ProjTokenKind.EQUALS,
+    "!": ProjTokenKind.BANG,
+    "(": ProjTokenKind.LPAREN,
+    ")": ProjTokenKind.RPAREN,
+}
+
+OPERATOR_SPELLING = {
+    "&&": ProjTokenKind.AND,
+    "||": ProjTokenKind.OR,
+    "^": ProjTokenKind.XOR,
+    "==": ProjTokenKind.EQ,
 }
 
 TYPE_KEYWORD_MAP = {
@@ -54,6 +80,11 @@ TYPE_KEYWORD_MAP = {
     "proj": ProjTokenKind.PROJECTION,
     "bool": ProjTokenKind.BOOL,
     "angle": ProjTokenKind.ANGLE,
+}
+
+BOOL_LITERAL_MAP = {
+    "true": ProjTokenKind.TRUE,
+    "false": ProjTokenKind.FALSE,
 }
 
 ProjToken = Token[ProjTokenKind]
@@ -110,13 +141,21 @@ class ProjLexer(Lexer[ProjTokenKind]):
         if state := self._try_state():
             return state
 
+        # Try operators (&&, ||, ^, ==)
+        if operator := self._try_operator():
+            return operator
+
         # Try punctuation first
         if punct := self._try_punctuation():
             return punct
 
-        # Try type keywords (single character)
+        # Try type keywords
         if keyword := self._try_type_keyword():
             return keyword
+
+        # Try boolean literals (true, false)
+        if bool_lit := self._try_bool_literal():
+            return bool_lit
 
         # Try identifier (includes X, Y, Z which can be basis or identifiers)
         if ident := self._try_identifier():
@@ -126,6 +165,15 @@ class ProjLexer(Lexer[ProjTokenKind]):
         start_pos = self.pos
         self._consume_chars()
         self.raise_error(f"Unexpected character: {self.input.content[start_pos]}")
+
+    def _try_operator(self) -> ProjToken | None:
+        """Try to lex operators: &&, ||, ^, ==."""
+        for spelling, kind in OPERATOR_SPELLING.items():
+            if self._peek_chars(len(spelling)) == spelling:
+                start_pos = self.pos
+                self._consume_chars(len(spelling))
+                return self._form_token(kind, start_pos)
+        return None
 
     def _try_punctuation(self) -> ProjToken | None:
         """Try to lex punctuation."""
@@ -174,6 +222,21 @@ class ProjLexer(Lexer[ProjTokenKind]):
     def _try_type_keyword(self) -> ProjToken | None:
         """Try to lex type keywords (qubit, proj, bool, angle)."""
         for keyword, kind in TYPE_KEYWORD_MAP.items():
+            if self._peek_chars(len(keyword)) == keyword:
+                # Make sure it's not part of a larger identifier
+                next_char: str | None = None
+                if self._is_in_bounds(len(keyword) + 1):
+                    peeked = self._peek_chars(len(keyword) + 1)
+                    assert peeked is not None
+                    next_char = peeked[-1]
+                if next_char is None or not (next_char.isalnum() or next_char == "_"):
+                    self._consume_chars(len(keyword))
+                    return self._form_token(kind, self.pos - len(keyword))
+        return None
+
+    def _try_bool_literal(self) -> ProjToken | None:
+        """Try to lex boolean literals (true, false)."""
+        for keyword, kind in BOOL_LITERAL_MAP.items():
             if self._peek_chars(len(keyword)) == keyword:
                 # Make sure it's not part of a larger identifier
                 next_char: str | None = None

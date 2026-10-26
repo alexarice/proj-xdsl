@@ -2,18 +2,26 @@
 
 from __future__ import annotations
 
-from xdsl.dialects.builtin import NoneAttr, i1
-from xdsl.ir import TypeAttribute
+from xdsl.dialects.arith import ConstantOp
+from xdsl.dialects.builtin import IntegerAttr, NoneAttr, i1
+from xdsl.ir import SSAValue, TypeAttribute
 from xdsl.parser.generic_parser import GenericParser, ParserState
+from xdsl.utils.lexer import Input
 
 from projxdsl.dialects.proj import (
+    AndOp,
     AngleType,
     Basis,
     BasisAttr,
+    EqOp,
+    FromBoolOp,
+    NotOp,
+    OrOp,
     ProjectionType,
     QubitType,
     State,
     StateAttr,
+    XorOp,
 )
 from projxdsl.frontend.lexer import ProjLexer, ProjToken, ProjTokenKind
 
@@ -32,11 +40,17 @@ class ProjParser(GenericParser[ProjTokenKind]):
     """
 
     def __init__(self, code: str, filename: str = "<input>"):
-        from xdsl.utils.lexer import Input
-
         input = Input(code, filename)
         lexer = ProjLexer(input)
         super().__init__(ProjParserState(lexer))
+
+    # Binding powers for Pratt parsing
+    # Higher number = tighter binding
+    _PREFIX_NOT_BP = 7
+    _INFIX_XOR_BP = (5, 6)  # (left_bp, right_bp)
+    _INFIX_AND_BP = (3, 4)
+    _INFIX_OR_BP = (1, 2)
+    _INFIX_EQ_BP = (9, 10)
 
     def parse_type(self) -> TypeAttribute:
         """
@@ -151,3 +165,171 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 )
 
         return StateAttr(state)
+
+    def parse_expression(
+        self, variables: dict[str, SSAValue], min_bp: int = 0
+    ) -> SSAValue:
+        """
+        Parse a projection expression using Pratt parsing.
+
+        Args:
+            variables: Mapping from variable names to SSA values
+            min_bp: Minimum binding power for Pratt parsing (default 0)
+
+        Returns:
+            SSA value of the parsed expression
+
+        Grammar:
+            expr ::= primary postfix* infix*
+            primary ::= identifier | "true" | "false" | "!" expr | "(" expr ")"
+            postfix ::= "==" state
+            infix ::= "&&" expr | "||" expr | "^" expr
+        """
+        lhs = self._parse_prefix_and_primary(variables)
+
+        while True:
+            if self._current_token.kind == ProjTokenKind.EQ:
+                if min_bp > self._INFIX_EQ_BP[0]:
+                    break
+                self._consume_token()
+                state = self.parse_state()
+                lhs = EqOp.build(
+                    operands=[lhs],
+                    properties={"state": state},
+                    result_types=[ProjectionType()],
+                ).result
+            elif self._current_token.kind == ProjTokenKind.AND:
+                left_bp, right_bp = self._INFIX_AND_BP
+                if min_bp > left_bp:
+                    break
+                self._consume_token()
+                rhs = self.parse_expression(variables, right_bp)
+
+                lhs_proj = (
+                    FromBoolOp.build(
+                        operands=[lhs], result_types=[ProjectionType()]
+                    ).result
+                    if lhs.type == i1
+                    else lhs
+                )
+                rhs_proj = (
+                    FromBoolOp.build(
+                        operands=[rhs], result_types=[ProjectionType()]
+                    ).result
+                    if rhs.type == i1
+                    else rhs
+                )
+                lhs = AndOp.build(
+                    operands=[lhs_proj, rhs_proj], result_types=[ProjectionType()]
+                ).result
+            elif self._current_token.kind == ProjTokenKind.OR:
+                left_bp, right_bp = self._INFIX_OR_BP
+                if min_bp > left_bp:
+                    break
+                self._consume_token()
+                rhs = self.parse_expression(variables, right_bp)
+
+                lhs_proj = (
+                    FromBoolOp.build(
+                        operands=[lhs], result_types=[ProjectionType()]
+                    ).result
+                    if lhs.type == i1
+                    else lhs
+                )
+                rhs_proj = (
+                    FromBoolOp.build(
+                        operands=[rhs], result_types=[ProjectionType()]
+                    ).result
+                    if rhs.type == i1
+                    else rhs
+                )
+                lhs = OrOp.build(
+                    operands=[lhs_proj, rhs_proj], result_types=[ProjectionType()]
+                ).result
+            elif self._current_token.kind == ProjTokenKind.XOR:
+                left_bp, right_bp = self._INFIX_XOR_BP
+                if min_bp > left_bp:
+                    break
+                self._consume_token()
+                rhs = self.parse_expression(variables, right_bp)
+
+                lhs_proj = (
+                    FromBoolOp.build(
+                        operands=[lhs], result_types=[ProjectionType()]
+                    ).result
+                    if lhs.type == i1
+                    else lhs
+                )
+                rhs_proj = (
+                    FromBoolOp.build(
+                        operands=[rhs], result_types=[ProjectionType()]
+                    ).result
+                    if rhs.type == i1
+                    else rhs
+                )
+                lhs = XorOp.build(
+                    operands=[lhs_proj, rhs_proj], result_types=[ProjectionType()]
+                ).result
+            else:
+                break
+
+        return lhs
+
+    def _parse_prefix_and_primary(self, variables: dict[str, SSAValue]) -> SSAValue:
+        """
+        Parse prefix operators and primary expressions.
+
+        Prefix operators: !
+        Primary expressions: identifier, true, false, parenthesized expression
+
+        Args:
+            variables: Mapping from variable names to SSA values
+        """
+        match self._current_token.kind:
+            case ProjTokenKind.IDENTIFIER:
+                var_name = self._current_token.text
+                self._consume_token()
+
+                if var_name not in variables:
+                    self.raise_error(f"Undefined variable: {var_name}")
+
+                return variables[var_name]
+
+            case ProjTokenKind.TRUE:
+                self._consume_token()
+
+                bool_const = ConstantOp(IntegerAttr(1, 1))
+                return FromBoolOp.build(
+                    operands=[bool_const.result], result_types=[ProjectionType()]
+                ).result
+
+            case ProjTokenKind.FALSE:
+                self._consume_token()
+
+                bool_const = ConstantOp(IntegerAttr(0, 1))
+                return FromBoolOp.build(
+                    operands=[bool_const.result], result_types=[ProjectionType()]
+                ).result
+
+            case ProjTokenKind.BANG:
+                self._consume_token()
+
+                operand = self.parse_expression(variables, self._PREFIX_NOT_BP)
+                if operand.type == i1:
+                    operand = FromBoolOp.build(
+                        operands=[operand], result_types=[ProjectionType()]
+                    ).result
+                return NotOp.build(
+                    operands=[operand], result_types=[ProjectionType()]
+                ).result
+
+            case ProjTokenKind.LPAREN:
+                self._consume_token()
+                expr = self.parse_expression(variables, 0)
+                self.parse_punctuation(")", " to close parenthesized expression")
+                return expr
+
+            case _:
+                self.raise_error(
+                    f"Unexpected token in expression: {self._current_token.text}"
+                )
