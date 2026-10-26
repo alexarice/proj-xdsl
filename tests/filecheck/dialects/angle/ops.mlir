@@ -14,6 +14,5 @@
 // CHECK: %sum = angle.add %zero, %pi
 %sum = angle.add %zero, %pi
 
-// CHECK: %scaled = angle.scalar_mult %scalar, %pi
-%scalar = arith.constant 2.0 : f64
-%scaled = angle.scalar_mult %scalar, %pi
+// CHECK: %scaled = angle.scalar_mult 2.000000e+00, %pi
+%scaled = angle.scalar_mult 2.0, %pi
