@@ -10,3 +10,6 @@
 
 // CHECK: %pi = angle.pi
 %pi = angle.pi
+
+// CHECK: %sum = angle.add %zero, %pi
+%sum = angle.add %zero, %pi

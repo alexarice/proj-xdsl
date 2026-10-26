@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from xdsl.ir import Dialect, ParametrizedAttribute, TypeAttribute
+from xdsl.ir import Dialect, ParametrizedAttribute, SSAValue, TypeAttribute
 from xdsl.irdl import (
     IRDLOperation,
     irdl_attr_definition,
     irdl_op_definition,
+    operand_def,
     result_def,
 )
 
@@ -54,11 +55,31 @@ class PiOp(IRDLOperation):
         super().__init__(result_types=[AngleType()])
 
 
+@irdl_op_definition
+class AddOp(IRDLOperation):
+    """
+    Angle addition operation.
+    Adds two angles together.
+    """
+
+    name = "angle.add"
+
+    lhs = operand_def(AngleType)
+    rhs = operand_def(AngleType)
+    result = result_def(AngleType)
+
+    assembly_format = "$lhs `,` $rhs attr-dict"
+
+    def __init__(self, lhs: SSAValue, rhs: SSAValue):
+        super().__init__(operands=[lhs, rhs], result_types=[AngleType()])
+
+
 Angle = Dialect(
     "angle",
     [
         ZeroOp,
         PiOp,
+        AddOp,
     ],
     [
         AngleType,
