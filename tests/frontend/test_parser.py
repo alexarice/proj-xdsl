@@ -374,3 +374,58 @@ class TestIntegerParsing:
         parser = ProjParser("5")
         with pytest.raises(ParseError, match="Only 0 is a valid angle constant"):
             parser.parse_expression({})
+
+
+class TestPhaseStatement:
+    """Test parsing of phase statements."""
+
+    def test_phase_statement(self):
+        """Test parsing ph(theta) statement."""
+        from xdsl.ir import Operation
+
+        from projxdsl.dialects.angle import AngleType
+        from projxdsl.dialects.proj import PhaseOp
+        from projxdsl.frontend.parser import ProjParser
+
+        class MockAngleOp(Operation):
+            name = "test.angle"
+
+            def __init__(self):
+                super().__init__(result_types=[AngleType()])
+
+        angle_var = MockAngleOp().results[0]
+        parser = ProjParser("ph(theta)")
+        result = parser.parse_statement({"theta": angle_var})
+        assert isinstance(result, PhaseOp)
+        assert result.angle is angle_var
+
+    def test_phase_statement_with_pi(self):
+        """Test parsing ph(pi) statement."""
+        from projxdsl.dialects.proj import PhaseOp
+        from projxdsl.frontend.parser import ProjParser
+
+        parser = ProjParser("ph(pi)")
+        result = parser.parse_statement({})
+        assert isinstance(result, PhaseOp)
+
+    def test_phase_statement_with_zero(self):
+        """Test parsing ph(0) statement."""
+        from projxdsl.dialects.proj import PhaseOp
+        from projxdsl.frontend.parser import ProjParser
+
+        parser = ProjParser("ph(0)")
+        result = parser.parse_statement({})
+        assert isinstance(result, PhaseOp)
+
+    def test_phase_statement_type_error(self):
+        """Test that ph with non-angle raises error."""
+        from xdsl.dialects.arith import ConstantOp
+        from xdsl.dialects.builtin import IntegerAttr
+
+        from projxdsl.frontend.parser import ProjParser, TypeCheckError
+
+        # Create a boolean variable
+        p = ConstantOp(IntegerAttr(1, 1)).result
+        parser = ProjParser("ph(p)")
+        with pytest.raises(TypeCheckError, match="Expected angle"):
+            parser.parse_statement({"p": p})

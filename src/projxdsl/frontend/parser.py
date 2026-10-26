@@ -20,6 +20,7 @@ from projxdsl.dialects.proj import (
     FromBoolOp,
     NotOp,
     OrOp,
+    PhaseOp,
     ProjectionType,
     QubitType,
     State,
@@ -294,6 +295,30 @@ class ProjParser(GenericParser[ProjTokenKind]):
                     break
 
         return lhs
+
+    def parse_statement(self, variables: dict[str, SSAValue]) -> PhaseOp:
+        """
+        Parse a statement.
+
+        statement ::= "ph" "(" angle-expr ")"
+        angle-expr ::= expression that evaluates to an angle type
+        """
+        self._parse_token(
+            ProjTokenKind.PHASE,
+            "Expected 'ph' keyword for phase statement",
+        )
+
+        with self.in_parens():
+            # Parse the angle expression
+            angle = self.parse_expression(variables)
+
+            # Check that the expression has angle type
+            if angle.type != AngleType():
+                self.raise_typing_error(
+                    f"Expected angle expression for phase statement, got {angle.type}"
+                )
+
+        return PhaseOp(angle)
 
     def _build_binary_predicate_op(
         self,
