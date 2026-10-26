@@ -32,7 +32,7 @@ class Basis(StrEnum):
 @irdl_attr_definition
 class BasisAttr(EnumAttribute[Basis]):
     """
-    Basis attribute (B ∈ {X, Y, Z}).
+    Basis attribute (basis ∈ {X, Y, Z}).
     """
 
     name = "proj.basis"
@@ -117,7 +117,7 @@ class StateAttr(EnumAttribute[State]):
 @irdl_attr_definition
 class ProjectionType(ParametrizedAttribute, TypeAttribute):
     """
-    Projection type (P).
+    Projection type (proj).
     """
 
     name = "proj.projection"
@@ -126,7 +126,7 @@ class ProjectionType(ParametrizedAttribute, TypeAttribute):
 @irdl_attr_definition
 class AngleType(ParametrizedAttribute, TypeAttribute):
     """
-    A - Classical angle type for Phase gate parameters.
+    angle - Classical angle type for Phase gate parameters.
     """
 
     name = "proj.angle"
@@ -135,7 +135,7 @@ class AngleType(ParametrizedAttribute, TypeAttribute):
 @irdl_attr_definition
 class QubitType(ParametrizedAttribute, TypeAttribute):
     """
-    Q - Qubit type with optional basis borrow annotation.
+    qubit - Qubit type with optional basis borrow annotation.
     """
 
     name = "proj.qubit"
@@ -165,7 +165,7 @@ ProjectionConstr = irdl_to_attr_constraint(ProjectionType)
 class NotOp(IRDLOperation):
     """
     Negation operation for projections.
-    Takes a projection (P) and returns a projection.
+    Takes a projection (proj) and returns a projection.
     """
 
     name = "proj.not"
