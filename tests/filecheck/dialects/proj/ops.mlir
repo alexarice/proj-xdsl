@@ -52,3 +52,35 @@ func.func @test_eq_plus(%arg0: !proj.qubit<x>) -> !proj.projection {
 // CHECK: proj.phase %angle
 %angle = angle.zero
 proj.phase %angle
+
+// Test proj.if with true region
+func.func @test_if(%arg0: !proj.projection) {
+  // CHECK: proj.if %arg0 {
+  // CHECK-GENERIC: "proj.if"(%[[ARG0:.*]]) ({
+  // CHECK-GENERIC:   "proj.yield"() : () -> ()
+  // CHECK-GENERIC: }) : (!proj.projection) -> ()
+  proj.if %arg0 {
+    proj.yield
+  }
+  func.return
+}
+
+// Test proj.if with else region
+func.func @test_if_else(%arg0: !proj.projection) {
+  // CHECK: proj.if %arg0 {
+  // CHECK:   proj.yield
+  // CHECK: } else {
+  // CHECK:   proj.yield
+  // CHECK: }
+  // CHECK-GENERIC: "proj.if"(%[[ARG0:.*]]) ({
+  // CHECK-GENERIC:   "proj.yield"() : () -> ()
+  // CHECK-GENERIC: }, {
+  // CHECK-GENERIC:   "proj.yield"() : () -> ()
+  // CHECK-GENERIC: }) : (!proj.projection) -> ()
+  proj.if %arg0 {
+    proj.yield
+  } else {
+    proj.yield
+  }
+  func.return
+}

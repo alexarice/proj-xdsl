@@ -1,10 +1,19 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from enum import auto
 
 from xdsl.dialects.builtin import NoneAttr, i1
 from xdsl.dialects.utils import EnumAttribute
-from xdsl.ir import Dialect, ParametrizedAttribute, SSAValue, TypeAttribute
+from xdsl.ir import (
+    Block,
+    Dialect,
+    Operation,
+    ParametrizedAttribute,
+    Region,
+    SSAValue,
+    TypeAttribute,
+)
 from xdsl.irdl import (
     IRDLOperation,
     irdl_attr_definition,
@@ -12,10 +21,14 @@ from xdsl.irdl import (
     irdl_to_attr_constraint,
     operand_def,
     prop_def,
+    region_def,
     result_def,
+    traits_def,
+    var_operand_def,
 )
-from xdsl.parser import AttrParser
+from xdsl.parser import AttrParser, Parser
 from xdsl.printer import Printer
+from xdsl.traits import IsTerminator, SingleBlockImplicitTerminator
 from xdsl.utils.str_enum import StrEnum
 
 from projxdsl.dialects.angle import AngleType
@@ -298,6 +311,98 @@ class PhaseOp(IRDLOperation):
         super().__init__(operands=[angle])
 
 
+@irdl_op_definition
+class YieldOp(IRDLOperation):
+    """
+    Yield operation for proj control flow.
+    Terminates a proj.if region.
+    """
+
+    name = "proj.yield"
+
+    arguments = var_operand_def()
+
+    assembly_format = "attr-dict ($arguments^ `:` type($arguments))?"
+
+    traits = traits_def(IsTerminator())
+
+    def __init__(self, *operands: SSAValue):
+        super().__init__(operands=[operands])
+
+
+@irdl_op_definition
+class IfOp(IRDLOperation):
+    """
+    Conditional operation for projections.
+    Executes the true region if the condition projection is true.
+    """
+
+    name = "proj.if"
+
+    condition = operand_def(ProjectionType)
+    true_region = region_def("single_block")
+    false_region = region_def()
+
+    traits = traits_def(SingleBlockImplicitTerminator(YieldOp))
+
+    def __init__(
+        self,
+        condition: SSAValue,
+        true_region: Region | Sequence[Block] | Sequence[Operation],
+        false_region: Region | Sequence[Block] | Sequence[Operation] | None = None,
+    ):
+        if false_region is None:
+            false_region = Region()
+        super().__init__(
+            operands=[condition],
+            regions=[true_region, false_region],
+        )
+
+    @staticmethod
+    def parse_region_with_yield(parser: Parser) -> Region:
+        region = parser.parse_region()
+        block = region.blocks.last
+        if block is None:
+            block = Block()
+            region.add_block(block)
+        last_op = block.last_op
+        if last_op is not None and last_op.has_trait(IsTerminator):
+            return region
+        block.add_op(YieldOp())
+        return region
+
+    @classmethod
+    def parse(cls, parser: Parser) -> IfOp:
+        condition = parser.parse_operand()
+        true_region = cls.parse_region_with_yield(parser)
+        false_region = (
+            cls.parse_region_with_yield(parser)
+            if parser.parse_optional_keyword("else")
+            else Region()
+        )
+        parser.parse_optional_attr_dict()
+        return cls(condition, true_region, false_region)
+
+    def print(self, printer: Printer) -> None:
+        printer.print_string(" ")
+        printer.print_operand(self.condition)
+        printer.print_string(" ")
+        printer.print_region(
+            self.true_region,
+            print_entry_block_args=False,
+            print_block_terminators=True,
+        )
+        if bool(self.false_region.blocks):
+            printer.print_string(" else ")
+            printer.print_region(
+                self.false_region,
+                print_entry_block_args=False,
+                print_block_terminators=True,
+            )
+        if bool(self.attributes.keys()):
+            printer.print_attr_dict(self.attributes)
+
+
 Proj = Dialect(
     "proj",
     [
@@ -308,6 +413,8 @@ Proj = Dialect(
         FromBoolOp,
         EqOp,
         PhaseOp,
+        YieldOp,
+        IfOp,
     ],
     [
         BasisAttr,

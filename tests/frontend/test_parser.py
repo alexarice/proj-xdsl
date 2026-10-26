@@ -369,7 +369,9 @@ class TestIntegerParsing:
 
     def test_invalid_integer_for_angle(self):
         """Test that non-zero integers are rejected for angle context."""
-        from projxdsl.frontend.parser import ParseError, ProjParser
+        from xdsl.utils.exceptions import ParseError
+
+        from projxdsl.frontend.parser import ProjParser
 
         parser = ProjParser("5")
         with pytest.raises(ParseError, match="Only 0 is a valid angle constant"):

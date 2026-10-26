@@ -634,7 +634,7 @@ class TestAngleConstants:
 
     def test_invalid_integer_angle(self):
         """Test that non-zero integers are rejected."""
-        from projxdsl.frontend.parser import ParseError
+        from xdsl.utils.exceptions import ParseError
 
         with pytest.raises(ParseError, match="Only 0 is a valid angle constant"):
             parse_expression("1", {})
