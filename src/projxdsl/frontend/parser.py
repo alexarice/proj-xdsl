@@ -188,90 +188,95 @@ class ProjParser(GenericParser[ProjTokenKind]):
         lhs = self._parse_prefix_and_primary(variables)
 
         while True:
-            if self._current_token.kind == ProjTokenKind.EQ:
-                if min_bp > self._INFIX_EQ_BP[0]:
-                    break
-                self._consume_token()
-                state = self.parse_state()
-                lhs = EqOp.build(
-                    operands=[lhs],
-                    properties={"state": state},
-                    result_types=[ProjectionType()],
-                ).result
-            elif self._current_token.kind == ProjTokenKind.AND:
-                left_bp, right_bp = self._INFIX_AND_BP
-                if min_bp > left_bp:
-                    break
-                self._consume_token()
-                rhs = self.parse_expression(variables, right_bp)
+            match self._current_token.kind:
+                case ProjTokenKind.EQ:
+                    if min_bp > self._INFIX_EQ_BP[0]:
+                        break
+                    self._consume_token()
+                    state = self.parse_state()
+                    lhs = EqOp.build(
+                        operands=[lhs],
+                        properties={"state": state},
+                        result_types=[ProjectionType()],
+                    ).result
 
-                lhs_proj = (
-                    FromBoolOp.build(
-                        operands=[lhs], result_types=[ProjectionType()]
-                    ).result
-                    if lhs.type == i1
-                    else lhs
-                )
-                rhs_proj = (
-                    FromBoolOp.build(
-                        operands=[rhs], result_types=[ProjectionType()]
-                    ).result
-                    if rhs.type == i1
-                    else rhs
-                )
-                lhs = AndOp.build(
-                    operands=[lhs_proj, rhs_proj], result_types=[ProjectionType()]
-                ).result
-            elif self._current_token.kind == ProjTokenKind.OR:
-                left_bp, right_bp = self._INFIX_OR_BP
-                if min_bp > left_bp:
-                    break
-                self._consume_token()
-                rhs = self.parse_expression(variables, right_bp)
+                case ProjTokenKind.AND:
+                    left_bp, right_bp = self._INFIX_AND_BP
+                    if min_bp > left_bp:
+                        break
+                    self._consume_token()
+                    rhs = self.parse_expression(variables, right_bp)
 
-                lhs_proj = (
-                    FromBoolOp.build(
-                        operands=[lhs], result_types=[ProjectionType()]
+                    lhs_proj = (
+                        FromBoolOp.build(
+                            operands=[lhs], result_types=[ProjectionType()]
+                        ).result
+                        if lhs.type == i1
+                        else lhs
+                    )
+                    rhs_proj = (
+                        FromBoolOp.build(
+                            operands=[rhs], result_types=[ProjectionType()]
+                        ).result
+                        if rhs.type == i1
+                        else rhs
+                    )
+                    lhs = AndOp.build(
+                        operands=[lhs_proj, rhs_proj], result_types=[ProjectionType()]
                     ).result
-                    if lhs.type == i1
-                    else lhs
-                )
-                rhs_proj = (
-                    FromBoolOp.build(
-                        operands=[rhs], result_types=[ProjectionType()]
-                    ).result
-                    if rhs.type == i1
-                    else rhs
-                )
-                lhs = OrOp.build(
-                    operands=[lhs_proj, rhs_proj], result_types=[ProjectionType()]
-                ).result
-            elif self._current_token.kind == ProjTokenKind.XOR:
-                left_bp, right_bp = self._INFIX_XOR_BP
-                if min_bp > left_bp:
-                    break
-                self._consume_token()
-                rhs = self.parse_expression(variables, right_bp)
 
-                lhs_proj = (
-                    FromBoolOp.build(
-                        operands=[lhs], result_types=[ProjectionType()]
+                case ProjTokenKind.OR:
+                    left_bp, right_bp = self._INFIX_OR_BP
+                    if min_bp > left_bp:
+                        break
+                    self._consume_token()
+                    rhs = self.parse_expression(variables, right_bp)
+
+                    lhs_proj = (
+                        FromBoolOp.build(
+                            operands=[lhs], result_types=[ProjectionType()]
+                        ).result
+                        if lhs.type == i1
+                        else lhs
+                    )
+                    rhs_proj = (
+                        FromBoolOp.build(
+                            operands=[rhs], result_types=[ProjectionType()]
+                        ).result
+                        if rhs.type == i1
+                        else rhs
+                    )
+                    lhs = OrOp.build(
+                        operands=[lhs_proj, rhs_proj], result_types=[ProjectionType()]
                     ).result
-                    if lhs.type == i1
-                    else lhs
-                )
-                rhs_proj = (
-                    FromBoolOp.build(
-                        operands=[rhs], result_types=[ProjectionType()]
+
+                case ProjTokenKind.XOR:
+                    left_bp, right_bp = self._INFIX_XOR_BP
+                    if min_bp > left_bp:
+                        break
+                    self._consume_token()
+                    rhs = self.parse_expression(variables, right_bp)
+
+                    lhs_proj = (
+                        FromBoolOp.build(
+                            operands=[lhs], result_types=[ProjectionType()]
+                        ).result
+                        if lhs.type == i1
+                        else lhs
+                    )
+                    rhs_proj = (
+                        FromBoolOp.build(
+                            operands=[rhs], result_types=[ProjectionType()]
+                        ).result
+                        if rhs.type == i1
+                        else rhs
+                    )
+                    lhs = XorOp.build(
+                        operands=[lhs_proj, rhs_proj], result_types=[ProjectionType()]
                     ).result
-                    if rhs.type == i1
-                    else rhs
-                )
-                lhs = XorOp.build(
-                    operands=[lhs_proj, rhs_proj], result_types=[ProjectionType()]
-                ).result
-            else:
-                break
+
+                case _:
+                    break
 
         return lhs
 
