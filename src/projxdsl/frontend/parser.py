@@ -56,10 +56,10 @@ class ProjParser(GenericParser[ProjTokenKind]):
     # Binding powers for Pratt parsing
     # Higher number = tighter binding
     _PREFIX_NOT_BP = 7
+    _POSTFIX_EQ_BP = 9  # Postfix operator (single binding power)
     _INFIX_XOR_BP = (5, 6)  # (left_bp, right_bp)
     _INFIX_AND_BP = (3, 4)
     _INFIX_OR_BP = (1, 2)
-    _INFIX_EQ_BP = (9, 10)
 
     def parse_type(self) -> TypeAttribute:
         """
@@ -203,7 +203,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         while True:
             match self._current_token.kind:
                 case ProjTokenKind.EQ:
-                    if min_bp > self._INFIX_EQ_BP[0]:
+                    if min_bp > self._POSTFIX_EQ_BP:
                         break
                     self._consume_token()
                     state = self.parse_state()
