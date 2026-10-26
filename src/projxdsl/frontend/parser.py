@@ -11,7 +11,7 @@ from xdsl.parser.generic_parser import GenericParser, ParserState
 from xdsl.utils.exceptions import ParseError
 from xdsl.utils.lexer import Input
 
-from projxdsl.dialects.angle import AngleType
+from projxdsl.dialects.angle import AddOp, AngleType, ScalarMultOp
 from projxdsl.dialects.proj import (
     AndOp,
     Basis,
@@ -55,8 +55,10 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
     # Binding powers for Pratt parsing
     # Higher number = tighter binding
+    _PREFIX_SCALAR_MULT_BP = 11  # Prefix operator (single binding power) - tightest
     _PREFIX_NOT_BP = 7
     _POSTFIX_EQ_BP = 9  # Postfix operator (single binding power)
+    _INFIX_ADD_BP = (8, 9)  # (left_bp, right_bp) - tighter than not
     _INFIX_XOR_BP = (5, 6)  # (left_bp, right_bp)
     _INFIX_AND_BP = (3, 4)
     _INFIX_OR_BP = (1, 2)
@@ -261,6 +263,25 @@ class ProjParser(GenericParser[ProjTokenKind]):
                     rhs = self.parse_expression(variables, right_bp)
                     lhs = self._build_binary_predicate_op(lhs, rhs, OrIOp, OrOp, "||")
 
+                case ProjTokenKind.PLUS:
+                    left_bp, right_bp = self._INFIX_ADD_BP
+                    if min_bp > left_bp:
+                        break
+                    self._consume_token()
+                    rhs = self.parse_expression(variables, right_bp)
+
+                    # Check that both operands are angles
+                    if lhs.type != AngleType():
+                        self.raise_typing_error(
+                            f"Expected angle for '+' left operand, got {lhs.type}"
+                        )
+                    if rhs.type != AngleType():
+                        self.raise_typing_error(
+                            f"Expected angle for '+' right operand, got {rhs.type}"
+                        )
+
+                    lhs = AddOp(lhs, rhs).result
+
                 case ProjTokenKind.XOR:
                     left_bp, right_bp = self._INFIX_XOR_BP
                     if min_bp > left_bp:
@@ -352,6 +373,25 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 self._consume_token()
                 bool_const = ConstantOp(IntegerAttr(0, 1))
                 return bool_const.result
+
+            case ProjTokenKind.FLOAT:
+                # Scalar multiplication: `2.0 * a` where `2.0 *` is a prefix operator
+                scalar = self.parse_float()
+                self._parse_token(
+                    ProjTokenKind.STAR,
+                    "Expected '*' after float literal for scalar multiplication",
+                )
+
+                # Parse the angle expression with tight binding
+                angle = self.parse_expression(variables, self._PREFIX_SCALAR_MULT_BP)
+
+                # Check that the operand is an angle
+                if angle.type != AngleType():
+                    self.raise_typing_error(
+                        f"Expected angle for '*' operand, got {angle.type}"
+                    )
+
+                return ScalarMultOp(scalar, angle).result
 
             case ProjTokenKind.BANG:
                 self._consume_token()

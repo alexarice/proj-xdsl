@@ -6,6 +6,7 @@ from xdsl.dialects.builtin import IntegerAttr, i1
 from xdsl.ir import SSAValue
 from xdsl.utils.exceptions import ParseError
 
+from projxdsl.dialects.angle import AddOp, AngleType, ScalarMultOp
 from projxdsl.dialects.proj import (
     AndOp,
     EqOp,
@@ -30,13 +31,36 @@ def make_qubit_var() -> SSAValue:
 
     from projxdsl.dialects.proj import QubitType
 
-    class MockAllocOp(Operation):
-        name = "test.alloc"
+    class MockQubitOp(Operation):
+        name = "test.qubit"
 
         def __init__(self):
             super().__init__(result_types=[QubitType(NoneAttr())])
 
-    return MockAllocOp().results[0]
+    return MockQubitOp().results[0]
+
+
+def make_angle_var() -> SSAValue:
+    """Create an angle SSA value for testing."""
+    from xdsl.ir import Operation
+
+    from projxdsl.dialects.angle import AngleType
+
+    class MockAngleOp(Operation):
+        name = "test.angle"
+
+        def __init__(self):
+            super().__init__(result_types=[AngleType()])
+
+    return MockAngleOp().results[0]
+
+    class MockAngleOp(Operation):
+        name = "test.angle"
+
+        def __init__(self):
+            super().__init__(result_types=[AngleType()])
+
+    return MockAngleOp().results[0]
 
 
 def parse_expression(code: str, variables: dict[str, SSAValue] | None = None):
@@ -529,3 +553,51 @@ class TestComplexExpressions:
         # r should also be wrapped in FromBoolOp
         r_from_bool = result.owner.operands[1].owner
         assert isinstance(r_from_bool, FromBoolOp)
+
+
+class TestAngleExpressions:
+    """Test parsing of angle expressions."""
+
+    def test_angle_add(self):
+        """Test parsing angle addition."""
+
+        a = make_angle_var()
+        b = make_angle_var()
+        result = parse_expression("a + b", {"a": a, "b": b})
+        assert isinstance(result.owner, AddOp)
+        assert result.type == AngleType()
+
+    def test_angle_scalar_mult(self):
+        """Test parsing scalar multiplication: 2.0 * a."""
+
+        a = make_angle_var()
+        result = parse_expression("2.0 * a", {"a": a})
+        assert isinstance(result.owner, ScalarMultOp)
+        assert result.type == AngleType()
+
+    def test_angle_scalar_mult_binds_tighter(self):
+        """Test that scalar_mult binds tighter than add."""
+
+        a = make_angle_var()
+        b = make_angle_var()
+        # 2.0 * a + b should parse as (2.0 * a) + b
+        result = parse_expression("2.0 * a + b", {"a": a, "b": b})
+        assert isinstance(result.owner, AddOp)
+        assert isinstance(result.owner.operands[0].owner, ScalarMultOp)
+
+    def test_angle_add_type_error(self):
+        """Test that add with non-angle raises error."""
+        from projxdsl.frontend.parser import TypeCheckError
+
+        p = make_bool_var()
+        a = make_angle_var()
+        with pytest.raises(TypeCheckError, match="Expected angle"):
+            parse_expression("p + a", {"p": p, "a": a})
+
+    def test_angle_scalar_mult_type_error(self):
+        """Test that scalar_mult with non-angle raises error."""
+        from projxdsl.frontend.parser import TypeCheckError
+
+        p = make_bool_var()
+        with pytest.raises(TypeCheckError, match="Expected angle"):
+            parse_expression("2.0 * p", {"p": p})

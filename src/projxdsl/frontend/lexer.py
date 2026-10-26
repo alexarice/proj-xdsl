@@ -26,6 +26,7 @@ class ProjTokenKind(Enum):
     BANG = auto()
     LPAREN = auto()
     RPAREN = auto()
+    STAR = auto()
 
     # Operators
     AND = auto()
@@ -33,6 +34,7 @@ class ProjTokenKind(Enum):
     XOR = auto()
     NOT = auto()
     EQ = auto()
+    PLUS = auto()
 
     # Boolean literals
     TRUE = auto()
@@ -79,6 +81,8 @@ KIND_BY_PUNCTUATION_SPELLING = {
     "!": ProjTokenKind.BANG,
     "(": ProjTokenKind.LPAREN,
     ")": ProjTokenKind.RPAREN,
+    "*": ProjTokenKind.STAR,
+    "+": ProjTokenKind.PLUS,
 }
 
 OPERATOR_SPELLING = {
