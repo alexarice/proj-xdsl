@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import NoReturn
 
-from xdsl.dialects.arith import ConstantOp, XOrIOp
+from xdsl.dialects.arith import AndIOp, ConstantOp, OrIOp, XOrIOp
 from xdsl.dialects.builtin import IntegerAttr, NoneAttr, i1
 from xdsl.ir import SSAValue, TypeAttribute
 from xdsl.parser.generic_parser import GenericParser, ParserState
@@ -237,24 +237,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
                         break
                     self._consume_token()
                     rhs = self.parse_expression(variables, right_bp)
-
-                    lhs_proj = (
-                        FromBoolOp.build(
-                            operands=[lhs], result_types=[ProjectionType()]
-                        ).result
-                        if lhs.type == i1
-                        else lhs
-                    )
-                    rhs_proj = (
-                        FromBoolOp.build(
-                            operands=[rhs], result_types=[ProjectionType()]
-                        ).result
-                        if rhs.type == i1
-                        else rhs
-                    )
-                    lhs = AndOp.build(
-                        operands=[lhs_proj, rhs_proj], result_types=[ProjectionType()]
-                    ).result
+                    lhs = self._build_binary_predicate_op(lhs, rhs, AndIOp, AndOp, "&&")
 
                 case ProjTokenKind.OR:
                     left_bp, right_bp = self._INFIX_OR_BP
@@ -262,24 +245,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
                         break
                     self._consume_token()
                     rhs = self.parse_expression(variables, right_bp)
-
-                    lhs_proj = (
-                        FromBoolOp.build(
-                            operands=[lhs], result_types=[ProjectionType()]
-                        ).result
-                        if lhs.type == i1
-                        else lhs
-                    )
-                    rhs_proj = (
-                        FromBoolOp.build(
-                            operands=[rhs], result_types=[ProjectionType()]
-                        ).result
-                        if rhs.type == i1
-                        else rhs
-                    )
-                    lhs = OrOp.build(
-                        operands=[lhs_proj, rhs_proj], result_types=[ProjectionType()]
-                    ).result
+                    lhs = self._build_binary_predicate_op(lhs, rhs, OrIOp, OrOp, "||")
 
                 case ProjTokenKind.XOR:
                     left_bp, right_bp = self._INFIX_XOR_BP
@@ -287,29 +253,69 @@ class ProjParser(GenericParser[ProjTokenKind]):
                         break
                     self._consume_token()
                     rhs = self.parse_expression(variables, right_bp)
-
-                    lhs_proj = (
-                        FromBoolOp.build(
-                            operands=[lhs], result_types=[ProjectionType()]
-                        ).result
-                        if lhs.type == i1
-                        else lhs
-                    )
-                    rhs_proj = (
-                        FromBoolOp.build(
-                            operands=[rhs], result_types=[ProjectionType()]
-                        ).result
-                        if rhs.type == i1
-                        else rhs
-                    )
-                    lhs = XorOp.build(
-                        operands=[lhs_proj, rhs_proj], result_types=[ProjectionType()]
-                    ).result
+                    lhs = self._build_binary_predicate_op(lhs, rhs, XOrIOp, XorOp, "^")
 
                 case _:
                     break
 
         return lhs
+
+    def _build_binary_predicate_op(
+        self,
+        lhs: SSAValue,
+        rhs: SSAValue,
+        classical_op: type[AndIOp | OrIOp | XOrIOp],
+        projection_op: type[AndOp | OrOp | XorOp],
+        op_name: str,
+    ) -> SSAValue:
+        """
+        Build a binary operation with proper type checking.
+
+        Args:
+            lhs: Left-hand side operand
+            rhs: Right-hand side operand
+            classical_op: Classical operation class (arith.andi, arith.ori, arith.xori)
+            projection_op: Projection operation class (proj.and, proj.or, proj.xor)
+            op_name: Name of the operator for error messages
+
+        Returns:
+            SSA value of the result
+
+        Raises:
+            TypeCheckError: If operand types are incompatible
+        """
+        lhs_is_bool = lhs.type == i1
+        rhs_is_bool = rhs.type == i1
+        lhs_is_proj = isinstance(lhs.type, ProjectionType)
+        rhs_is_proj = isinstance(rhs.type, ProjectionType)
+
+        if lhs_is_bool and rhs_is_bool:
+            # Both booleans: use classical operation
+            return classical_op(lhs, rhs).result
+        elif lhs_is_proj and rhs_is_proj:
+            # Both projections: use projection operation
+            return projection_op.build(
+                operands=[lhs, rhs], result_types=[ProjectionType()]
+            ).result
+        elif (lhs_is_bool and rhs_is_proj) or (lhs_is_proj and rhs_is_bool):
+            # Mixed: convert boolean to projection, then use projection operation
+            if lhs_is_bool:
+                lhs = FromBoolOp.build(
+                    operands=[lhs], result_types=[ProjectionType()]
+                ).result
+            if rhs_is_bool:
+                rhs = FromBoolOp.build(
+                    operands=[rhs], result_types=[ProjectionType()]
+                ).result
+            return projection_op.build(
+                operands=[lhs, rhs], result_types=[ProjectionType()]
+            ).result
+        else:
+            # Invalid types
+            self.raise_typing_error(
+                f"Invalid operand types for '{op_name}': expected boolean or "
+                f"projection, got {lhs.type} and {rhs.type}"
+            )
 
     def _parse_prefix_and_primary(self, variables: dict[str, SSAValue]) -> SSAValue:
         """
