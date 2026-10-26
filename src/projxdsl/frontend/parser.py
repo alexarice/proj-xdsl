@@ -207,6 +207,24 @@ class ProjParser(GenericParser[ProjTokenKind]):
                         break
                     self._consume_token()
                     state = self.parse_state()
+
+                    if not isinstance(lhs.type, QubitType):
+                        self.raise_typing_error(
+                            f"Expected qubit type for '==' operator, got {lhs.type}"
+                        )
+
+                    # Check basis compatibility
+                    qubit_type = lhs.type
+                    if not isinstance(qubit_type.borrow_type, NoneAttr):
+                        # Qubit has a basis annotation, check state matches
+                        basis = qubit_type.borrow_type.data
+                        state_basis = state.data.get_basis()
+                        if basis != state_basis:
+                            self.raise_typing_error(
+                                f"Qubit borrowed in {basis.name} basis cannot be "
+                                f"projected in {state_basis.name} basis"
+                            )
+
                     lhs = EqOp.build(
                         operands=[lhs],
                         properties={"state": state},

@@ -71,6 +71,16 @@ class State(StrEnum):
     LEFT = auto()
     RIGHT = auto()
 
+    def get_basis(self) -> Basis:
+        """Get the measurement basis for this state."""
+        match self:
+            case State.ZERO | State.ONE:
+                return Basis.Z
+            case State.PLUS | State.MINUS:
+                return Basis.X
+            case State.LEFT | State.RIGHT:
+                return Basis.Y
+
 
 @irdl_attr_definition
 class StateAttr(EnumAttribute[State]):
