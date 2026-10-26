@@ -211,8 +211,8 @@ class TestStateParsing:
             parse_state("|X>")
 
     def test_missing_pipe(self):
-        # Missing pipe causes lexer error on the digit
-        with pytest.raises(ValueError, match="Unexpected character: 0"):
+        # Missing pipe causes parse error (0 is lexed as integer, but not a valid state)
+        with pytest.raises(ParseError, match="Expected state literal"):
             parse_state("0>")
 
     def test_missing_closing(self):
@@ -313,3 +313,64 @@ class TestFloatParsing:
         parser = ProjParser("x")
         result = parser.parse_optional_float()
         assert result is None
+
+
+class TestIntegerParsing:
+    """Test integer literal parsing."""
+
+    def test_simple_integer(self):
+        """Test parsing a simple integer literal."""
+        from xdsl.utils.lexer import Input
+
+        from projxdsl.frontend.lexer import ProjLexer, ProjTokenKind
+
+        input = Input("42", "<test>")
+        lexer = ProjLexer(input)
+        token = lexer.lex()
+
+        assert token.kind == ProjTokenKind.INTEGER
+        assert token.kind.get_integer_value(token.span) == 42
+
+    def test_single_digit_integer(self):
+        """Test parsing a single digit integer."""
+        from xdsl.utils.lexer import Input
+
+        from projxdsl.frontend.lexer import ProjLexer, ProjTokenKind
+
+        input = Input("0", "<test>")
+        lexer = ProjLexer(input)
+        token = lexer.lex()
+
+        assert token.kind == ProjTokenKind.INTEGER
+        assert token.kind.get_integer_value(token.span) == 0
+
+    def test_multi_digit_integer(self):
+        """Test parsing a multi-digit integer."""
+        from xdsl.utils.lexer import Input
+
+        from projxdsl.frontend.lexer import ProjLexer, ProjTokenKind
+
+        input = Input("123", "<test>")
+        lexer = ProjLexer(input)
+        token = lexer.lex()
+
+        assert token.kind == ProjTokenKind.INTEGER
+        assert token.kind.get_integer_value(token.span) == 123
+
+    def test_integer_in_parser(self):
+        """Test parsing integers in the parser (only 0 is valid for angles)."""
+        from projxdsl.dialects.angle import ZeroOp
+        from projxdsl.frontend.parser import ProjParser
+
+        parser = ProjParser("0")
+        result = parser.parse_expression({})
+        assert isinstance(result.owner, ZeroOp)
+        assert result.type == AngleType()
+
+    def test_invalid_integer_for_angle(self):
+        """Test that non-zero integers are rejected for angle context."""
+        from projxdsl.frontend.parser import ParseError, ProjParser
+
+        parser = ProjParser("5")
+        with pytest.raises(ParseError, match="Only 0 is a valid angle constant"):
+            parser.parse_expression({})

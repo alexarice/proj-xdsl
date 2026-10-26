@@ -601,3 +601,40 @@ class TestAngleExpressions:
         p = make_bool_var()
         with pytest.raises(TypeCheckError, match="Expected angle"):
             parse_expression("2.0 * p", {"p": p})
+
+
+class TestAngleConstants:
+    """Test parsing of angle constants."""
+
+    def test_pi_constant(self):
+        """Test parsing pi constant."""
+        from projxdsl.dialects.angle import PiOp
+
+        result = parse_expression("pi", {})
+        assert isinstance(result.owner, PiOp)
+        assert result.type == AngleType()
+
+    def test_zero_constant(self):
+        """Test parsing 0 constant."""
+        from projxdsl.dialects.angle import ZeroOp
+
+        result = parse_expression("0", {})
+        assert isinstance(result.owner, ZeroOp)
+        assert result.type == AngleType()
+
+    def test_angle_constant_in_expression(self):
+        """Test using angle constants in expressions."""
+        from projxdsl.dialects.angle import AddOp, PiOp, ZeroOp
+
+        # pi + 0
+        result = parse_expression("pi + 0", {})
+        assert isinstance(result.owner, AddOp)
+        assert isinstance(result.owner.operands[0].owner, PiOp)
+        assert isinstance(result.owner.operands[1].owner, ZeroOp)
+
+    def test_invalid_integer_angle(self):
+        """Test that non-zero integers are rejected."""
+        from projxdsl.frontend.parser import ParseError
+
+        with pytest.raises(ParseError, match="Only 0 is a valid angle constant"):
+            parse_expression("1", {})

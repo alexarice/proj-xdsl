@@ -40,14 +40,28 @@ class ProjTokenKind(Enum):
     TRUE = auto()
     FALSE = auto()
 
+    # Angle constants
+    PI = auto()
+
     # State (ket states)
     STATE = auto()
 
     # Literals
     FLOAT = auto()
+    INTEGER = auto()
 
     # Identifier (includes X, Y, Z which can be basis or identifiers)
     IDENTIFIER = auto()
+
+    def get_integer_value(self, span: Span) -> int:
+        """
+        Translate the token text into an integer value.
+        This function will raise an exception if the token is not an integer
+        literal.
+        """
+        if self != ProjTokenKind.INTEGER:
+            raise ValueError("Token is not an integer literal!")
+        return int(span.text)
 
     def get_float_value(self, span: Span) -> float:
         """
@@ -104,6 +118,10 @@ BOOL_LITERAL_MAP = {
     "false": ProjTokenKind.FALSE,
 }
 
+ANGLE_CONSTANT_MAP = {
+    "pi": ProjTokenKind.PI,
+}
+
 ProjToken = Token[ProjTokenKind]
 
 
@@ -113,6 +131,7 @@ class ProjLexer(Lexer[ProjTokenKind]):
     _whitespace_regex = re.compile(r"((//[^\n]*(\n)?)|(\s+))*", re.ASCII)
     _identifier_regex = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*", re.ASCII)
     _float_regex = re.compile(r"[0-9]+\.[0-9]*([eE][+-]?[0-9]+)?", re.ASCII)
+    _integer_regex = re.compile(r"[0-9]+", re.ASCII)
 
     def _is_in_bounds(self, size: Position = 1) -> bool:
         """Check if the current position is within the bounds of the input."""
@@ -175,9 +194,17 @@ class ProjLexer(Lexer[ProjTokenKind]):
         if bool_lit := self._try_bool_literal():
             return bool_lit
 
+        # Try angle constants (pi)
+        if angle_const := self._try_angle_constant():
+            return angle_const
+
         # Try float literals
         if float_lit := self._try_float():
             return float_lit
+
+        # Try integer literals
+        if int_lit := self._try_integer():
+            return int_lit
 
         # Try identifier (includes X, Y, Z which can be basis or identifiers)
         if ident := self._try_identifier():
@@ -270,6 +297,28 @@ class ProjLexer(Lexer[ProjTokenKind]):
                     self._consume_chars(len(keyword))
                     return self._form_token(kind, self.pos - len(keyword))
         return None
+
+    def _try_angle_constant(self) -> ProjToken | None:
+        """Try to lex angle constants (pi)."""
+        for keyword, kind in ANGLE_CONSTANT_MAP.items():
+            if self._peek_chars(len(keyword)) == keyword:
+                # Make sure it's not part of a larger identifier
+                next_char: str | None = None
+                if self._is_in_bounds(len(keyword) + 1):
+                    peeked = self._peek_chars(len(keyword) + 1)
+                    assert peeked is not None
+                    next_char = peeked[-1]
+                if next_char is None or not (next_char.isalnum() or next_char == "_"):
+                    self._consume_chars(len(keyword))
+                    return self._form_token(kind, self.pos - len(keyword))
+        return None
+
+    def _try_integer(self) -> ProjToken | None:
+        """Try to lex an integer literal."""
+        match = self._consume_regex(self._integer_regex)
+        if match is None:
+            return None
+        return self._form_token(ProjTokenKind.INTEGER, match.start())
 
     def _try_float(self) -> ProjToken | None:
         """Try to lex a float literal (e.g., 1.0, 3.14, 2.5e-3)."""

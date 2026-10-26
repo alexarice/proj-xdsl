@@ -11,7 +11,7 @@ from xdsl.parser.generic_parser import GenericParser, ParserState
 from xdsl.utils.exceptions import ParseError
 from xdsl.utils.lexer import Input
 
-from projxdsl.dialects.angle import AddOp, AngleType, ScalarMultOp
+from projxdsl.dialects.angle import AddOp, AngleType, PiOp, ScalarMultOp, ZeroOp
 from projxdsl.dialects.proj import (
     AndOp,
     Basis,
@@ -373,6 +373,18 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 self._consume_token()
                 bool_const = ConstantOp(IntegerAttr(0, 1))
                 return bool_const.result
+
+            case ProjTokenKind.PI:
+                self._consume_token()
+                return PiOp().result
+
+            case ProjTokenKind.INTEGER:
+                # Only 0 is valid as an angle constant
+                token = self._consume_token()
+                value = token.kind.get_integer_value(token.span)
+                if value != 0:
+                    self.raise_error(f"Only 0 is a valid angle constant, got {value}")
+                return ZeroOp().result
 
             case ProjTokenKind.FLOAT:
                 # Scalar multiplication: `2.0 * a` where `2.0 *` is a prefix operator
