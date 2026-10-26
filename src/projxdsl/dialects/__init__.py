@@ -11,7 +11,13 @@ def get_all_dialects() -> dict[str, Callable[[], Dialect]]:
 
         return Proj
 
+    def get_angle():
+        from projxdsl.dialects.angle import Angle
+
+        return Angle
+
     # Add your dialects here to be discovered by `xdsl-opt`
     return {
         "proj": get_proj,
+        "angle": get_angle,
     }

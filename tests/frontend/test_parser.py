@@ -4,8 +4,8 @@ import pytest
 from xdsl.dialects.builtin import NoneAttr, i1
 from xdsl.utils.exceptions import ParseError
 
+from projxdsl.dialects.angle import AngleType
 from projxdsl.dialects.proj import (
-    AngleType,
     Basis,
     BasisAttr,
     ProjectionType,

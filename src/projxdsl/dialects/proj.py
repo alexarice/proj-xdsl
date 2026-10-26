@@ -134,15 +134,6 @@ class ProjectionType(ParametrizedAttribute, TypeAttribute):
 
 
 @irdl_attr_definition
-class AngleType(ParametrizedAttribute, TypeAttribute):
-    """
-    angle - Classical angle type for Phase gate parameters.
-    """
-
-    name = "proj.angle"
-
-
-@irdl_attr_definition
 class QubitType(ParametrizedAttribute, TypeAttribute):
     """
     qubit - Qubit type with optional basis borrow annotation.
@@ -303,6 +294,5 @@ Proj = Dialect(
         StateAttr,
         QubitType,
         ProjectionType,
-        AngleType,
     ],
 )

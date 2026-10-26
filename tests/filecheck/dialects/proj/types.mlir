@@ -10,8 +10,6 @@
   // CHECK-SAME: qubit_y = !proj.qubit<y>
   qubit_y = !proj.qubit<y>,
   // CHECK-SAME: qubit_z = !proj.qubit<z>
-  qubit_z = !proj.qubit<z>,
-  // CHECK-SAME: angle = !proj.angle
-  angle = !proj.angle
+  qubit_z = !proj.qubit<z>
 } : () -> ()
-     
+      

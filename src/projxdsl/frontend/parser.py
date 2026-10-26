@@ -11,9 +11,9 @@ from xdsl.parser.generic_parser import GenericParser, ParserState
 from xdsl.utils.exceptions import ParseError
 from xdsl.utils.lexer import Input
 
+from projxdsl.dialects.angle import AngleType
 from projxdsl.dialects.proj import (
     AndOp,
-    AngleType,
     Basis,
     BasisAttr,
     EqOp,
