@@ -286,8 +286,8 @@ class ProjParser(GenericParser[ProjTokenKind]):
         """
         lhs_is_bool = lhs.type == i1
         rhs_is_bool = rhs.type == i1
-        lhs_is_proj = isinstance(lhs.type, ProjectionType)
-        rhs_is_proj = isinstance(rhs.type, ProjectionType)
+        lhs_is_proj = lhs.type == ProjectionType()
+        rhs_is_proj = rhs.type == ProjectionType()
 
         if lhs_is_bool and rhs_is_bool:
             # Both booleans: use classical operation
@@ -352,7 +352,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
                 operand = self.parse_expression(variables, self._PREFIX_NOT_BP)
 
-                if isinstance(operand.type, ProjectionType):
+                if operand.type == ProjectionType():
                     return NotOp.build(
                         operands=[operand], result_types=[ProjectionType()]
                     ).result

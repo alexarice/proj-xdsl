@@ -113,12 +113,12 @@ class TestNotOperator:
         # Create a projection: q == |0>
         parser = ProjParser("q == |0>")
         proj = parser.parse_expression({"q": var})
-        assert isinstance(proj.type, ProjectionType)
+        assert proj.type == ProjectionType()
 
         # Now test !(q == |0>)
         result = parse_expression("!(q == |0>)", {"q": var})
         assert isinstance(result.owner, NotOp)
-        assert isinstance(result.type, ProjectionType)
+        assert result.type == ProjectionType()
 
     def test_not_invalid_type(self):
         """Test that ! raises TypeCheckError for invalid types."""
@@ -164,7 +164,7 @@ class TestAndOperator:
         parser = ProjParser("q1 == |0> && q2 == |1>")
         result = parser.parse_expression({"q1": q1, "q2": q2})
         assert isinstance(result.owner, AndOp)
-        assert isinstance(result.type, ProjectionType)
+        assert result.type == ProjectionType()
 
     def test_and_mixed_bool_projection(self):
         """Test parsing p && q where p is boolean and q is projection."""
@@ -173,7 +173,7 @@ class TestAndOperator:
         # p && (q == |0>)
         result = parse_expression("p && (q == |0>)", {"p": p, "q": q})
         assert isinstance(result.owner, AndOp)
-        assert isinstance(result.type, ProjectionType)
+        assert result.type == ProjectionType()
         # First operand should be wrapped in FromBool
         from_bool = result.owner.operands[0].owner
         assert isinstance(from_bool, FromBoolOp)
@@ -207,7 +207,7 @@ class TestOrOperator:
         parser = ProjParser("q1 == |0> || q2 == |1>")
         result = parser.parse_expression({"q1": q1, "q2": q2})
         assert isinstance(result.owner, OrOp)
-        assert isinstance(result.type, ProjectionType)
+        assert result.type == ProjectionType()
 
     def test_or_mixed_bool_projection(self):
         """Test parsing p || q where p is boolean and q is projection."""
@@ -216,7 +216,7 @@ class TestOrOperator:
         # p || (q == |0>)
         result = parse_expression("p || (q == |0>)", {"p": p, "q": q})
         assert isinstance(result.owner, OrOp)
-        assert isinstance(result.type, ProjectionType)
+        assert result.type == ProjectionType()
         # First operand should be wrapped in FromBool
         from_bool = result.owner.operands[0].owner
         assert isinstance(from_bool, FromBoolOp)
@@ -250,7 +250,7 @@ class TestXorOperator:
         parser = ProjParser("q1 == |0> ^ q2 == |1>")
         result = parser.parse_expression({"q1": q1, "q2": q2})
         assert isinstance(result.owner, XorOp)
-        assert isinstance(result.type, ProjectionType)
+        assert result.type == ProjectionType()
 
     def test_xor_mixed_bool_projection(self):
         """Test parsing p ^ q where p is boolean and q is projection."""
@@ -259,7 +259,7 @@ class TestXorOperator:
         # p ^ (q == |0>)
         result = parse_expression("p ^ (q == |0>)", {"p": p, "q": q})
         assert isinstance(result.owner, XorOp)
-        assert isinstance(result.type, ProjectionType)
+        assert result.type == ProjectionType()
         # First operand should be wrapped in FromBool
         from_bool = result.owner.operands[0].owner
         assert isinstance(from_bool, FromBoolOp)
@@ -286,7 +286,7 @@ class TestEqOperator:
         p = make_bool_var()
         result = parse_expression("q == |0> && p", {"q": q, "p": p})
         assert isinstance(result.owner, AndOp)
-        assert isinstance(result.type, ProjectionType)
+        assert result.type == ProjectionType()
 
     def test_eq_invalid_type(self):
         """Test that == raises TypeCheckError for non-qubit types."""
@@ -474,7 +474,7 @@ class TestBindingPower:
         result = parse_expression("!(q == |0>)", {"q": q})
         assert isinstance(result.owner, NotOp)
         assert isinstance(result.owner.operands[0].owner, EqOp)
-        assert isinstance(result.type, ProjectionType)
+        assert result.type == ProjectionType()
 
 
 class TestParentheses:
@@ -516,7 +516,7 @@ class TestComplexExpressions:
         result = parse_expression("!p && q == |0> || r", {"p": p, "q": q, "r": r})
         # Final result should be ProjectionType (mixed bool and proj)
         assert isinstance(result.owner, OrOp)
-        assert isinstance(result.type, ProjectionType)
+        assert result.type == ProjectionType()
         and_op = result.owner.operands[0]
         assert isinstance(and_op.owner, AndOp)
         # !p returns i1, which is then wrapped in FromBoolOp for the && operator

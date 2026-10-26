@@ -42,7 +42,7 @@ class TestTypeParsing:
 
     def test_projection(self):
         result = parse_type("proj")
-        assert isinstance(result, ProjectionType)
+        assert result == ProjectionType()
 
     def test_boolean(self):
         result = parse_type("bool")
