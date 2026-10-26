@@ -41,8 +41,21 @@ class ProjTokenKind(Enum):
     # State (ket states)
     STATE = auto()
 
+    # Literals
+    FLOAT = auto()
+
     # Identifier (includes X, Y, Z which can be basis or identifiers)
     IDENTIFIER = auto()
+
+    def get_float_value(self, span: Span) -> float:
+        """
+        Translate the token text into a float value.
+        This function will raise an exception if the token is not a float
+        literal.
+        """
+        if self != ProjTokenKind.FLOAT:
+            raise ValueError("Token is not a float literal!")
+        return float(span.text)
 
     def is_punctuation(self) -> bool:
         """Check if this token kind is punctuation."""
@@ -95,6 +108,7 @@ class ProjLexer(Lexer[ProjTokenKind]):
 
     _whitespace_regex = re.compile(r"((//[^\n]*(\n)?)|(\s+))*", re.ASCII)
     _identifier_regex = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*", re.ASCII)
+    _float_regex = re.compile(r"[0-9]+\.[0-9]*([eE][+-]?[0-9]+)?", re.ASCII)
 
     def _is_in_bounds(self, size: Position = 1) -> bool:
         """Check if the current position is within the bounds of the input."""
@@ -156,6 +170,10 @@ class ProjLexer(Lexer[ProjTokenKind]):
         # Try boolean literals (true, false)
         if bool_lit := self._try_bool_literal():
             return bool_lit
+
+        # Try float literals
+        if float_lit := self._try_float():
+            return float_lit
 
         # Try identifier (includes X, Y, Z which can be basis or identifiers)
         if ident := self._try_identifier():
@@ -248,6 +266,13 @@ class ProjLexer(Lexer[ProjTokenKind]):
                     self._consume_chars(len(keyword))
                     return self._form_token(kind, self.pos - len(keyword))
         return None
+
+    def _try_float(self) -> ProjToken | None:
+        """Try to lex a float literal (e.g., 1.0, 3.14, 2.5e-3)."""
+        match = self._consume_regex(self._float_regex)
+        if match is None:
+            return None
+        return self._form_token(ProjTokenKind.FLOAT, match.start())
 
     def _try_identifier(self) -> ProjToken | None:
         """Try to lex an identifier."""

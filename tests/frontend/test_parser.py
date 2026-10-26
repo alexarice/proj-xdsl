@@ -259,3 +259,57 @@ class TestStateBasis:
             basis = state.get_basis()
             assert isinstance(basis, Basis)
             assert basis in [Basis.X, Basis.Y, Basis.Z]
+
+
+class TestFloatParsing:
+    """Test float literal parsing."""
+
+    def test_simple_float(self):
+        """Test parsing a simple float literal."""
+        from xdsl.utils.lexer import Input
+
+        from projxdsl.frontend.lexer import ProjLexer, ProjTokenKind
+
+        input = Input("3.14", "<test>")
+        lexer = ProjLexer(input)
+        token = lexer.lex()
+
+        assert token.kind == ProjTokenKind.FLOAT
+        assert token.kind.get_float_value(token.span) == 3.14
+
+    def test_float_with_exponent(self):
+        """Test parsing a float with exponent."""
+        from xdsl.utils.lexer import Input
+
+        from projxdsl.frontend.lexer import ProjLexer, ProjTokenKind
+
+        input = Input("2.5e-3", "<test>")
+        lexer = ProjLexer(input)
+        token = lexer.lex()
+
+        assert token.kind == ProjTokenKind.FLOAT
+        assert abs(token.kind.get_float_value(token.span) - 0.0025) < 1e-10
+
+    def test_float_in_parser(self):
+        """Test parsing floats in the parser."""
+        from projxdsl.frontend.parser import ProjParser
+
+        parser = ProjParser("3.14")
+        result = parser.parse_float()
+        assert result == 3.14
+
+    def test_optional_float_present(self):
+        """Test parse_optional_float when float is present."""
+        from projxdsl.frontend.parser import ProjParser
+
+        parser = ProjParser("2.0")
+        result = parser.parse_optional_float()
+        assert result == 2.0
+
+    def test_optional_float_absent(self):
+        """Test parse_optional_float when float is not present."""
+        from projxdsl.frontend.parser import ProjParser
+
+        parser = ProjParser("x")
+        result = parser.parse_optional_float()
+        assert result is None

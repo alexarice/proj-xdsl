@@ -179,6 +179,24 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
         return StateAttr(state)
 
+    def parse_optional_float(self) -> float | None:
+        """
+        Parse a float literal, if present.
+        """
+        if self._current_token.kind == ProjTokenKind.FLOAT:
+            token = self._consume_token()
+            return token.kind.get_float_value(token.span)
+        return None
+
+    def parse_float(self) -> float:
+        """
+        Parse a float literal.
+        """
+        return self.expect(
+            lambda: self.parse_optional_float(),
+            "Expected float literal",
+        )
+
     def parse_expression(
         self, variables: dict[str, SSAValue], min_bp: int = 0
     ) -> SSAValue:
