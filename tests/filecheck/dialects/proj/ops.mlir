@@ -84,3 +84,26 @@ func.func @test_if_else(%arg0: !proj.projection) {
   }
   func.return
 }
+
+// Test proj.alloc with different states
+func.func @test_alloc() {
+  // CHECK: %[[Q0:.*]] = proj.alloc<zero> : !proj.qubit
+  // CHECK-GENERIC: %[[Q0:.*]] = "proj.alloc"() <{{.*}}state = #proj.state<zero>{{.*}}> : () -> !proj.qubit
+  %q0 = proj.alloc <zero> : !proj.qubit
+  // CHECK: %[[Q1:.*]] = proj.alloc<one> : !proj.qubit
+  // CHECK-GENERIC: %[[Q1:.*]] = "proj.alloc"() <{{.*}}state = #proj.state<one>{{.*}}> : () -> !proj.qubit
+  %q1 = proj.alloc <one> : !proj.qubit
+  // CHECK: %[[QP:.*]] = proj.alloc<plus> : !proj.qubit
+  // CHECK-GENERIC: %[[QP:.*]] = "proj.alloc"() <{{.*}}state = #proj.state<plus>{{.*}}> : () -> !proj.qubit
+  %q_plus = proj.alloc <plus> : !proj.qubit
+  // CHECK: %[[QM:.*]] = proj.alloc<minus> : !proj.qubit
+  // CHECK-GENERIC: %[[QM:.*]] = "proj.alloc"() <{{.*}}state = #proj.state<minus>{{.*}}> : () -> !proj.qubit
+  %q_minus = proj.alloc <minus> : !proj.qubit
+  // CHECK: %[[QL:.*]] = proj.alloc<left> : !proj.qubit
+  // CHECK-GENERIC: %[[QL:.*]] = "proj.alloc"() <{{.*}}state = #proj.state<left>{{.*}}> : () -> !proj.qubit
+  %q_left = proj.alloc <left> : !proj.qubit
+  // CHECK: %[[QR:.*]] = proj.alloc<right> : !proj.qubit
+  // CHECK-GENERIC: %[[QR:.*]] = "proj.alloc"() <{{.*}}state = #proj.state<right>{{.*}}> : () -> !proj.qubit
+  %q_right = proj.alloc <right> : !proj.qubit
+  func.return
+}

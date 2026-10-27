@@ -271,6 +271,27 @@ class FromBoolOp(IRDLOperation):
 
 
 @irdl_op_definition
+class AllocOp(IRDLOperation):
+    """
+    Qubit allocation operation.
+    Allocates a qubit in the specified state.
+    """
+
+    name = "proj.alloc"
+
+    state = prop_def(StateAttr)
+    result = result_def(QubitType)
+
+    assembly_format = "`` $state attr-dict `:` type($result)"
+
+    def __init__(self, state: StateAttr):
+        super().__init__(
+            properties={"state": state},
+            result_types=[QubitType(NoneAttr())],
+        )
+
+
+@irdl_op_definition
 class EqOp(IRDLOperation):
     """
     Projection creation operation.
@@ -406,6 +427,7 @@ class IfOp(IRDLOperation):
 Proj = Dialect(
     "proj",
     [
+        AllocOp,
         NotOp,
         AndOp,
         OrOp,
