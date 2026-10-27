@@ -385,10 +385,11 @@ class TestPhaseStatement:
         parser = ProjParser("ph(theta)")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        result = parser.parse_statement({"theta": angle_var}, builder)
-        assert isinstance(result, PhaseOp)
-        assert result.angle is angle_var
-        assert len(list(block.ops)) == 1  # PhaseOp inserted
+        parser.parse_statement({"theta": angle_var}, builder)
+        ops = list(block.ops)
+        assert len(ops) == 1  # PhaseOp inserted
+        assert isinstance(ops[0], PhaseOp)
+        assert ops[0].angle is angle_var
 
     def test_phase_statement_with_pi(self):
         """Test parsing ph(pi) statement."""
@@ -396,9 +397,11 @@ class TestPhaseStatement:
         parser = ProjParser("ph(pi)")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        result = parser.parse_statement({}, builder)
-        assert isinstance(result, PhaseOp)
-        assert len(list(block.ops)) == 2  # PiOp + PhaseOp inserted
+        parser.parse_statement({}, builder)
+        ops = list(block.ops)
+        assert len(ops) == 2  # PiOp + PhaseOp inserted
+        assert isinstance(ops[0], PiOp)
+        assert isinstance(ops[1], PhaseOp)
 
     def test_phase_statement_with_zero(self):
         """Test parsing ph(0) statement."""
@@ -406,9 +409,11 @@ class TestPhaseStatement:
         parser = ProjParser("ph(0)")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        result = parser.parse_statement({}, builder)
-        assert isinstance(result, PhaseOp)
-        assert len(list(block.ops)) == 2  # ZeroOp + PhaseOp inserted
+        parser.parse_statement({}, builder)
+        ops = list(block.ops)
+        assert len(ops) == 2  # ZeroOp + PhaseOp inserted
+        assert isinstance(ops[0], ZeroOp)
+        assert isinstance(ops[1], PhaseOp)
 
     def test_phase_statement_type_error(self):
         """Test that ph with non-angle raises error."""
@@ -445,16 +450,20 @@ class TestIfStatement:
         parser = ProjParser("if p { ph(pi) }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        result = parser.parse_statement({"p": proj_var}, builder)
-        assert isinstance(result, IfOp)
-        assert result.condition is proj_var
-        assert len(result.true_region.blocks) == 1
-        inner_block = result.true_region.blocks[0]
-        ops = list(inner_block.ops)
-        assert len(ops) == 3  # PiOp + PhaseOp + YieldOp
-        assert isinstance(ops[0], PiOp)
-        assert isinstance(ops[1], PhaseOp)
-        assert isinstance(ops[2], YieldOp)
+        parser.parse_statement({"p": proj_var}, builder)
+        # IfOp is inserted into the block
+        ops = list(block.ops)
+        assert len(ops) == 1
+        if_op = ops[0]
+        assert isinstance(if_op, IfOp)
+        assert if_op.condition is proj_var
+        assert len(if_op.true_region.blocks) == 1
+        inner_block = if_op.true_region.blocks[0]
+        inner_ops = list(inner_block.ops)
+        assert len(inner_ops) == 3  # PiOp + PhaseOp + YieldOp
+        assert isinstance(inner_ops[0], PiOp)
+        assert isinstance(inner_ops[1], PhaseOp)
+        assert isinstance(inner_ops[2], YieldOp)
 
     def test_if_statement_multiple_statements(self):
         """Test parsing if statement with multiple phase statements."""
@@ -476,16 +485,20 @@ class TestIfStatement:
         parser = ProjParser("if p { ph(pi); ph(0) }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        result = parser.parse_statement({"p": proj_var}, builder)
-        assert isinstance(result, IfOp)
-        inner_block = result.true_region.blocks[0]
-        ops = list(inner_block.ops)
-        assert len(ops) == 5  # PiOp + PhaseOp + ZeroOp + PhaseOp + YieldOp
-        assert isinstance(ops[0], PiOp)
-        assert isinstance(ops[1], PhaseOp)
-        assert isinstance(ops[2], ZeroOp)
-        assert isinstance(ops[3], PhaseOp)
-        assert isinstance(ops[4], YieldOp)
+        parser.parse_statement({"p": proj_var}, builder)
+        # IfOp is inserted into the block
+        ops = list(block.ops)
+        assert len(ops) == 1
+        if_op = ops[0]
+        assert isinstance(if_op, IfOp)
+        inner_block = if_op.true_region.blocks[0]
+        inner_ops = list(inner_block.ops)
+        assert len(inner_ops) == 5  # PiOp + PhaseOp + ZeroOp + PhaseOp + YieldOp
+        assert isinstance(inner_ops[0], PiOp)
+        assert isinstance(inner_ops[1], PhaseOp)
+        assert isinstance(inner_ops[2], ZeroOp)
+        assert isinstance(inner_ops[3], PhaseOp)
+        assert isinstance(inner_ops[4], YieldOp)
 
     def test_if_statement_with_semicolons(self):
         """Test parsing if statement with semicolons between statements."""
@@ -507,11 +520,14 @@ class TestIfStatement:
         parser = ProjParser("if p { ph(pi); ph(0) }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        result = parser.parse_statement({"p": proj_var}, builder)
-        assert isinstance(result, IfOp)
-        inner_block = result.true_region.blocks[0]
-        ops = list(inner_block.ops)
-        assert len(ops) == 5  # PiOp + PhaseOp + ZeroOp + PhaseOp + YieldOp
+        parser.parse_statement({"p": proj_var}, builder)
+        ops = list(block.ops)
+        assert len(ops) == 1
+        if_op = ops[0]
+        assert isinstance(if_op, IfOp)
+        inner_block = if_op.true_region.blocks[0]
+        inner_ops = list(inner_block.ops)
+        assert len(inner_ops) == 5  # PiOp + PhaseOp + ZeroOp + PhaseOp + YieldOp
 
     def test_if_statement_without_semicolons(self):
         """Test that missing semicolon between statements raises error."""
@@ -556,12 +572,15 @@ class TestIfStatement:
         parser = ProjParser("if p { }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        result = parser.parse_statement({"p": proj_var}, builder)
-        assert isinstance(result, IfOp)
-        inner_block = result.true_region.blocks[0]
-        ops = list(inner_block.ops)
-        assert len(ops) == 1  # Just YieldOp
-        assert isinstance(ops[0], YieldOp)
+        parser.parse_statement({"p": proj_var}, builder)
+        ops = list(block.ops)
+        assert len(ops) == 1
+        if_op = ops[0]
+        assert isinstance(if_op, IfOp)
+        inner_block = if_op.true_region.blocks[0]
+        inner_ops = list(inner_block.ops)
+        assert len(inner_ops) == 1  # Just YieldOp
+        assert isinstance(inner_ops[0], YieldOp)
 
     def test_if_statement_type_error(self):
         """Test that if with non-projection condition raises error."""
@@ -640,17 +659,20 @@ class TestIfStatement:
         parser = ProjParser("if p { if q { ph(pi) } }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        result = parser.parse_statement({"p": proj_var, "q": proj_var}, builder)
-        assert isinstance(result, IfOp)
-        assert result.condition is proj_var
-        true_block = result.true_region.blocks[0]
-        ops = list(true_block.ops)
-        assert len(ops) == 2  # Inner IfOp + YieldOp
-        inner_if = ops[0]
+        parser.parse_statement({"p": proj_var, "q": proj_var}, builder)
+        ops = list(block.ops)
+        assert len(ops) == 1
+        if_op = ops[0]
+        assert isinstance(if_op, IfOp)
+        assert if_op.condition is proj_var
+        true_block = if_op.true_region.blocks[0]
+        inner_ops = list(true_block.ops)
+        assert len(inner_ops) == 2  # Inner IfOp + YieldOp
+        inner_if = inner_ops[0]
         assert isinstance(inner_if, IfOp)
         inner_block = inner_if.true_region.blocks[0]
-        inner_ops = list(inner_block.ops)
-        assert len(inner_ops) == 3  # PiOp + PhaseOp + YieldOp
-        assert isinstance(inner_ops[0], PiOp)
-        assert isinstance(inner_ops[1], PhaseOp)
-        assert isinstance(inner_ops[2], YieldOp)
+        inner_inner_ops = list(inner_block.ops)
+        assert len(inner_inner_ops) == 3  # PiOp + PhaseOp + YieldOp
+        assert isinstance(inner_inner_ops[0], PiOp)
+        assert isinstance(inner_inner_ops[1], PhaseOp)
+        assert isinstance(inner_inner_ops[2], YieldOp)

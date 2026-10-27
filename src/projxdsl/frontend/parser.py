@@ -203,11 +203,9 @@ class ProjParser(GenericParser[ProjTokenKind]):
             "Expected float literal",
         )
 
-    def parse_optional_statement(
-        self, variables: dict[str, SSAValue], builder: Builder
-    ) -> PhaseOp | IfOp | None:
+    def parse_statement(self, variables: dict[str, SSAValue], builder: Builder) -> None:
         """
-        Parse a statement if present, return None otherwise.
+        Parse a statement and insert it into the block via builder.
 
         statement ::= "ph" "(" angle-expr ")" | "if" expr block
         block ::= "{" statement* "}"
@@ -225,29 +223,14 @@ class ProjParser(GenericParser[ProjTokenKind]):
                         f" got {angle.type}"
                     )
 
-            return builder.insert(PhaseOp(angle))
+            builder.insert(PhaseOp(angle))
         elif self._parse_optional_token(ProjTokenKind.IF) is not None:
-            return self._parse_if_statement(variables, builder)
-
-        return None
-
-    def parse_statement(
-        self, variables: dict[str, SSAValue], builder: Builder
-    ) -> PhaseOp | IfOp:
-        """
-        Parse a statement, raising an error if no statement is found.
-
-        statement ::= "ph" "(" angle-expr ")" | "if" expr block
-        block ::= "{" statement* "}"
-        angle-expr ::= expression that evaluates to an angle type
-        """
-        stmt = self.parse_optional_statement(variables, builder)
-        if stmt is None:
+            self._parse_if_statement(variables, builder)
+        else:
             self.raise_error(
                 f"Expected 'ph' or 'if' keyword for statement,"
                 f" got {self._current_token.text}"
             )
-        return stmt
 
     def _parse_if_statement(
         self, variables: dict[str, SSAValue], builder: Builder
