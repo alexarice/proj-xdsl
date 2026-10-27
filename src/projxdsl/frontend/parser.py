@@ -202,102 +202,6 @@ class ProjParser(GenericParser[ProjTokenKind]):
             "Expected float literal",
         )
 
-    def parse_expression(
-        self, variables: dict[str, SSAValue], min_bp: int = 0
-    ) -> SSAValue:
-        """
-        Parse a projection expression using Pratt parsing.
-
-        Args:
-            variables: Mapping from variable names to SSA values
-            min_bp: Minimum binding power for Pratt parsing (default 0)
-
-        Returns:
-            SSA value of the parsed expression
-
-        Grammar:
-            expr ::= primary postfix* infix*
-            primary ::= identifier | "true" | "false" | "!" expr | "(" expr ")"
-            postfix ::= "==" state
-            infix ::= "&&" expr | "||" expr | "^" expr
-        """
-        lhs = self._parse_prefix_and_primary(variables)
-
-        while True:
-            match self._current_token.kind:
-                case ProjTokenKind.EQ:
-                    if min_bp > self._POSTFIX_EQ_BP:
-                        break
-                    self._consume_token()
-                    state = self.parse_state()
-
-                    if not isinstance(lhs.type, QubitType):
-                        self.raise_typing_error(
-                            f"Expected qubit type for '==' operator, got {lhs.type}"
-                        )
-
-                    # Check basis compatibility
-                    qubit_type = lhs.type
-                    if not isinstance(qubit_type.borrow_type, NoneAttr):
-                        # Qubit has a basis annotation, check state matches
-                        basis = qubit_type.borrow_type.data
-                        state_basis = state.data.get_basis()
-                        if basis != state_basis:
-                            self.raise_typing_error(
-                                f"Qubit borrowed in {basis.name} basis cannot be "
-                                f"projected in {state_basis.name} basis"
-                            )
-
-                    lhs = EqOp(lhs, state).result
-
-                case ProjTokenKind.AND:
-                    left_bp, right_bp = self._INFIX_AND_BP
-                    if min_bp > left_bp:
-                        break
-                    self._consume_token()
-                    rhs = self.parse_expression(variables, right_bp)
-                    lhs = self._build_binary_predicate_op(lhs, rhs, AndIOp, AndOp, "&&")
-
-                case ProjTokenKind.OR:
-                    left_bp, right_bp = self._INFIX_OR_BP
-                    if min_bp > left_bp:
-                        break
-                    self._consume_token()
-                    rhs = self.parse_expression(variables, right_bp)
-                    lhs = self._build_binary_predicate_op(lhs, rhs, OrIOp, OrOp, "||")
-
-                case ProjTokenKind.PLUS:
-                    left_bp, right_bp = self._INFIX_ADD_BP
-                    if min_bp > left_bp:
-                        break
-                    self._consume_token()
-                    rhs = self.parse_expression(variables, right_bp)
-
-                    # Check that both operands are angles
-                    if lhs.type != AngleType():
-                        self.raise_typing_error(
-                            f"Expected angle for '+' left operand, got {lhs.type}"
-                        )
-                    if rhs.type != AngleType():
-                        self.raise_typing_error(
-                            f"Expected angle for '+' right operand, got {rhs.type}"
-                        )
-
-                    lhs = AddOp(lhs, rhs).result
-
-                case ProjTokenKind.XOR:
-                    left_bp, right_bp = self._INFIX_XOR_BP
-                    if min_bp > left_bp:
-                        break
-                    self._consume_token()
-                    rhs = self.parse_expression(variables, right_bp)
-                    lhs = self._build_binary_predicate_op(lhs, rhs, XOrIOp, XorOp, "^")
-
-                case _:
-                    break
-
-        return lhs
-
     def parse_optional_statement(
         self, variables: dict[str, SSAValue]
     ) -> PhaseOp | IfOp | None:
@@ -397,6 +301,101 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
         return region
 
+    def parse_expression(
+        self, variables: dict[str, SSAValue], min_bp: int = 0
+    ) -> SSAValue:
+        """
+        Parse a projection expression using Pratt parsing.
+
+        Args:
+            variables: Mapping from variable names to SSA values
+            min_bp: Minimum binding power for Pratt parsing (default 0)
+
+        Returns:
+            SSA value of the parsed expression
+
+        Grammar:
+            expr ::= primary postfix* infix*
+            primary ::= identifier | "true" | "false" | "!" expr | "(" expr ")"
+            postfix ::= "==" state
+            infix ::= "&&" expr | "||" expr | "^" expr
+        """
+        lhs = self._parse_prefix_and_primary(variables)
+
+        while True:
+            if self._current_token.kind == ProjTokenKind.EQ:
+                if min_bp > self._POSTFIX_EQ_BP:
+                    break
+                self._consume_token()
+                state = self.parse_state()
+
+                if not isinstance(lhs.type, QubitType):
+                    self.raise_typing_error(
+                        f"Expected qubit type for '==' operator, got {lhs.type}"
+                    )
+
+                # Check basis compatibility
+                qubit_type = lhs.type
+                if not isinstance(qubit_type.borrow_type, NoneAttr):
+                    # Qubit has a basis annotation, check state matches
+                    basis = qubit_type.borrow_type.data
+                    state_basis = state.data.get_basis()
+                    if basis != state_basis:
+                        self.raise_typing_error(
+                            f"Qubit borrowed in {basis.name} basis cannot be "
+                            f"projected in {state_basis.name} basis"
+                        )
+
+                lhs = EqOp(lhs, state).result
+
+            elif self._current_token.kind == ProjTokenKind.AND:
+                left_bp, right_bp = self._INFIX_AND_BP
+                if min_bp > left_bp:
+                    break
+                self._consume_token()
+                rhs = self.parse_expression(variables, right_bp)
+                lhs = self._build_binary_predicate_op(lhs, rhs, AndIOp, AndOp, "&&")
+
+            elif self._current_token.kind == ProjTokenKind.OR:
+                left_bp, right_bp = self._INFIX_OR_BP
+                if min_bp > left_bp:
+                    break
+                self._consume_token()
+                rhs = self.parse_expression(variables, right_bp)
+                lhs = self._build_binary_predicate_op(lhs, rhs, OrIOp, OrOp, "||")
+
+            elif self._current_token.kind == ProjTokenKind.PLUS:
+                left_bp, right_bp = self._INFIX_ADD_BP
+                if min_bp > left_bp:
+                    break
+                self._consume_token()
+                rhs = self.parse_expression(variables, right_bp)
+
+                # Check that both operands are angles
+                if lhs.type != AngleType():
+                    self.raise_typing_error(
+                        f"Expected angle for '+' left operand, got {lhs.type}"
+                    )
+                if rhs.type != AngleType():
+                    self.raise_typing_error(
+                        f"Expected angle for '+' right operand, got {rhs.type}"
+                    )
+
+                lhs = AddOp(lhs, rhs).result
+
+            elif self._current_token.kind == ProjTokenKind.XOR:
+                left_bp, right_bp = self._INFIX_XOR_BP
+                if min_bp > left_bp:
+                    break
+                self._consume_token()
+                rhs = self.parse_expression(variables, right_bp)
+                lhs = self._build_binary_predicate_op(lhs, rhs, XOrIOp, XorOp, "^")
+
+            else:
+                break
+
+        return lhs
+
     def _build_binary_predicate_op(
         self,
         lhs: SSAValue,
@@ -456,80 +455,67 @@ class ProjParser(GenericParser[ProjTokenKind]):
         Args:
             variables: Mapping from variable names to SSA values
         """
-        match self._current_token.kind:
-            case ProjTokenKind.IDENTIFIER:
-                var_name = self._current_token.text
-                self._consume_token()
+        if (token := self._parse_optional_token(ProjTokenKind.IDENTIFIER)) is not None:
+            var_name = token.text
 
-                if var_name not in variables:
-                    self.raise_error(f"Undefined variable: {var_name}")
+            if var_name not in variables:
+                self.raise_error(f"Undefined variable: {var_name}")
 
-                return variables[var_name]
+            return variables[var_name]
 
-            case ProjTokenKind.TRUE:
-                self._consume_token()
-                bool_const = ConstantOp(IntegerAttr(1, 1))
-                return bool_const.result
+        if self._parse_optional_token(ProjTokenKind.TRUE) is not None:
+            bool_const = ConstantOp(IntegerAttr(1, 1))
+            return bool_const.result
 
-            case ProjTokenKind.FALSE:
-                self._consume_token()
-                bool_const = ConstantOp(IntegerAttr(0, 1))
-                return bool_const.result
+        if self._parse_optional_token(ProjTokenKind.FALSE) is not None:
+            bool_const = ConstantOp(IntegerAttr(0, 1))
+            return bool_const.result
 
-            case ProjTokenKind.PI:
-                self._consume_token()
-                return PiOp().result
+        if self._parse_optional_token(ProjTokenKind.PI) is not None:
+            return PiOp().result
 
-            case ProjTokenKind.INTEGER:
-                # Only 0 is valid as an angle constant
-                token = self._consume_token()
-                value = token.kind.get_integer_value(token.span)
-                if value != 0:
-                    self.raise_error(f"Only 0 is a valid angle constant, got {value}")
-                return ZeroOp().result
+        if (integer := self._parse_optional_token(ProjTokenKind.INTEGER)) is not None:
+            # Only 0 is valid as an angle constant
+            value = integer.kind.get_integer_value(integer.span)
+            if value != 0:
+                self.raise_error(f"Only 0 is a valid angle constant, got {value}")
+            return ZeroOp().result
 
-            case ProjTokenKind.FLOAT:
-                # Scalar multiplication: `2.0 * a` where `2.0 *` is a prefix operator
-                scalar = self.parse_float()
-                self._parse_token(
-                    ProjTokenKind.STAR,
-                    "Expected '*' after float literal for scalar multiplication",
+        if (scalar := self.parse_optional_float()) is not None:
+            # Scalar multiplication: `2.0 * a` where `2.0 *` is a prefix operator
+            self._parse_token(
+                ProjTokenKind.STAR,
+                "Expected '*' after float literal for scalar multiplication",
+            )
+
+            # Parse the angle expression with tight binding
+            angle = self.parse_expression(variables, self._PREFIX_SCALAR_MULT_BP)
+
+            # Check that the operand is an angle
+            if angle.type != AngleType():
+                self.raise_typing_error(
+                    f"Expected angle for '*' operand, got {angle.type}"
                 )
 
-                # Parse the angle expression with tight binding
-                angle = self.parse_expression(variables, self._PREFIX_SCALAR_MULT_BP)
+            return ScalarMultOp(scalar, angle).result
 
-                # Check that the operand is an angle
-                if angle.type != AngleType():
-                    self.raise_typing_error(
-                        f"Expected angle for '*' operand, got {angle.type}"
-                    )
+        if self._parse_optional_token(ProjTokenKind.BANG) is not None:
+            operand = self.parse_expression(variables, self._PREFIX_NOT_BP)
 
-                return ScalarMultOp(scalar, angle).result
-
-            case ProjTokenKind.BANG:
-                self._consume_token()
-
-                operand = self.parse_expression(variables, self._PREFIX_NOT_BP)
-
-                if operand.type == ProjectionType():
-                    return NotOp(operand).result
-                elif operand.type == i1:
-                    const_one = ConstantOp(IntegerAttr(1, 1))
-                    return XOrIOp(operand, const_one.result).result
-                else:
-                    self.raise_typing_error(
-                        f"Expected projection or boolean for '!' operator,"
-                        f" got {operand.type}"
-                    )
-
-            case ProjTokenKind.LPAREN:
-                self._consume_token()
-                expr = self.parse_expression(variables, 0)
-                self.parse_punctuation(")", " to close parenthesized expression")
-                return expr
-
-            case _:
-                self.raise_error(
-                    f"Unexpected token in expression: {self._current_token.text}"
+            if operand.type == ProjectionType():
+                return NotOp(operand).result
+            elif operand.type == i1:
+                const_one = ConstantOp(IntegerAttr(1, 1))
+                return XOrIOp(operand, const_one.result).result
+            else:
+                self.raise_typing_error(
+                    f"Expected projection or boolean for '!' operator,"
+                    f" got {operand.type}"
                 )
+
+        if self._parse_optional_token(ProjTokenKind.LPAREN) is not None:
+            expr = self.parse_expression(variables, 0)
+            self.parse_punctuation(")", " to close parenthesized expression")
+            return expr
+
+        self.raise_error(f"Unexpected token in expression: {self._current_token.text}")
