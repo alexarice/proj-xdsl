@@ -33,6 +33,7 @@ from projxdsl.dialects.proj import (
     XorOp,
     YieldOp,
 )
+from projxdsl.frontend.func_kind import FuncKind
 from projxdsl.frontend.lexer import ProjLexer, ProjToken, ProjTokenKind
 
 
@@ -207,7 +208,12 @@ class ProjParser(GenericParser[ProjTokenKind]):
             "Expected float literal",
         )
 
-    def parse_statement(self, variables: dict[str, SSAValue], builder: Builder) -> None:
+    def parse_statement(
+        self,
+        variables: dict[str, SSAValue],
+        builder: Builder,
+        func_kind: FuncKind = FuncKind.MIXED,
+    ) -> None:
         """
         Parse a statement and insert it into the block via builder.
 
@@ -221,9 +227,13 @@ class ProjParser(GenericParser[ProjTokenKind]):
         angle-expr ::= expression that evaluates to an angle type
         """
         if self._parse_optional_token(ProjTokenKind.PHASE) is not None:
+            if not func_kind.allows_operation("phase"):
+                self.raise_error(
+                    f"Phase operation not allowed in {func_kind.value} functions"
+                )
             with self.in_parens():
                 # Parse the angle expression
-                angle = self.parse_expression(variables, builder)
+                angle = self.parse_expression(variables, builder, func_kind=func_kind)
 
                 # Check that the expression has angle type
                 if angle.type != AngleType():
@@ -234,14 +244,19 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
             builder.insert(PhaseOp(angle))
         elif self._parse_optional_token(ProjTokenKind.IF) is not None:
-            self._parse_if_statement(variables, builder)
+            if not func_kind.allows_operation("if"):
+                self.raise_error(
+                    f"If operation not allowed in {func_kind.value} functions"
+                )
+            self._parse_if_statement(variables, builder, func_kind=func_kind)
         elif self._parse_optional_token(ProjTokenKind.LET) is not None:
-            self._parse_let_statement(variables, builder)
+            self._parse_let_statement(variables, builder, func_kind=func_kind)
         else:
             # Parse as an expression statement (result is discarded)
             self.parse_expression(
                 variables,
                 builder,
+                func_kind=func_kind,
                 initial_error=(
                     f"Expected 'ph', 'if', 'let', or an expression for statement, "
                     f"got '{self._current_token.text}'"
@@ -249,7 +264,10 @@ class ProjParser(GenericParser[ProjTokenKind]):
             )
 
     def _parse_if_statement(
-        self, variables: dict[str, SSAValue], builder: Builder
+        self,
+        variables: dict[str, SSAValue],
+        builder: Builder,
+        func_kind: FuncKind,
     ) -> IfOp:
         """
         Parse an if statement.
@@ -258,7 +276,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         block ::= "{" statement* "}"
         """
         # Parse the condition expression (inserted in parent block)
-        condition = self.parse_expression(variables, builder)
+        condition = self.parse_expression(variables, builder, func_kind=func_kind)
 
         # Check that the condition is a projection
         if condition.type != ProjectionType():
@@ -272,7 +290,9 @@ class ProjParser(GenericParser[ProjTokenKind]):
             block_variables = dict(variables)
             self.parse_list(
                 delimiter=self.Delimiter.BRACES,
-                parse=lambda: self.parse_statement(block_variables, inner_builder),
+                parse=lambda: self.parse_statement(
+                    block_variables, inner_builder, func_kind
+                ),
                 separator=";",
                 context_msg=" in statement block",
             )
@@ -290,7 +310,10 @@ class ProjParser(GenericParser[ProjTokenKind]):
         return builder.insert(IfOp(condition, true_region, false_region))
 
     def _parse_let_statement(
-        self, variables: dict[str, SSAValue], builder: Builder
+        self,
+        variables: dict[str, SSAValue],
+        builder: Builder,
+        func_kind: FuncKind,
     ) -> None:
         """
         Parse a let statement and add the binding to variables.
@@ -314,7 +337,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         self.parse_punctuation("=", "Expected '=' in let statement")
 
         # Parse the expression
-        expr_value = self.parse_expression(variables, builder)
+        expr_value = self.parse_expression(variables, builder, func_kind=func_kind)
 
         # Validate type if annotation was provided
         if expected_type is not None and expr_value.type != expected_type:
@@ -333,6 +356,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         builder: Builder,
         min_bp: int = 0,
         initial_error: str | None = None,
+        func_kind: FuncKind = FuncKind.MIXED,
     ) -> SSAValue:
         """
         Parse a projection expression using Pratt parsing.
@@ -343,6 +367,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
             min_bp: Minimum binding power for Pratt parsing (default 0)
             initial_error: Error message if first token cannot start
                 an expression (should mention the unexpected token)
+            func_kind: Function kind for operation validation
 
         Returns:
             SSA value of the parsed expression
@@ -354,7 +379,9 @@ class ProjParser(GenericParser[ProjTokenKind]):
             postfix ::= "==" state
             infix ::= "&&" expr | "||" expr | "^" expr
         """
-        lhs = self._parse_prefix_and_primary(variables, builder, initial_error)
+        lhs = self._parse_prefix_and_primary(
+            variables, builder, initial_error, func_kind
+        )
 
         while True:
             if self._current_token.kind == ProjTokenKind.EQ:
@@ -387,7 +414,9 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 if min_bp > left_bp:
                     break
                 self._consume_token()
-                rhs = self.parse_expression(variables, builder, right_bp)
+                rhs = self.parse_expression(
+                    variables, builder, right_bp, func_kind=func_kind
+                )
                 lhs = self._build_binary_predicate_op(
                     lhs, rhs, AndIOp, AndOp, "&&", builder
                 )
@@ -397,7 +426,9 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 if min_bp > left_bp:
                     break
                 self._consume_token()
-                rhs = self.parse_expression(variables, builder, right_bp)
+                rhs = self.parse_expression(
+                    variables, builder, right_bp, func_kind=func_kind
+                )
                 lhs = self._build_binary_predicate_op(
                     lhs, rhs, OrIOp, OrOp, "||", builder
                 )
@@ -407,7 +438,9 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 if min_bp > left_bp:
                     break
                 self._consume_token()
-                rhs = self.parse_expression(variables, builder, right_bp)
+                rhs = self.parse_expression(
+                    variables, builder, right_bp, func_kind=func_kind
+                )
 
                 # Check that both operands are angles
                 if lhs.type != AngleType():
@@ -426,7 +459,9 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 if min_bp > left_bp:
                     break
                 self._consume_token()
-                rhs = self.parse_expression(variables, builder, right_bp)
+                rhs = self.parse_expression(
+                    variables, builder, right_bp, func_kind=func_kind
+                )
                 lhs = self._build_binary_predicate_op(
                     lhs, rhs, XOrIOp, XorOp, "^", builder
                 )
@@ -492,6 +527,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         variables: Mapping[str, SSAValue],
         builder: Builder,
         initial_error: str | None = None,
+        func_kind: FuncKind = FuncKind.MIXED,
     ) -> SSAValue:
         """
         Parse prefix operators and primary expressions.
@@ -504,6 +540,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
             builder: Builder for inserting operations
             initial_error: Error message if first token cannot start
                 an expression (should mention the unexpected token)
+            func_kind: Function kind for operation validation
         """
         if (token := self._parse_optional_token(ProjTokenKind.IDENTIFIER)) is not None:
             var_name = token.text
@@ -538,7 +575,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
             # Parse the angle expression with tight binding
             angle = self.parse_expression(
-                variables, builder, self._PREFIX_SCALAR_MULT_BP
+                variables, builder, self._PREFIX_SCALAR_MULT_BP, func_kind=func_kind
             )
 
             # Check that the operand is an angle
@@ -550,7 +587,9 @@ class ProjParser(GenericParser[ProjTokenKind]):
             return builder.insert(ScalarMultOp(scalar, angle)).result
 
         if self._parse_optional_token(ProjTokenKind.BANG) is not None:
-            operand = self.parse_expression(variables, builder, self._PREFIX_NOT_BP)
+            operand = self.parse_expression(
+                variables, builder, self._PREFIX_NOT_BP, func_kind=func_kind
+            )
 
             if operand.type == ProjectionType():
                 return builder.insert(NotOp(operand)).result
@@ -564,12 +603,22 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 )
 
         if self._parse_optional_token(ProjTokenKind.ALLOC) is not None:
+            if not func_kind.allows_operation("alloc"):
+                self.raise_error(
+                    f"Alloc operation not allowed in {func_kind.value} functions"
+                )
             state = self.parse_state()
             alloc_op = builder.insert(AllocOp(state))
             return alloc_op.result
 
         if self._parse_optional_token(ProjTokenKind.MEASURE) is not None:
-            operand = self.parse_expression(variables, builder, self._PREFIX_MEASURE_BP)
+            if not func_kind.allows_operation("measure"):
+                self.raise_error(
+                    f"Measure operation not allowed in {func_kind.value} functions"
+                )
+            operand = self.parse_expression(
+                variables, builder, self._PREFIX_MEASURE_BP, func_kind=func_kind
+            )
             if operand.type == ProjectionType():
                 return builder.insert(MeasureOp(operand)).result
             elif operand.type == i1:
@@ -582,7 +631,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 )
 
         if self._parse_optional_token(ProjTokenKind.LPAREN) is not None:
-            expr = self.parse_expression(variables, builder, 0)
+            expr = self.parse_expression(variables, builder, 0, func_kind=func_kind)
             self.parse_punctuation(")", " to close parenthesized expression")
             return expr
 

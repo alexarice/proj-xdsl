@@ -27,6 +27,7 @@ from projxdsl.dialects.proj import (
     StateAttr,
     YieldOp,
 )
+from projxdsl.frontend.func_kind import FuncKind
 from projxdsl.frontend.lexer import ProjLexer, ProjTokenKind
 from projxdsl.frontend.parser import ProjParser, TypeCheckError
 
@@ -870,3 +871,154 @@ class TestExpressionStatement:
             match="Expected 'ph', 'if', 'let', or an expression for statement, got '}'",
         ):
             parser.parse_statement({}, builder)
+
+
+class TestFuncKindValidation:
+    """Test function kind validation during parsing."""
+
+    def test_phase_in_pure_raises_error(self):
+        """Test that phase in pure function raises error."""
+        parser = ProjParser("ph(pi)")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        with pytest.raises(ParseError, match="Phase operation not allowed in pure"):
+            parser.parse_statement({}, builder, func_kind=FuncKind.PURE)
+
+    def test_phase_in_unitary_allowed(self):
+        """Test that phase in unitary function is allowed."""
+        parser = ProjParser("ph(pi)")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        parser.parse_statement({}, builder, func_kind=FuncKind.UNITARY)
+        ops = list(block.ops)
+        assert len(ops) == 2  # PiOp + PhaseOp
+
+    def test_phase_in_mixed_allowed(self):
+        """Test that phase in mixed function is allowed."""
+        parser = ProjParser("ph(pi)")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        parser.parse_statement({}, builder, func_kind=FuncKind.MIXED)
+        ops = list(block.ops)
+        assert len(ops) == 2  # PiOp + PhaseOp
+
+    def test_alloc_in_pure_raises_error(self):
+        """Test that alloc in pure function raises error."""
+        parser = ProjParser("alloc |0>")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        with pytest.raises(ParseError, match="Alloc operation not allowed in pure"):
+            parser.parse_statement({}, builder, func_kind=FuncKind.PURE)
+
+    def test_alloc_in_unitary_raises_error(self):
+        """Test that alloc in unitary function raises error."""
+        parser = ProjParser("alloc |0>")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        with pytest.raises(ParseError, match="Alloc operation not allowed in unitary"):
+            parser.parse_statement({}, builder, func_kind=FuncKind.UNITARY)
+
+    def test_alloc_in_mixed_allowed(self):
+        """Test that alloc in mixed function is allowed."""
+        parser = ProjParser("alloc |0>")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        parser.parse_statement({}, builder, func_kind=FuncKind.MIXED)
+        ops = list(block.ops)
+        assert len(ops) == 1  # AllocOp
+
+    def test_measure_in_pure_raises_error(self):
+        """Test that measure in pure function raises error."""
+        qubit_var = make_qubit_var()
+        proj_var = make_proj_var(qubit_var)
+        parser = ProjParser("measure p")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        with pytest.raises(ParseError, match="Measure operation not allowed in pure"):
+            parser.parse_expression({"p": proj_var}, builder, func_kind=FuncKind.PURE)
+
+    def test_measure_in_unitary_raises_error(self):
+        """Test that measure in unitary function raises error."""
+        qubit_var = make_qubit_var()
+        proj_var = make_proj_var(qubit_var)
+        parser = ProjParser("measure p")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        with pytest.raises(
+            ParseError, match="Measure operation not allowed in unitary"
+        ):
+            parser.parse_expression(
+                {"p": proj_var}, builder, func_kind=FuncKind.UNITARY
+            )
+
+    def test_measure_in_mixed_allowed(self):
+        """Test that measure in mixed function is allowed."""
+        qubit_var = make_qubit_var()
+        proj_var = make_proj_var(qubit_var)
+        parser = ProjParser("measure p")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        result = parser.parse_expression(
+            {"p": proj_var}, builder, func_kind=FuncKind.MIXED
+        )
+        assert result is not None
+        ops = list(block.ops)
+        assert len(ops) == 1  # MeasureOp
+
+    def test_if_in_pure_raises_error(self):
+        """Test that if in pure function raises error."""
+        qubit_var = make_qubit_var()
+        proj_var = make_proj_var(qubit_var)
+        parser = ProjParser("if p { ph(pi) }")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        with pytest.raises(ParseError, match="If operation not allowed in pure"):
+            parser.parse_statement({"p": proj_var}, builder, func_kind=FuncKind.PURE)
+
+    def test_if_in_unitary_allowed(self):
+        """Test that if in unitary function is allowed."""
+        qubit_var = make_qubit_var()
+        proj_var = make_proj_var(qubit_var)
+        parser = ProjParser("if p { ph(pi) }")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        parser.parse_statement({"p": proj_var}, builder, func_kind=FuncKind.UNITARY)
+        ops = list(block.ops)
+        assert len(ops) == 1  # IfOp
+
+    def test_let_with_measure_in_unitary_raises_error(self):
+        """Test that let with measure expression in unitary function raises error."""
+        qubit_var = make_qubit_var()
+        parser = ProjParser("let x = measure q == |0>")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        with pytest.raises(
+            ParseError, match="Measure operation not allowed in unitary"
+        ):
+            parser.parse_statement(
+                {"q": qubit_var}, builder, func_kind=FuncKind.UNITARY
+            )
+
+    def test_and_with_measure_in_unitary_raises_error(self):
+        """Test that p && measure p in unitary function raises error."""
+        qubit_var = make_qubit_var()
+        proj_var = make_proj_var(qubit_var)
+        parser = ProjParser("p && measure p")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        with pytest.raises(
+            ParseError, match="Measure operation not allowed in unitary"
+        ):
+            parser.parse_expression(
+                {"p": proj_var}, builder, func_kind=FuncKind.UNITARY
+            )
+
+    def test_or_with_measure_in_pure_raises_error(self):
+        """Test that p || measure p in pure function raises error."""
+        qubit_var = make_qubit_var()
+        proj_var = make_proj_var(qubit_var)
+        parser = ProjParser("p || measure p")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        with pytest.raises(ParseError, match="Measure operation not allowed in pure"):
+            parser.parse_expression({"p": proj_var}, builder, func_kind=FuncKind.PURE)
