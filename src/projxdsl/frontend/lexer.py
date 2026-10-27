@@ -204,21 +204,9 @@ class ProjLexer(Lexer[ProjTokenKind]):
         if punct := self._try_punctuation():
             return punct
 
-        # Try type keywords
-        if keyword := self._try_type_keyword():
+        # Try keywords
+        if keyword := self._try_keyword():
             return keyword
-
-        # Try boolean literals (true, false)
-        if bool_lit := self._try_bool_literal():
-            return bool_lit
-
-        # Try angle constants (pi)
-        if angle_const := self._try_angle_constant():
-            return angle_const
-
-        # Try statement keywords (ph)
-        if stmt_kw := self._try_statement_keyword():
-            return stmt_kw
 
         # Try float literals
         if float_lit := self._try_float():
@@ -290,61 +278,25 @@ class ProjLexer(Lexer[ProjTokenKind]):
 
         return self._form_token(ProjTokenKind.STATE, start_pos)
 
-    def _try_keyword(self, kinds: tuple[ProjTokenKind, ...]) -> ProjToken | None:
+    def _try_keyword(self) -> ProjToken | None:
         """
-        Try to lex a keyword from KEYWORD_MAP that matches one of the given kinds.
-
-        Args:
-            kinds: Tuple of token kinds to match against
+        Try to lex a keyword from KEYWORD_MAP.
 
         Returns:
             Token if a matching keyword is found, None otherwise
         """
         for keyword, kind in KEYWORD_MAP.items():
-            if kind in kinds:
-                if self._peek_chars(len(keyword)) == keyword:
-                    # Make sure it's not part of a larger identifier
-                    next_char: str | None = None
-                    if self._is_in_bounds(len(keyword) + 1):
-                        peeked = self._peek_chars(len(keyword) + 1)
-                        assert peeked is not None
-                        next_char = peeked[-1]
-                    if next_char is None or not (
-                        next_char.isalnum() or next_char == "_"
-                    ):
-                        self._consume_chars(len(keyword))
-                        return self._form_token(kind, self.pos - len(keyword))
+            if self._peek_chars(len(keyword)) == keyword:
+                # Make sure it's not part of a larger identifier
+                next_char: str | None = None
+                if self._is_in_bounds(len(keyword) + 1):
+                    peeked = self._peek_chars(len(keyword) + 1)
+                    assert peeked is not None
+                    next_char = peeked[-1]
+                if next_char is None or not (next_char.isalnum() or next_char == "_"):
+                    self._consume_chars(len(keyword))
+                    return self._form_token(kind, self.pos - len(keyword))
         return None
-
-    def _try_type_keyword(self) -> ProjToken | None:
-        """Try to lex type keywords (qubit, proj, bool, angle)."""
-        return self._try_keyword(
-            (
-                ProjTokenKind.QUBIT,
-                ProjTokenKind.PROJECTION,
-                ProjTokenKind.BOOL,
-                ProjTokenKind.ANGLE,
-            )
-        )
-
-    def _try_bool_literal(self) -> ProjToken | None:
-        """Try to lex boolean literals (true, false)."""
-        return self._try_keyword((ProjTokenKind.TRUE, ProjTokenKind.FALSE))
-
-    def _try_angle_constant(self) -> ProjToken | None:
-        """Try to lex angle constants (pi)."""
-        return self._try_keyword((ProjTokenKind.PI,))
-
-    def _try_statement_keyword(self) -> ProjToken | None:
-        """Try to lex statement keywords (ph, if, let, alloc)."""
-        return self._try_keyword(
-            (
-                ProjTokenKind.PHASE,
-                ProjTokenKind.IF,
-                ProjTokenKind.LET,
-                ProjTokenKind.ALLOC,
-            )
-        )
 
     def _try_integer(self) -> ProjToken | None:
         """Try to lex an integer literal."""
