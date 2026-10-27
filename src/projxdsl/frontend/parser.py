@@ -216,6 +216,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         statement ::= "ph" "(" angle-expr ")"
                     | "if" expr block
                     | "let" ident (":" type)? "=" expr
+                    | expr
         block ::= "{" statement* "}"
         angle-expr ::= expression that evaluates to an angle type
         """
@@ -237,9 +238,14 @@ class ProjParser(GenericParser[ProjTokenKind]):
         elif self._parse_optional_token(ProjTokenKind.LET) is not None:
             self._parse_let_statement(variables, builder)
         else:
-            self.raise_error(
-                f"Expected 'ph', 'if', or 'let' keyword for statement,"
-                f" got {self._current_token.text}"
+            # Parse as an expression statement (result is discarded)
+            self.parse_expression(
+                variables,
+                builder,
+                initial_error=(
+                    f"Expected 'ph', 'if', 'let', or an expression for statement, "
+                    f"got '{self._current_token.text}'"
+                ),
             )
 
     def _parse_if_statement(
@@ -326,6 +332,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         variables: Mapping[str, SSAValue],
         builder: Builder,
         min_bp: int = 0,
+        initial_error: str | None = None,
     ) -> SSAValue:
         """
         Parse a projection expression using Pratt parsing.
@@ -334,6 +341,8 @@ class ProjParser(GenericParser[ProjTokenKind]):
             variables: Mapping from variable names to SSA values
             builder: Builder for inserting operations
             min_bp: Minimum binding power for Pratt parsing (default 0)
+            initial_error: Error message if first token cannot start
+                an expression (should mention the unexpected token)
 
         Returns:
             SSA value of the parsed expression
@@ -345,7 +354,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
             postfix ::= "==" state
             infix ::= "&&" expr | "||" expr | "^" expr
         """
-        lhs = self._parse_prefix_and_primary(variables, builder)
+        lhs = self._parse_prefix_and_primary(variables, builder, initial_error)
 
         while True:
             if self._current_token.kind == ProjTokenKind.EQ:
@@ -479,7 +488,10 @@ class ProjParser(GenericParser[ProjTokenKind]):
             )
 
     def _parse_prefix_and_primary(
-        self, variables: Mapping[str, SSAValue], builder: Builder
+        self,
+        variables: Mapping[str, SSAValue],
+        builder: Builder,
+        initial_error: str | None = None,
     ) -> SSAValue:
         """
         Parse prefix operators and primary expressions.
@@ -490,6 +502,8 @@ class ProjParser(GenericParser[ProjTokenKind]):
         Args:
             variables: Mapping from variable names to SSA values
             builder: Builder for inserting operations
+            initial_error: Error message if first token cannot start
+                an expression (should mention the unexpected token)
         """
         if (token := self._parse_optional_token(ProjTokenKind.IDENTIFIER)) is not None:
             var_name = token.text
@@ -572,4 +586,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
             self.parse_punctuation(")", " to close parenthesized expression")
             return expr
 
-        self.raise_error(f"Unexpected token in expression: {self._current_token.text}")
+        self.raise_error(
+            initial_error
+            or f"Unexpected token in expression: {self._current_token.text}"
+        )

@@ -823,3 +823,50 @@ class TestMeasureExpression:
         assert isinstance(ops[1], FromBoolOp)
         assert isinstance(ops[2], MeasureOp)
         assert result.type == i1
+
+
+class TestExpressionStatement:
+    """Test parsing of bare expression statements."""
+
+    def test_measure_statement(self):
+        """Test using measure as a statement."""
+
+        from projxdsl.dialects.proj import ProjectionType
+
+        parser = ProjParser("measure p")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        variables: dict[str, SSAValue] = {
+            "p": XDSLTestOp(result_types=[ProjectionType()]).results[0]
+        }
+        parser.parse_statement(variables, builder)
+        parser.expect_eof()
+
+        ops = list(block.ops)
+        assert len(ops) == 1
+        assert isinstance(ops[0], MeasureOp)
+
+    def test_bool_expression_statement(self):
+        """Test using a boolean expression as a statement."""
+
+        parser = ProjParser("true")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        parser.parse_statement({}, builder)
+        parser.expect_eof()
+
+        ops = list(block.ops)
+        assert len(ops) == 1
+        assert isinstance(ops[0], ConstantOp)
+
+    def test_invalid_statement_error(self):
+        """Test error message for invalid statement tokens."""
+
+        parser = ProjParser("}")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        with pytest.raises(
+            ParseError,
+            match="Expected 'ph', 'if', 'let', or an expression for statement, got '}'",
+        ):
+            parser.parse_statement({}, builder)
