@@ -352,6 +352,24 @@ class YieldOp(IRDLOperation):
 
 
 @irdl_op_definition
+class MeasureOp(IRDLOperation):
+    """
+    Measurement operation.
+    Takes a projection and returns a boolean (i1).
+    """
+
+    name = "proj.measure"
+
+    projection = operand_def(ProjectionType)
+    result = result_def(i1)
+
+    assembly_format = "$projection attr-dict"
+
+    def __init__(self, projection: SSAValue):
+        super().__init__(operands=[projection], result_types=[i1])
+
+
+@irdl_op_definition
 class IfOp(IRDLOperation):
     """
     Conditional operation for projections.
@@ -434,6 +452,7 @@ Proj = Dialect(
         XorOp,
         FromBoolOp,
         EqOp,
+        MeasureOp,
         PhaseOp,
         YieldOp,
         IfOp,

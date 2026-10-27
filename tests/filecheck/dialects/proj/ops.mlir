@@ -107,3 +107,11 @@ func.func @test_alloc() {
   %q_right = proj.alloc <right> : !proj.qubit
   func.return
 }
+
+// Test proj.measure
+func.func @test_measure(%arg0: !proj.projection) -> i1 {
+  // CHECK: %[[M0:.*]] = proj.measure %arg0
+  // CHECK-GENERIC: %[[M0:.*]] = "proj.measure"(%[[ARG0:.*]]) : (!proj.projection) -> i1
+  %m = proj.measure %arg0
+  func.return %m : i1
+}
