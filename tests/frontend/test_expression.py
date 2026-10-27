@@ -4,7 +4,8 @@ import pytest
 from xdsl.builder import Builder
 from xdsl.dialects.arith import AndIOp, ConstantOp, OrIOp, XOrIOp
 from xdsl.dialects.builtin import IntegerAttr, NoneAttr, i1
-from xdsl.ir import Block, Operation, SSAValue
+from xdsl.dialects.test import TestOp as XDSLTestOp
+from xdsl.ir import Block, SSAValue
 from xdsl.rewriter import InsertPoint
 from xdsl.utils.exceptions import ParseError
 
@@ -30,34 +31,12 @@ def make_bool_var(value: int = 1) -> SSAValue:
 
 def make_qubit_var() -> SSAValue:
     """Create a qubit SSA value for testing."""
-
-    class MockQubitOp(Operation):
-        name = "test.qubit"
-
-        def __init__(self):
-            super().__init__(result_types=[QubitType(NoneAttr())])
-
-    return MockQubitOp().results[0]
+    return XDSLTestOp(result_types=[QubitType(NoneAttr())]).results[0]
 
 
 def make_angle_var() -> SSAValue:
     """Create an angle SSA value for testing."""
-
-    class MockAngleOp(Operation):
-        name = "test.angle"
-
-        def __init__(self):
-            super().__init__(result_types=[AngleType()])
-
-    return MockAngleOp().results[0]
-
-    class MockAngleOp(Operation):
-        name = "test.angle"
-
-        def __init__(self):
-            super().__init__(result_types=[AngleType()])
-
-    return MockAngleOp().results[0]
+    return XDSLTestOp(result_types=[AngleType()]).results[0]
 
 
 def parse_expression(code: str, variables: dict[str, SSAValue] | None = None):
@@ -333,13 +312,7 @@ class TestEqOperator:
     def test_eq_basis_compatible(self):
         """Test that qubit<Z> can use Z basis states."""
 
-        class MockAllocZOp(Operation):
-            name = "test.alloc_z"
-
-            def __init__(self):
-                super().__init__(result_types=[QubitType(BasisAttr.Z())])
-
-        q_z = MockAllocZOp().results[0]
+        q_z = XDSLTestOp(result_types=[QubitType(BasisAttr.Z())]).results[0]
         # Should work with |0> (Z basis)
         result = parse_expression("q == |0>", {"q": q_z})
         assert isinstance(result.owner, EqOp)
@@ -350,13 +323,7 @@ class TestEqOperator:
     def test_eq_basis_incompatible(self):
         """Test that qubit<Z> cannot use X or Y basis states."""
 
-        class MockAllocZOp(Operation):
-            name = "test.alloc_z"
-
-            def __init__(self):
-                super().__init__(result_types=[QubitType(BasisAttr.Z())])
-
-        q_z = MockAllocZOp().results[0]
+        q_z = XDSLTestOp(result_types=[QubitType(BasisAttr.Z())]).results[0]
         # Should fail with |+> (X basis)
         with pytest.raises(
             TypeCheckError, match="Z basis cannot be projected in X basis"
@@ -379,13 +346,7 @@ class TestEqOperator:
     def test_eq_x_basis_compatible(self):
         """Test that qubit<X> can use X basis states."""
 
-        class MockAllocXOp(Operation):
-            name = "test.alloc_x"
-
-            def __init__(self):
-                super().__init__(result_types=[QubitType(BasisAttr.X())])
-
-        q_x = MockAllocXOp().results[0]
+        q_x = XDSLTestOp(result_types=[QubitType(BasisAttr.X())]).results[0]
         # Should work with |+> (X basis)
         result = parse_expression("q == |+>", {"q": q_x})
         assert isinstance(result.owner, EqOp)
@@ -396,13 +357,7 @@ class TestEqOperator:
     def test_eq_x_basis_incompatible(self):
         """Test that qubit<X> cannot use Y or Z basis states."""
 
-        class MockAllocXOp(Operation):
-            name = "test.alloc_x"
-
-            def __init__(self):
-                super().__init__(result_types=[QubitType(BasisAttr.X())])
-
-        q_x = MockAllocXOp().results[0]
+        q_x = XDSLTestOp(result_types=[QubitType(BasisAttr.X())]).results[0]
         # Should fail with |0> (Z basis)
         with pytest.raises(
             TypeCheckError, match="X basis cannot be projected in Z basis"
@@ -417,13 +372,7 @@ class TestEqOperator:
     def test_eq_y_basis_compatible(self):
         """Test that qubit<Y> can use Y basis states."""
 
-        class MockAllocYOp(Operation):
-            name = "test.alloc_y"
-
-            def __init__(self):
-                super().__init__(result_types=[QubitType(BasisAttr.Y())])
-
-        q_y = MockAllocYOp().results[0]
+        q_y = XDSLTestOp(result_types=[QubitType(BasisAttr.Y())]).results[0]
         # Should work with |L> (Y basis)
         result = parse_expression("q == |L>", {"q": q_y})
         assert isinstance(result.owner, EqOp)
@@ -434,13 +383,7 @@ class TestEqOperator:
     def test_eq_y_basis_incompatible(self):
         """Test that qubit<Y> cannot use X or Z basis states."""
 
-        class MockAllocYOp(Operation):
-            name = "test.alloc_y"
-
-            def __init__(self):
-                super().__init__(result_types=[QubitType(BasisAttr.Y())])
-
-        q_y = MockAllocYOp().results[0]
+        q_y = XDSLTestOp(result_types=[QubitType(BasisAttr.Y())]).results[0]
         # Should fail with |0> (Z basis)
         with pytest.raises(
             TypeCheckError, match="Y basis cannot be projected in Z basis"

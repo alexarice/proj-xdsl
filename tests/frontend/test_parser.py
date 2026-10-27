@@ -4,7 +4,8 @@ import pytest
 from xdsl.builder import Builder
 from xdsl.dialects.arith import ConstantOp
 from xdsl.dialects.builtin import IntegerAttr, NoneAttr, i1
-from xdsl.ir import Block, Operation, SSAValue
+from xdsl.dialects.test import TestOp as XDSLTestOp
+from xdsl.ir import Block, SSAValue
 from xdsl.rewriter import InsertPoint
 from xdsl.utils.exceptions import ParseError
 from xdsl.utils.lexer import Input
@@ -39,6 +40,26 @@ def parse_state(code: str):
     result = parser.parse_state()
     parser.expect_eof()
     return result
+
+
+def make_qubit_var() -> SSAValue:
+    """Create a qubit SSA value for testing using test.op."""
+    return XDSLTestOp(result_types=[QubitType(NoneAttr())]).results[0]
+
+
+def make_qubit_with_basis(basis: Basis) -> SSAValue:
+    """Create a qubit SSA value with basis annotation for testing."""
+    return XDSLTestOp(result_types=[QubitType(BasisAttr(basis))]).results[0]
+
+
+def make_proj_var(qubit: SSAValue) -> SSAValue:
+    """Create a projection SSA value for testing."""
+    return XDSLTestOp(operands=[qubit], result_types=[ProjectionType()]).results[0]
+
+
+def make_angle_var() -> SSAValue:
+    """Create an angle SSA value for testing."""
+    return XDSLTestOp(result_types=[AngleType()]).results[0]
 
 
 class TestTypeParsing:
@@ -375,13 +396,7 @@ class TestPhaseStatement:
     def test_phase_statement(self):
         """Test parsing ph(theta) statement."""
 
-        class MockAngleOp(Operation):
-            name = "test.angle"
-
-            def __init__(self):
-                super().__init__(result_types=[AngleType()])
-
-        angle_var = MockAngleOp().results[0]
+        angle_var = make_angle_var()
         parser = ProjParser("ph(theta)")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
@@ -433,20 +448,8 @@ class TestIfStatement:
     def test_simple_if_statement(self):
         """Test parsing a simple if statement with one phase."""
 
-        class MockQubitOp(Operation):
-            name = "test.qubit"
-
-            def __init__(self):
-                super().__init__(result_types=[QubitType()])
-
-        class MockProjOp(Operation):  # type: ignore[misc]
-            name = "test.proj"
-
-            def __init__(self, qubit: SSAValue):
-                super().__init__(operands=[qubit], result_types=[ProjectionType()])
-
-        qubit_var = MockQubitOp().results[0]
-        proj_var = MockProjOp(qubit_var).results[0]
+        qubit_var = make_qubit_var()
+        proj_var = make_proj_var(qubit_var)
         parser = ProjParser("if p { ph(pi) }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
@@ -468,20 +471,8 @@ class TestIfStatement:
     def test_if_statement_multiple_statements(self):
         """Test parsing if statement with multiple phase statements."""
 
-        class MockQubitOp(Operation):
-            name = "test.qubit"
-
-            def __init__(self):
-                super().__init__(result_types=[QubitType()])
-
-        class MockProjOp(Operation):  # type: ignore[misc]
-            name = "test.proj"
-
-            def __init__(self, qubit: SSAValue):
-                super().__init__(operands=[qubit], result_types=[ProjectionType()])
-
-        qubit_var = MockQubitOp().results[0]
-        proj_var = MockProjOp(qubit_var).results[0]
+        qubit_var = make_qubit_var()
+        proj_var = make_proj_var(qubit_var)
         parser = ProjParser("if p { ph(pi); ph(0) }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
@@ -503,20 +494,8 @@ class TestIfStatement:
     def test_if_statement_with_semicolons(self):
         """Test parsing if statement with semicolons between statements."""
 
-        class MockQubitOp(Operation):
-            name = "test.qubit"
-
-            def __init__(self):
-                super().__init__(result_types=[QubitType()])
-
-        class MockProjOp(Operation):  # type: ignore[misc]
-            name = "test.proj"
-
-            def __init__(self, qubit: SSAValue):
-                super().__init__(operands=[qubit], result_types=[ProjectionType()])
-
-        qubit_var = MockQubitOp().results[0]
-        proj_var = MockProjOp(qubit_var).results[0]
+        qubit_var = make_qubit_var()
+        proj_var = make_proj_var(qubit_var)
         parser = ProjParser("if p { ph(pi); ph(0) }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
@@ -532,20 +511,8 @@ class TestIfStatement:
     def test_if_statement_without_semicolons(self):
         """Test that missing semicolon between statements raises error."""
 
-        class MockQubitOp(Operation):
-            name = "test.qubit"
-
-            def __init__(self):
-                super().__init__(result_types=[QubitType()])
-
-        class MockProjOp(Operation):  # type: ignore[misc]
-            name = "test.proj"
-
-            def __init__(self, qubit: SSAValue):
-                super().__init__(operands=[qubit], result_types=[ProjectionType()])
-
-        qubit_var = MockQubitOp().results[0]
-        proj_var = MockProjOp(qubit_var).results[0]
+        qubit_var = make_qubit_var()
+        proj_var = make_proj_var(qubit_var)
         parser = ProjParser("if p { ph(pi) ph(0) }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
@@ -555,20 +522,8 @@ class TestIfStatement:
     def test_if_statement_empty_block(self):
         """Test parsing if statement with empty block."""
 
-        class MockQubitOp(Operation):
-            name = "test.qubit"
-
-            def __init__(self):
-                super().__init__(result_types=[QubitType()])
-
-        class MockProjOp(Operation):  # type: ignore[misc]
-            name = "test.proj"
-
-            def __init__(self, qubit: SSAValue):
-                super().__init__(operands=[qubit], result_types=[ProjectionType()])
-
-        qubit_var = MockQubitOp().results[0]
-        proj_var = MockProjOp(qubit_var).results[0]
+        qubit_var = make_qubit_var()
+        proj_var = make_proj_var(qubit_var)
         parser = ProjParser("if p { }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
@@ -596,20 +551,8 @@ class TestIfStatement:
     def test_if_statement_missing_brace(self):
         """Test that missing opening brace raises error."""
 
-        class MockQubitOp(Operation):
-            name = "test.qubit"
-
-            def __init__(self):
-                super().__init__(result_types=[QubitType()])
-
-        class MockProjOp(Operation):
-            name = "test.proj"
-
-            def __init__(self, qubit: SSAValue):
-                super().__init__(operands=[qubit], result_types=[ProjectionType()])
-
-        qubit_var = MockQubitOp().results[0]
-        proj_var = MockProjOp(qubit_var).results[0]
+        qubit_var = make_qubit_var()
+        proj_var = make_proj_var(qubit_var)
         parser = ProjParser("if p ph(pi) }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
@@ -619,20 +562,8 @@ class TestIfStatement:
     def test_if_statement_missing_closing_brace(self):
         """Test that missing closing brace raises error."""
 
-        class MockQubitOp(Operation):
-            name = "test.qubit"
-
-            def __init__(self):
-                super().__init__(result_types=[QubitType()])
-
-        class MockProjOp(Operation):  # type: ignore[misc]
-            name = "test.proj"
-
-            def __init__(self, qubit: SSAValue):
-                super().__init__(operands=[qubit], result_types=[ProjectionType()])
-
-        qubit_var = MockQubitOp().results[0]
-        proj_var = MockProjOp(qubit_var).results[0]
+        qubit_var = make_qubit_var()
+        proj_var = make_proj_var(qubit_var)
         parser = ProjParser("if p { ph(pi)")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
@@ -642,20 +573,8 @@ class TestIfStatement:
     def test_nested_if_statement(self):
         """Test parsing nested if statements."""
 
-        class MockQubitOp(Operation):
-            name = "test.qubit"
-
-            def __init__(self):
-                super().__init__(result_types=[QubitType()])
-
-        class MockProjOp(Operation):  # type: ignore[misc]
-            name = "test.proj"
-
-            def __init__(self, qubit: SSAValue):
-                super().__init__(operands=[qubit], result_types=[ProjectionType()])
-
-        qubit_var = MockQubitOp().results[0]
-        proj_var = MockProjOp(qubit_var).results[0]
+        qubit_var = make_qubit_var()
+        proj_var = make_proj_var(qubit_var)
         parser = ProjParser("if p { if q { ph(pi) } }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
@@ -684,13 +603,7 @@ class TestLetStatement:
     def test_let_statement(self):
         """Test parsing a simple let statement."""
 
-        class MockQubitOp(Operation):
-            name = "test.qubit"
-
-            def __init__(self):
-                super().__init__(result_types=[QubitType()])
-
-        qubit_var = MockQubitOp().results[0]
+        qubit_var = make_qubit_var()
         parser = ProjParser("let p = q == |0>")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
@@ -704,13 +617,7 @@ class TestLetStatement:
     def test_let_statement_with_type(self):
         """Test parsing a let statement with type annotation."""
 
-        class MockQubitOp(Operation):
-            name = "test.qubit"
-
-            def __init__(self):
-                super().__init__(result_types=[QubitType()])
-
-        qubit_var = MockQubitOp().results[0]
+        qubit_var = make_qubit_var()
         parser = ProjParser("let p: proj = q == |0>")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
@@ -724,20 +631,8 @@ class TestLetStatement:
     def test_let_statement_scoping(self):
         """Test that let variables are scoped to their block."""
 
-        class MockQubitOp(Operation):
-            name = "test.qubit"
-
-            def __init__(self):
-                super().__init__(result_types=[QubitType()])
-
-        class MockProjOp(Operation):  # type: ignore[misc]
-            name = "test.proj"
-
-            def __init__(self, qubit: SSAValue):
-                super().__init__(operands=[qubit], result_types=[ProjectionType()])
-
-        qubit_var = MockQubitOp().results[0]
-        proj_var = MockProjOp(qubit_var).results[0]
+        qubit_var = make_qubit_var()
+        proj_var = make_proj_var(qubit_var)
         parser = ProjParser("if p { let x = q == |0> }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
@@ -758,13 +653,7 @@ class TestLetStatement:
     def test_let_statement_shadowing_error(self):
         """Test that redefining a variable raises an error."""
 
-        class MockQubitOp(Operation):
-            name = "test.qubit"
-
-            def __init__(self):
-                super().__init__(result_types=[QubitType()])
-
-        qubit_var = MockQubitOp().results[0]
+        qubit_var = make_qubit_var()
         parser = ProjParser("let q = q == |0>")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
@@ -775,13 +664,7 @@ class TestLetStatement:
     def test_let_statement_type_mismatch(self):
         """Test that a type mismatch raises an error."""
 
-        class MockQubitOp(Operation):
-            name = "test.qubit"
-
-            def __init__(self):
-                super().__init__(result_types=[QubitType()])
-
-        qubit_var = MockQubitOp().results[0]
+        qubit_var = make_qubit_var()
         parser = ProjParser("let p: qubit = q == |0>")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
