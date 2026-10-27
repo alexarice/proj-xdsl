@@ -386,16 +386,86 @@ For each call:
 2. Check actual projection params are not currently borrowed
 3. Check no conflicts between new borrows and existing borrows
 
-## Open Questions
+## Function Kinds
 
-1. **Unitary marking**: How to mark functions/blocks as unitary, ensuring they don't contain measurements? This would prevent measurement results from being used in quantum `if` statements, maintaining a clear separation between:
-   - **Unitary code**: Only quantum projections, no measurements
-   - **Measurement code**: Can measure, but restricted in quantum conditionals
+Functions are classified into three kinds based on their effect on quantum state:
 
-   Possible approaches:
-   - Effect system (track `measure` effect)
-   - Separate function types (`fn` vs `unitary fn`)
-   - Region attributes in IR
+### `pure fn` - Purely Classical Computation
+- **Semantics**: No quantum operations; classical computation only
+- **Allowed**: Classical control, arithmetic, boolean logic
+- **Disallowed**: Qubit allocation, phase gates, projections, measurement
+- **Return types**: `bool`, `angle` (classical types only)
+- **Use case**: Classical post-processing, computing classical functions from measurement results
+
+```rust
+pure fn classical_post_process(m1: bool, m2: bool) -> bool {
+    return m1 && m2
+}
+```
+
+### `unitary fn` - Unitary Evolution
+- **Semantics**: Reversible quantum operations; no measurement allowed
+- **Allowed**: Qubit allocation, projections, phase gates, unitary transforms
+- **Return types**: `qubit`, `qubit<B>`, `proj` (quantum types only)
+- **Constraint**: IR verifier rejects `proj.measure` operations
+- **Use case**: Oracle construction, ansatz preparation, basis changes
+
+```rust
+unitary fn bell_pair(q1: qubit, q2: qubit) -> (qubit, qubit) {
+    // Prepare Bell state
+    let q1 = alloc |0>
+    phase(PI/2)
+    // ... unitary operations
+    return (q1, q2)
+}
+```
+
+### `mixed fn` - General Quantum Channel
+- **Semantics**: Arbitrary CPTP map; full quantum operations with measurement
+- **Allowed**: All operations including mid-circuit measurement
+- **Return types**: Any type
+- **Use case**: Full algorithms, error correction, measurement-based protocols
+
+```rust
+mixed fn teleport(src: qubit, dst: qubit) -> qubit {
+    // Bell measurement
+    let m1 = measure(src == |0>)
+    let m2 = measure(src == |+>)
+    // Classical correction
+    if m1 { phase(PI) }
+    if m2 { ... }
+    return dst
+}
+```
+
+### Kind Hierarchy
+
+```
+pure ⊆ unitary ⊆ mixed
+```
+
+- `pure` functions are a subset of `unitary` (classical ops are trivially unitary)
+- `unitary` functions are a subset of `mixed` (unitary ops are a special case of channels)
+- A `pure fn` can be called where `unitary fn` or `mixed fn` is expected
+- A `unitary fn` can be called where `mixed fn` is expected
+- Kind is **not** part of the type system (no subtyping in function signatures)
+- Kind checking is done at call sites via effect validation
+
+### IR Representation
+
+Each kind maps to a distinct operation in the `proj` dialect:
+
+```mlir
+proj.pure @classical_fn(...) attributes { ... }
+proj.unitary @bell_pair(...) attributes { ... }
+proj.mixed @teleport(...) attributes { ... }
+```
+
+**Benefits of separate operations**:
+- IR-level verification (e.g., reject `proj.measure` in `proj.unitary`)
+- Explicit semantics in operation name
+- Enables kind-specific optimizations
+- Clear intent when reading/generated IR
 
 
 
@@ -421,7 +491,9 @@ For each call:
 | Scalar mult | `c * a` | `2.0 * PI` |
 | Scalar div | `a / c` | `PI / 3.0` |
 | Angle constants | `PI`, `π`, `0` | `phase(PI)` |
-| Function | `fn name(params) -> ret { ... }` | `fn f(q: qubit) { ... }` |
+| Pure function | `pure fn name(params) -> ret { ... }` | `pure fn f(b: bool) -> bool { ... }` |
+| Unitary function | `unitary fn name(params) -> ret { ... }` | `unitary fn u(q: qubit) -> qubit { ... }` |
+| Mixed function | `mixed fn name(params) -> ret { ... }` | `mixed fn m(q: qubit) -> bool { ... }` |
 
 **Note**: State notation accepts both ASCII (`|0>`) and Unicode (`|0⟩`) syntax. Angle constant `PI` also accepts Unicode `π`.
 
@@ -429,6 +501,12 @@ For each call:
 - Booleans can be used in `if` statements
 - Boolean connectives (`&&`, `||`, `^`, `!`) work on both `bool` and `proj`
 - Measurement results (`bool`) can be used directly in quantum conditionals
+
+**Function Kinds**: `pure ⊆ unitary ⊆ mixed` - function kinds form a hierarchy. This means:
+- `pure fn` can be called where `unitary fn` or `mixed fn` is expected
+- `unitary fn` can be called where `mixed fn` is expected
+- Kind is checked at call sites, not part of the type system
+- IR uses separate operations: `proj.pure`, `proj.unitary`, `proj.mixed`
 
 ## References
 
