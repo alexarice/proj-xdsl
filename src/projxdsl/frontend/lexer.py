@@ -52,8 +52,9 @@ class ProjTokenKind(Enum):
     IF = auto()
     LET = auto()
 
-    # Expression keyword
+    # Expression keywords
     ALLOC = auto()
+    MEASURE = auto()
 
     # State (ket states)
     STATE = auto()
@@ -138,6 +139,7 @@ KEYWORD_MAP = {
     "if": ProjTokenKind.IF,
     "let": ProjTokenKind.LET,
     "alloc": ProjTokenKind.ALLOC,
+    "measure": ProjTokenKind.MEASURE,
 }
 
 ProjToken = Token[ProjTokenKind]

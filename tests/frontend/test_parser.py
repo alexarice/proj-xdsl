@@ -13,9 +13,13 @@ from xdsl.utils.lexer import Input
 from projxdsl.dialects.angle import AngleType, PiOp, ZeroOp
 from projxdsl.dialects.proj import (
     AllocOp,
+    AndOp,
     Basis,
     BasisAttr,
+    EqOp,
+    FromBoolOp,
     IfOp,
+    MeasureOp,
     PhaseOp,
     ProjectionType,
     QubitType,
@@ -721,3 +725,101 @@ class TestAllocExpression:
         assert isinstance(ops[0], AllocOp)
         assert "q" in variables
         assert variables["q"].type == QubitType()
+
+
+class TestMeasureExpression:
+    """Test parsing of measure expressions."""
+
+    def test_measure_expression(self):
+        """Test parsing measure expression."""
+
+        parser = ProjParser("measure p")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        variables: dict[str, SSAValue] = {
+            "p": XDSLTestOp(result_types=[ProjectionType()]).results[0]
+        }
+        result = parser.parse_expression(variables, builder)
+        parser.expect_eof()
+
+        ops = list(block.ops)
+        assert len(ops) == 1
+        assert isinstance(ops[0], MeasureOp)
+        assert result.type == i1
+
+    def test_measure_binding_power(self):
+        """Test that measure binds tighter than &&."""
+
+        parser = ProjParser("measure p && q")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        variables: dict[str, SSAValue] = {
+            "p": XDSLTestOp(result_types=[ProjectionType()]).results[0],
+            "q": XDSLTestOp(result_types=[ProjectionType()]).results[0],
+        }
+        result = parser.parse_expression(variables, builder)
+        parser.expect_eof()
+
+        ops = list(block.ops)
+        assert len(ops) == 3  # MeasureOp, FromBoolOp, AndOp
+        assert isinstance(ops[0], MeasureOp)
+        assert isinstance(ops[1], FromBoolOp)
+        assert isinstance(ops[2], AndOp)
+        assert result.type == ProjectionType()
+
+    def test_measure_with_eq(self):
+        """Test that measure binds weaker than ==."""
+
+        from projxdsl.dialects.proj import QubitType
+
+        parser = ProjParser("measure p == |0>")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        variables: dict[str, SSAValue] = {
+            "p": XDSLTestOp(result_types=[QubitType()]).results[0],
+        }
+        result = parser.parse_expression(variables, builder)
+        parser.expect_eof()
+
+        ops = list(block.ops)
+        assert len(ops) == 2  # EqOp, MeasureOp
+        assert isinstance(ops[0], EqOp)
+        assert isinstance(ops[1], MeasureOp)
+        assert result.type == i1
+
+    def test_measure_bool(self):
+        """Test that measuring a bool inserts FromBool."""
+
+        parser = ProjParser("measure true")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        result = parser.parse_expression({}, builder)
+        parser.expect_eof()
+
+        ops = list(block.ops)
+        assert len(ops) == 3  # ConstantOp, FromBoolOp, MeasureOp
+        assert isinstance(ops[0], ConstantOp)
+        assert isinstance(ops[1], FromBoolOp)
+        assert isinstance(ops[2], MeasureOp)
+        assert result.type == i1
+
+    def test_measure_nested(self):
+        """Test nested measure expressions."""
+
+        from projxdsl.dialects.proj import ProjectionType
+
+        parser = ProjParser("measure measure p")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        variables: dict[str, SSAValue] = {
+            "p": XDSLTestOp(result_types=[ProjectionType()]).results[0]
+        }
+        result = parser.parse_expression(variables, builder)
+        parser.expect_eof()
+
+        ops = list(block.ops)
+        assert len(ops) == 3  # MeasureOp, FromBoolOp, MeasureOp
+        assert isinstance(ops[0], MeasureOp)
+        assert isinstance(ops[1], FromBoolOp)
+        assert isinstance(ops[2], MeasureOp)
+        assert result.type == i1

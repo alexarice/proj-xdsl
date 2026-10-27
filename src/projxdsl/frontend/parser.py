@@ -22,6 +22,7 @@ from projxdsl.dialects.proj import (
     EqOp,
     FromBoolOp,
     IfOp,
+    MeasureOp,
     NotOp,
     OrOp,
     PhaseOp,
@@ -62,6 +63,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
     # Binding powers for Pratt parsing
     # Higher number = tighter binding
     _PREFIX_SCALAR_MULT_BP = 11  # Prefix operator (single binding power) - tightest
+    _PREFIX_MEASURE_BP = 7
     _PREFIX_NOT_BP = 7
     _POSTFIX_EQ_BP = 9  # Postfix operator (single binding power)
     _INFIX_ADD_BP = (8, 9)  # (left_bp, right_bp) - tighter than not
@@ -338,7 +340,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
         Grammar:
             expr ::= primary postfix* infix*
-            primary ::= identifier | "true" | "false" | "!" expr
+            primary ::= identifier | "true" | "false" | "!" expr | "measure" expr
                     | "alloc" state | "(" expr ")"
             postfix ::= "==" state
             infix ::= "&&" expr | "||" expr | "^" expr
@@ -482,7 +484,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         """
         Parse prefix operators and primary expressions.
 
-        Prefix operators: !
+        Prefix operators: !, measure
         Primary expressions: identifier, true, false, alloc, parenthesized expression
 
         Args:
@@ -551,6 +553,19 @@ class ProjParser(GenericParser[ProjTokenKind]):
             state = self.parse_state()
             alloc_op = builder.insert(AllocOp(state))
             return alloc_op.result
+
+        if self._parse_optional_token(ProjTokenKind.MEASURE) is not None:
+            operand = self.parse_expression(variables, builder, self._PREFIX_MEASURE_BP)
+            if operand.type == ProjectionType():
+                return builder.insert(MeasureOp(operand)).result
+            elif operand.type == i1:
+                proj = builder.insert(FromBoolOp(operand)).result
+                return builder.insert(MeasureOp(proj)).result
+            else:
+                self.raise_typing_error(
+                    f"Expected projection or boolean for 'measure' operator,"
+                    f" got {operand.type}"
+                )
 
         if self._parse_optional_token(ProjTokenKind.LPAREN) is not None:
             expr = self.parse_expression(variables, builder, 0)
