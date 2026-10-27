@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import NoReturn
 
+from collections.abc import Mapping
+
 from xdsl.builder import Builder
 from xdsl.dialects.arith import AndIOp, ConstantOp, OrIOp, XOrIOp
 from xdsl.dialects.builtin import IntegerAttr, NoneAttr, i1
@@ -272,7 +274,10 @@ class ProjParser(GenericParser[ProjTokenKind]):
         return builder.insert(IfOp(condition, true_region, false_region))
 
     def parse_expression(
-        self, variables: dict[str, SSAValue], builder: Builder, min_bp: int = 0
+        self,
+        variables: Mapping[str, SSAValue],
+        builder: Builder,
+        min_bp: int = 0,
     ) -> SSAValue:
         """
         Parse a projection expression using Pratt parsing.
@@ -425,7 +430,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
             )
 
     def _parse_prefix_and_primary(
-        self, variables: dict[str, SSAValue], builder: Builder
+        self, variables: Mapping[str, SSAValue], builder: Builder
     ) -> SSAValue:
         """
         Parse prefix operators and primary expressions.
