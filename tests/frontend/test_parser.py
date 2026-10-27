@@ -676,3 +676,115 @@ class TestIfStatement:
         assert isinstance(inner_inner_ops[0], PiOp)
         assert isinstance(inner_inner_ops[1], PhaseOp)
         assert isinstance(inner_inner_ops[2], YieldOp)
+
+
+class TestLetStatement:
+    """Test parsing of let statements."""
+
+    def test_let_statement(self):
+        """Test parsing a simple let statement."""
+
+        class MockQubitOp(Operation):
+            name = "test.qubit"
+
+            def __init__(self):
+                super().__init__(result_types=[QubitType()])
+
+        qubit_var = MockQubitOp().results[0]
+        parser = ProjParser("let p = q == |0>")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        variables = {"q": qubit_var}
+        parser.parse_statement(variables, builder)
+        parser.expect_eof()
+
+        assert "p" in variables
+        assert len(list(block.ops)) == 1  # EqOp inserted
+
+    def test_let_statement_with_type(self):
+        """Test parsing a let statement with type annotation."""
+
+        class MockQubitOp(Operation):
+            name = "test.qubit"
+
+            def __init__(self):
+                super().__init__(result_types=[QubitType()])
+
+        qubit_var = MockQubitOp().results[0]
+        parser = ProjParser("let p: proj = q == |0>")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        variables = {"q": qubit_var}
+        parser.parse_statement(variables, builder)
+        parser.expect_eof()
+
+        assert "p" in variables
+        assert len(list(block.ops)) == 1  # EqOp inserted
+
+    def test_let_statement_scoping(self):
+        """Test that let variables are scoped to their block."""
+
+        class MockQubitOp(Operation):
+            name = "test.qubit"
+
+            def __init__(self):
+                super().__init__(result_types=[QubitType()])
+
+        class MockProjOp(Operation):  # type: ignore[misc]
+            name = "test.proj"
+
+            def __init__(self, qubit: SSAValue):
+                super().__init__(operands=[qubit], result_types=[ProjectionType()])
+
+        qubit_var = MockQubitOp().results[0]
+        proj_var = MockProjOp(qubit_var).results[0]
+        parser = ProjParser("if p { let x = q == |0> }")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        variables = {"q": qubit_var, "p": proj_var}
+        parser.parse_statement(variables, builder)
+        parser.expect_eof()
+
+        # x should NOT be in outer scope
+        assert "x" not in variables
+
+        # x should be in the if block
+        if_op = list(block.ops)[0]
+        assert isinstance(if_op, IfOp)
+        inner_block = if_op.true_region.blocks[0]
+        inner_ops = list(inner_block.ops)
+        assert len(inner_ops) == 2  # EqOp + YieldOp
+
+    def test_let_statement_shadowing_error(self):
+        """Test that redefining a variable raises an error."""
+
+        class MockQubitOp(Operation):
+            name = "test.qubit"
+
+            def __init__(self):
+                super().__init__(result_types=[QubitType()])
+
+        qubit_var = MockQubitOp().results[0]
+        parser = ProjParser("let q = q == |0>")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        variables = {"q": qubit_var}
+        with pytest.raises(ParseError, match="already defined"):
+            parser.parse_statement(variables, builder)
+
+    def test_let_statement_type_mismatch(self):
+        """Test that a type mismatch raises an error."""
+
+        class MockQubitOp(Operation):
+            name = "test.qubit"
+
+            def __init__(self):
+                super().__init__(result_types=[QubitType()])
+
+        qubit_var = MockQubitOp().results[0]
+        parser = ProjParser("let p: qubit = q == |0>")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        variables = {"q": qubit_var}
+        with pytest.raises(TypeCheckError, match="Type mismatch"):
+            parser.parse_statement(variables, builder)

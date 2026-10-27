@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from typing import NoReturn
-
 from collections.abc import Mapping
+from typing import NoReturn
 
 from xdsl.builder import Builder
 from xdsl.dialects.arith import AndIOp, ConstantOp, OrIOp, XOrIOp
@@ -209,7 +208,11 @@ class ProjParser(GenericParser[ProjTokenKind]):
         """
         Parse a statement and insert it into the block via builder.
 
-        statement ::= "ph" "(" angle-expr ")" | "if" expr block
+        May mutate `variables` by adding new variable bindings (e.g., let statements).
+
+        statement ::= "ph" "(" angle-expr ")"
+                    | "if" expr block
+                    | "let" ident (":" type)? "=" expr
         block ::= "{" statement* "}"
         angle-expr ::= expression that evaluates to an angle type
         """
@@ -228,9 +231,11 @@ class ProjParser(GenericParser[ProjTokenKind]):
             builder.insert(PhaseOp(angle))
         elif self._parse_optional_token(ProjTokenKind.IF) is not None:
             self._parse_if_statement(variables, builder)
+        elif self._parse_optional_token(ProjTokenKind.LET) is not None:
+            self._parse_let_statement(variables, builder)
         else:
             self.raise_error(
-                f"Expected 'ph' or 'if' keyword for statement,"
+                f"Expected 'ph', 'if', or 'let' keyword for statement,"
                 f" got {self._current_token.text}"
             )
 
@@ -252,11 +257,13 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 f"Expected projection type for 'if' condition, got {condition.type}"
             )
 
-        # Parse the true block
+        # Parse the true block (with scoped variables)
         def parse_statements(inner_builder: Builder):
+            # Create a copy of variables for scoping
+            block_variables = dict(variables)
             self.parse_list(
                 delimiter=self.Delimiter.BRACES,
-                parse=lambda: self.parse_statement(variables, inner_builder),
+                parse=lambda: self.parse_statement(block_variables, inner_builder),
                 separator=";",
                 context_msg=" in statement block",
             )
@@ -272,6 +279,44 @@ class ProjParser(GenericParser[ProjTokenKind]):
             pass
 
         return builder.insert(IfOp(condition, true_region, false_region))
+
+    def _parse_let_statement(
+        self, variables: dict[str, SSAValue], builder: Builder
+    ) -> None:
+        """
+        Parse a let statement and add the binding to variables.
+
+        let-stmt ::= "let" ident (":" type)? "=" expr
+        """
+        # Parse the identifier
+        ident_token = self._parse_token(
+            ProjTokenKind.IDENTIFIER, "Expected identifier after 'let'"
+        )
+        var_name = ident_token.text
+
+        # Parse optional type annotation
+        if self.parse_optional_punctuation(":") is not None:
+            # Parse the type (we'll validate it matches the expression type later)
+            expected_type = self.parse_type()
+        else:
+            expected_type = None
+
+        # Parse the equals sign
+        self.parse_punctuation("=", "Expected '=' in let statement")
+
+        # Parse the expression
+        expr_value = self.parse_expression(variables, builder)
+
+        # Validate type if annotation was provided
+        if expected_type is not None and expr_value.type != expected_type:
+            self.raise_typing_error(
+                f"Type mismatch: expected {expected_type}, got {expr_value.type}"
+            )
+
+        # Add the binding to variables (mutates the dict)
+        if var_name in variables:
+            self.raise_error(f"Variable '{var_name}' is already defined")
+        variables[var_name] = expr_value
 
     def parse_expression(
         self,
