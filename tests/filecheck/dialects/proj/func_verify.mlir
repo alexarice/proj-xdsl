@@ -40,7 +40,7 @@
 // Test proj.unitary function verification - return type mismatch
 "proj.unitary"() <{sym_name = "return_mismatch", function_type = () -> ()}> ({
   ^bb0():
-    %0 = "proj.alloc"() <{state = #proj.state<zero>}> : () -> !proj.qubit
+    %0 = "test.op"() : () -> !proj.qubit
     "proj.return"(%0) : (!proj.qubit) -> ()
   // CHECK: Expected arguments to have the same types as the function output types: expected [], got [!proj.qubit]
 }) : () -> ()

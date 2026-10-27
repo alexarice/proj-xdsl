@@ -50,6 +50,7 @@ from xdsl.traits import (
 from xdsl.utils.str_enum import StrEnum
 
 from projxdsl.dialects.angle import AngleType
+from projxdsl.traits import AllowedInFuncKinds
 
 
 class Basis(StrEnum):
@@ -293,12 +294,15 @@ class AllocOp(IRDLOperation):
     """
     Qubit allocation operation.
     Allocates a qubit in the specified state.
+    Only allowed in mixed functions.
     """
 
     name = "proj.alloc"
 
     state = prop_def(StateAttr)
     result = result_def(QubitType)
+
+    traits = traits_def(AllowedInFuncKinds(("proj.mixed",)))
 
     assembly_format = "`` $state attr-dict `:` type($result)"
 
@@ -338,11 +342,14 @@ class PhaseOp(IRDLOperation):
     """
     Phase operation.
     Takes an angle operand.
+    Only allowed in unitary and mixed functions.
     """
 
     name = "proj.phase"
 
     angle = operand_def(AngleType)
+
+    traits = traits_def(AllowedInFuncKinds(("proj.unitary", "proj.mixed")))
 
     assembly_format = "$angle attr-dict"
 
@@ -374,12 +381,15 @@ class MeasureOp(IRDLOperation):
     """
     Measurement operation.
     Takes a projection and returns a boolean (i1).
+    Only allowed in mixed functions.
     """
 
     name = "proj.measure"
 
     projection = operand_def(ProjectionType)
     result = result_def(i1)
+
+    traits = traits_def(AllowedInFuncKinds(("proj.mixed",)))
 
     assembly_format = "$projection attr-dict"
 
@@ -392,6 +402,7 @@ class IfOp(IRDLOperation):
     """
     Conditional operation for projections.
     Executes the true region if the condition projection is true.
+    Only allowed in unitary and mixed functions.
     """
 
     name = "proj.if"
@@ -400,7 +411,10 @@ class IfOp(IRDLOperation):
     true_region = region_def("single_block")
     false_region = region_def()
 
-    traits = traits_def(SingleBlockImplicitTerminator(YieldOp))
+    traits = traits_def(
+        SingleBlockImplicitTerminator(YieldOp),
+        AllowedInFuncKinds(("proj.unitary", "proj.mixed")),
+    )
 
     def __init__(
         self,

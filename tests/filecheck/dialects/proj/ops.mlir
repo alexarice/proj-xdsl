@@ -151,3 +151,75 @@ proj.unitary @unitary_fn(%q: !proj.qubit) {
 proj.mixed @mixed_fn(%q: !proj.qubit) -> !proj.qubit {
   proj.return %q : !proj.qubit
 }
+
+// Test proj.phase in unitary function
+// CHECK: proj.unitary @phase_unitary() {
+// CHECK-NEXT:   %[[ANGLE:.*]] = angle.zero
+// CHECK-NEXT:   proj.phase %[[ANGLE]]
+// CHECK-NEXT:   proj.return
+// CHECK-NEXT: }
+proj.unitary @phase_unitary() {
+  %angle0 = angle.zero
+  proj.phase %angle0
+  proj.return
+}
+
+// Test proj.phase in mixed function
+// CHECK: proj.mixed @phase_mixed() {
+// CHECK-NEXT:   %[[ANGLE:.*]] = angle.zero
+// CHECK-NEXT:   proj.phase %[[ANGLE]]
+// CHECK-NEXT:   proj.return
+// CHECK-NEXT: }
+proj.mixed @phase_mixed() {
+  %angle1 = angle.zero
+  proj.phase %angle1
+  proj.return
+}
+
+// Test proj.if in unitary function
+// CHECK: proj.unitary @if_unitary(%arg: !proj.projection) {
+// CHECK-NEXT:   proj.if %arg {
+// CHECK-NEXT:     proj.yield
+// CHECK-NEXT:   }
+// CHECK-NEXT:   proj.return
+// CHECK-NEXT: }
+proj.unitary @if_unitary(%arg: !proj.projection) {
+  proj.if %arg {
+    proj.yield
+  }
+  proj.return
+}
+
+// Test proj.if in mixed function
+// CHECK: proj.mixed @if_mixed(%arg: !proj.projection) {
+// CHECK-NEXT:   proj.if %arg {
+// CHECK-NEXT:     proj.yield
+// CHECK-NEXT:   }
+// CHECK-NEXT:   proj.return
+// CHECK-NEXT: }
+proj.mixed @if_mixed(%arg: !proj.projection) {
+  proj.if %arg {
+    proj.yield
+  }
+  proj.return
+}
+
+// Test proj.alloc in mixed function
+// CHECK: proj.mixed @alloc_mixed() {
+// CHECK-NEXT:   %[[Q:.*]] = proj.alloc<zero> : !proj.qubit
+// CHECK-NEXT:   proj.return
+// CHECK-NEXT: }
+proj.mixed @alloc_mixed() {
+  %q = proj.alloc <zero> : !proj.qubit
+  proj.return
+}
+
+// Test proj.measure in mixed function
+// CHECK: proj.mixed @measure_mixed(%arg: !proj.projection) -> i1 {
+// CHECK-NEXT:   %[[M:.*]] = proj.measure %arg
+// CHECK-NEXT:   proj.return %[[M]] : i1
+// CHECK-NEXT: }
+proj.mixed @measure_mixed(%arg: !proj.projection) -> i1 {
+  %m = proj.measure %arg
+  proj.return %m : i1
+}
