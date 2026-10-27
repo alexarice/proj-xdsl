@@ -2,18 +2,20 @@
 
 import pytest
 from xdsl.dialects.arith import AndIOp, ConstantOp, OrIOp, XOrIOp
-from xdsl.dialects.builtin import IntegerAttr, i1
-from xdsl.ir import SSAValue
+from xdsl.dialects.builtin import IntegerAttr, NoneAttr, i1
+from xdsl.ir import Operation, SSAValue
 from xdsl.utils.exceptions import ParseError
 
-from projxdsl.dialects.angle import AddOp, AngleType, ScalarMultOp
+from projxdsl.dialects.angle import AddOp, AngleType, PiOp, ScalarMultOp, ZeroOp
 from projxdsl.dialects.proj import (
     AndOp,
+    BasisAttr,
     EqOp,
     FromBoolOp,
     NotOp,
     OrOp,
     ProjectionType,
+    QubitType,
     XorOp,
 )
 from projxdsl.frontend.parser import ProjParser, TypeCheckError
@@ -26,10 +28,6 @@ def make_bool_var(value: int = 1) -> SSAValue:
 
 def make_qubit_var() -> SSAValue:
     """Create a qubit SSA value for testing."""
-    from xdsl.dialects.builtin import NoneAttr
-    from xdsl.ir import Operation
-
-    from projxdsl.dialects.proj import QubitType
 
     class MockQubitOp(Operation):
         name = "test.qubit"
@@ -42,9 +40,6 @@ def make_qubit_var() -> SSAValue:
 
 def make_angle_var() -> SSAValue:
     """Create an angle SSA value for testing."""
-    from xdsl.ir import Operation
-
-    from projxdsl.dialects.angle import AngleType
 
     class MockAngleOp(Operation):
         name = "test.angle"
@@ -321,9 +316,6 @@ class TestEqOperator:
 
     def test_eq_basis_compatible(self):
         """Test that qubit<Z> can use Z basis states."""
-        from xdsl.ir import Operation
-
-        from projxdsl.dialects.proj import BasisAttr, QubitType
 
         class MockAllocZOp(Operation):
             name = "test.alloc_z"
@@ -341,9 +333,6 @@ class TestEqOperator:
 
     def test_eq_basis_incompatible(self):
         """Test that qubit<Z> cannot use X or Y basis states."""
-        from xdsl.ir import Operation
-
-        from projxdsl.dialects.proj import BasisAttr, QubitType
 
         class MockAllocZOp(Operation):
             name = "test.alloc_z"
@@ -373,9 +362,6 @@ class TestEqOperator:
 
     def test_eq_x_basis_compatible(self):
         """Test that qubit<X> can use X basis states."""
-        from xdsl.ir import Operation
-
-        from projxdsl.dialects.proj import BasisAttr, QubitType
 
         class MockAllocXOp(Operation):
             name = "test.alloc_x"
@@ -393,9 +379,6 @@ class TestEqOperator:
 
     def test_eq_x_basis_incompatible(self):
         """Test that qubit<X> cannot use Y or Z basis states."""
-        from xdsl.ir import Operation
-
-        from projxdsl.dialects.proj import BasisAttr, QubitType
 
         class MockAllocXOp(Operation):
             name = "test.alloc_x"
@@ -417,9 +400,6 @@ class TestEqOperator:
 
     def test_eq_y_basis_compatible(self):
         """Test that qubit<Y> can use Y basis states."""
-        from xdsl.ir import Operation
-
-        from projxdsl.dialects.proj import BasisAttr, QubitType
 
         class MockAllocYOp(Operation):
             name = "test.alloc_y"
@@ -437,9 +417,6 @@ class TestEqOperator:
 
     def test_eq_y_basis_incompatible(self):
         """Test that qubit<Y> cannot use X or Z basis states."""
-        from xdsl.ir import Operation
-
-        from projxdsl.dialects.proj import BasisAttr, QubitType
 
         class MockAllocYOp(Operation):
             name = "test.alloc_y"
@@ -587,7 +564,6 @@ class TestAngleExpressions:
 
     def test_angle_add_type_error(self):
         """Test that add with non-angle raises error."""
-        from projxdsl.frontend.parser import TypeCheckError
 
         p = make_bool_var()
         a = make_angle_var()
@@ -596,7 +572,6 @@ class TestAngleExpressions:
 
     def test_angle_scalar_mult_type_error(self):
         """Test that scalar_mult with non-angle raises error."""
-        from projxdsl.frontend.parser import TypeCheckError
 
         p = make_bool_var()
         with pytest.raises(TypeCheckError, match="Expected angle"):
@@ -608,7 +583,6 @@ class TestAngleConstants:
 
     def test_pi_constant(self):
         """Test parsing pi constant."""
-        from projxdsl.dialects.angle import PiOp
 
         result = parse_expression("pi", {})
         assert isinstance(result.owner, PiOp)
@@ -616,7 +590,6 @@ class TestAngleConstants:
 
     def test_zero_constant(self):
         """Test parsing 0 constant."""
-        from projxdsl.dialects.angle import ZeroOp
 
         result = parse_expression("0", {})
         assert isinstance(result.owner, ZeroOp)
@@ -624,7 +597,6 @@ class TestAngleConstants:
 
     def test_angle_constant_in_expression(self):
         """Test using angle constants in expressions."""
-        from projxdsl.dialects.angle import AddOp, PiOp, ZeroOp
 
         # pi + 0
         result = parse_expression("pi + 0", {})
@@ -634,7 +606,6 @@ class TestAngleConstants:
 
     def test_invalid_integer_angle(self):
         """Test that non-zero integers are rejected."""
-        from xdsl.utils.exceptions import ParseError
 
         with pytest.raises(ParseError, match="Only 0 is a valid angle constant"):
             parse_expression("1", {})

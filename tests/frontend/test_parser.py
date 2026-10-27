@@ -1,19 +1,24 @@
 """Tests for the proj-xdsl surface syntax parser."""
 
 import pytest
-from xdsl.dialects.builtin import NoneAttr, i1
+from xdsl.dialects.arith import ConstantOp
+from xdsl.dialects.builtin import IntegerAttr, NoneAttr, i1
+from xdsl.ir import Operation
 from xdsl.utils.exceptions import ParseError
+from xdsl.utils.lexer import Input
 
-from projxdsl.dialects.angle import AngleType
+from projxdsl.dialects.angle import AngleType, ZeroOp
 from projxdsl.dialects.proj import (
     Basis,
     BasisAttr,
+    PhaseOp,
     ProjectionType,
     QubitType,
     State,
     StateAttr,
 )
-from projxdsl.frontend.parser import ProjParser
+from projxdsl.frontend.lexer import ProjLexer, ProjTokenKind
+from projxdsl.frontend.parser import ProjParser, TypeCheckError
 
 
 def parse_type(code: str):
@@ -266,9 +271,6 @@ class TestFloatParsing:
 
     def test_simple_float(self):
         """Test parsing a simple float literal."""
-        from xdsl.utils.lexer import Input
-
-        from projxdsl.frontend.lexer import ProjLexer, ProjTokenKind
 
         input = Input("3.14", "<test>")
         lexer = ProjLexer(input)
@@ -279,9 +281,6 @@ class TestFloatParsing:
 
     def test_float_with_exponent(self):
         """Test parsing a float with exponent."""
-        from xdsl.utils.lexer import Input
-
-        from projxdsl.frontend.lexer import ProjLexer, ProjTokenKind
 
         input = Input("2.5e-3", "<test>")
         lexer = ProjLexer(input)
@@ -292,7 +291,6 @@ class TestFloatParsing:
 
     def test_float_in_parser(self):
         """Test parsing floats in the parser."""
-        from projxdsl.frontend.parser import ProjParser
 
         parser = ProjParser("3.14")
         result = parser.parse_float()
@@ -300,7 +298,6 @@ class TestFloatParsing:
 
     def test_optional_float_present(self):
         """Test parse_optional_float when float is present."""
-        from projxdsl.frontend.parser import ProjParser
 
         parser = ProjParser("2.0")
         result = parser.parse_optional_float()
@@ -308,7 +305,6 @@ class TestFloatParsing:
 
     def test_optional_float_absent(self):
         """Test parse_optional_float when float is not present."""
-        from projxdsl.frontend.parser import ProjParser
 
         parser = ProjParser("x")
         result = parser.parse_optional_float()
@@ -320,9 +316,6 @@ class TestIntegerParsing:
 
     def test_simple_integer(self):
         """Test parsing a simple integer literal."""
-        from xdsl.utils.lexer import Input
-
-        from projxdsl.frontend.lexer import ProjLexer, ProjTokenKind
 
         input = Input("42", "<test>")
         lexer = ProjLexer(input)
@@ -333,9 +326,6 @@ class TestIntegerParsing:
 
     def test_single_digit_integer(self):
         """Test parsing a single digit integer."""
-        from xdsl.utils.lexer import Input
-
-        from projxdsl.frontend.lexer import ProjLexer, ProjTokenKind
 
         input = Input("0", "<test>")
         lexer = ProjLexer(input)
@@ -346,9 +336,6 @@ class TestIntegerParsing:
 
     def test_multi_digit_integer(self):
         """Test parsing a multi-digit integer."""
-        from xdsl.utils.lexer import Input
-
-        from projxdsl.frontend.lexer import ProjLexer, ProjTokenKind
 
         input = Input("123", "<test>")
         lexer = ProjLexer(input)
@@ -359,8 +346,6 @@ class TestIntegerParsing:
 
     def test_integer_in_parser(self):
         """Test parsing integers in the parser (only 0 is valid for angles)."""
-        from projxdsl.dialects.angle import ZeroOp
-        from projxdsl.frontend.parser import ProjParser
 
         parser = ProjParser("0")
         result = parser.parse_expression({})
@@ -369,9 +354,6 @@ class TestIntegerParsing:
 
     def test_invalid_integer_for_angle(self):
         """Test that non-zero integers are rejected for angle context."""
-        from xdsl.utils.exceptions import ParseError
-
-        from projxdsl.frontend.parser import ProjParser
 
         parser = ProjParser("5")
         with pytest.raises(ParseError, match="Only 0 is a valid angle constant"):
@@ -383,11 +365,6 @@ class TestPhaseStatement:
 
     def test_phase_statement(self):
         """Test parsing ph(theta) statement."""
-        from xdsl.ir import Operation
-
-        from projxdsl.dialects.angle import AngleType
-        from projxdsl.dialects.proj import PhaseOp
-        from projxdsl.frontend.parser import ProjParser
 
         class MockAngleOp(Operation):
             name = "test.angle"
@@ -403,8 +380,6 @@ class TestPhaseStatement:
 
     def test_phase_statement_with_pi(self):
         """Test parsing ph(pi) statement."""
-        from projxdsl.dialects.proj import PhaseOp
-        from projxdsl.frontend.parser import ProjParser
 
         parser = ProjParser("ph(pi)")
         result = parser.parse_statement({})
@@ -412,8 +387,6 @@ class TestPhaseStatement:
 
     def test_phase_statement_with_zero(self):
         """Test parsing ph(0) statement."""
-        from projxdsl.dialects.proj import PhaseOp
-        from projxdsl.frontend.parser import ProjParser
 
         parser = ProjParser("ph(0)")
         result = parser.parse_statement({})
@@ -421,10 +394,6 @@ class TestPhaseStatement:
 
     def test_phase_statement_type_error(self):
         """Test that ph with non-angle raises error."""
-        from xdsl.dialects.arith import ConstantOp
-        from xdsl.dialects.builtin import IntegerAttr
-
-        from projxdsl.frontend.parser import ProjParser, TypeCheckError
 
         # Create a boolean variable
         p = ConstantOp(IntegerAttr(1, 1)).result
