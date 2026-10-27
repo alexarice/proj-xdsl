@@ -147,6 +147,16 @@ class TestPunctuation:
             (ProjTokenKind.EOF, ""),
         ]
 
+    def test_arrow(self):
+        tokens = lex_all("->")
+        assert tokens == [(ProjTokenKind.ARROW, "->"), (ProjTokenKind.EOF, "")]
+        assert ProjTokenKind.ARROW.is_punctuation()
+
+    def test_comma(self):
+        tokens = lex_all(",")
+        assert tokens == [(ProjTokenKind.COMMA, ","), (ProjTokenKind.EOF, "")]
+        assert ProjTokenKind.COMMA.is_punctuation()
+
 
 class TestQubitWithBasis:
     """Test lexing of qubit types with basis annotations."""

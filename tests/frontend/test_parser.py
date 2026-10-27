@@ -20,11 +20,15 @@ from projxdsl.dialects.proj import (
     FromBoolOp,
     IfOp,
     MeasureOp,
+    MixedOp,
     PhaseOp,
     ProjectionType,
+    PureOp,
     QubitType,
+    ReturnOp,
     State,
     StateAttr,
+    UnitaryOp,
     YieldOp,
 )
 from projxdsl.frontend.func_kind import FuncKind
@@ -1022,3 +1026,196 @@ class TestFuncKindValidation:
         builder = Builder(InsertPoint.at_end(block))
         with pytest.raises(ParseError, match="Measure operation not allowed in pure"):
             parser.parse_expression({"p": proj_var}, builder, func_kind=FuncKind.PURE)
+
+
+class TestFuncParsing:
+    """Test parsing of function definitions."""
+
+    def test_parse_pure_function_void(self):
+        """Test parsing a pure function with no return type."""
+        parser = ProjParser("pure fn foo(b: bool) { }")
+        func_op = parser.parse_func()
+        parser.expect_eof()
+
+        assert isinstance(func_op, PureOp)
+        assert func_op.sym_name.data == "foo"
+        assert len(func_op.function_type.inputs.data) == 1
+        assert func_op.function_type.inputs.data[0] == i1
+        assert len(func_op.function_type.outputs.data) == 0
+        assert len(func_op.body.blocks) == 1
+
+    def test_parse_unitary_function_with_return(self):
+        """Test parsing a unitary function with return type."""
+        parser = ProjParser("unitary fn bar(p: proj) -> proj { p }")
+        func_op = parser.parse_func()
+        parser.expect_eof()
+
+        assert isinstance(func_op, UnitaryOp)
+        assert func_op.sym_name.data == "bar"
+        assert len(func_op.function_type.inputs.data) == 1
+        assert func_op.function_type.inputs.data[0] == ProjectionType()
+        assert len(func_op.function_type.outputs.data) == 1
+        assert func_op.function_type.outputs.data[0] == ProjectionType()
+
+        # Check body has ReturnOp with the parameter
+        entry_block = func_op.body.blocks[0]
+        ops = list(entry_block.ops)
+        assert len(ops) == 1
+        assert isinstance(ops[0], ReturnOp)
+        assert ops[0].arguments[0] is entry_block.args[0]
+
+    def test_parse_mixed_function_with_body(self):
+        """Test parsing a mixed function with statements."""
+        parser = ProjParser("mixed fn baz(q: qubit) { ph(pi); q == |0> }")
+        func_op = parser.parse_func()
+        parser.expect_eof()
+
+        assert isinstance(func_op, MixedOp)
+        assert func_op.sym_name.data == "baz"
+        assert len(func_op.function_type.inputs.data) == 1
+        assert func_op.function_type.inputs.data[0] == QubitType()
+        assert len(func_op.function_type.outputs.data) == 0
+
+        # Check body has PiOp, PhaseOp, EqOp, ReturnOp
+        entry_block = func_op.body.blocks[0]
+        ops = list(entry_block.ops)
+        assert len(ops) == 4  # PiOp, PhaseOp, EqOp, ReturnOp
+        assert isinstance(ops[0], PiOp)
+        assert isinstance(ops[1], PhaseOp)
+        assert isinstance(ops[2], EqOp)
+        assert isinstance(ops[3], ReturnOp)
+
+    def test_parse_function_multiple_params(self):
+        """Test parsing a function with multiple parameters."""
+        parser = ProjParser("pure fn multi(a: bool, b: bool) -> bool { a && b }")
+        func_op = parser.parse_func()
+        parser.expect_eof()
+
+        assert isinstance(func_op, PureOp)
+        assert func_op.sym_name.data == "multi"
+        assert len(func_op.function_type.inputs.data) == 2
+        assert func_op.function_type.inputs.data[0] == i1
+        assert func_op.function_type.inputs.data[1] == i1
+        assert len(func_op.function_type.outputs.data) == 1
+
+    def test_parse_function_qubit_with_basis(self):
+        """Test parsing a function with qubit basis annotation."""
+        parser = ProjParser("unitary fn hadamard(q: qubit<Z>) -> qubit<Z> { q }")
+        func_op = parser.parse_func()
+        parser.expect_eof()
+
+        assert isinstance(func_op, UnitaryOp)
+        assert func_op.sym_name.data == "hadamard"
+        assert len(func_op.function_type.inputs.data) == 1
+        input_type = func_op.function_type.inputs.data[0]
+        assert isinstance(input_type, QubitType)
+        assert isinstance(input_type.borrow_type, BasisAttr)
+        assert input_type.borrow_type.data == Basis.Z
+
+        # Check return type also has basis
+        assert len(func_op.function_type.outputs.data) == 1
+        return_type = func_op.function_type.outputs.data[0]
+        assert isinstance(return_type, QubitType)
+        assert isinstance(return_type.borrow_type, BasisAttr)
+        assert return_type.borrow_type.data == Basis.Z
+
+    def test_parse_function_missing_kind_error(self):
+        """Test that missing function kind raises error."""
+        parser = ProjParser("fn foo() { }")
+        with pytest.raises(ParseError, match="Expected function kind"):
+            parser.parse_func()
+
+    def test_parse_function_missing_fn_error(self):
+        """Test that missing 'fn' keyword raises error."""
+        parser = ProjParser("pure foo() { }")
+        with pytest.raises(ParseError, match="Expected 'fn' keyword"):
+            parser.parse_func()
+
+    def test_parse_function_missing_name_error(self):
+        """Test that missing function name raises error."""
+        parser = ProjParser("pure fn (b: bool) { }")
+        with pytest.raises(ParseError, match="Expected function name"):
+            parser.parse_func()
+
+    def test_parse_function_missing_param_type_error(self):
+        """Test that missing parameter type raises error."""
+        parser = ProjParser("pure fn foo(b) { }")
+        with pytest.raises(ParseError, match="Expected ':'"):
+            parser.parse_func()
+
+    def test_parse_function_missing_param_name_error(self):
+        """Test that missing parameter name raises error."""
+        parser = ProjParser("pure fn foo(: bool) { }")
+        with pytest.raises(ParseError, match="Expected parameter name"):
+            parser.parse_func()
+
+    def test_parse_function_missing_comma_between_params(self):
+        """Test that missing comma between parameters raises error."""
+        parser = ProjParser("pure fn foo(a: bool b: bool) { }")
+        with pytest.raises(ParseError, match="in parameter list"):
+            parser.parse_func()
+
+    def test_parse_function_missing_return_type_error(self):
+        """Test that missing return type after '->' raises error."""
+        parser = ProjParser("pure fn foo() -> { }")
+        with pytest.raises(ParseError, match="Expected type"):
+            parser.parse_func()
+
+    def test_parse_function_return_type_mismatch(self):
+        """Test that return type mismatch raises error."""
+        parser = ProjParser("pure fn foo() -> bool { 0 }")
+        with pytest.raises(TypeCheckError, match="Expected return type"):
+            parser.parse_func()
+
+    def test_parse_function_missing_final_expr(self):
+        """Test that missing final expression raises error."""
+        parser = ProjParser("pure fn foo() -> bool { let x = true }")
+        with pytest.raises(ParseError, match="Expected expression"):
+            parser.parse_func()
+
+    def test_parse_function_error_in_body(self):
+        """Test that syntax error in function body is caught."""
+        parser = ProjParser("mixed fn foo() { ph(pi)")
+        with pytest.raises(ParseError, match="in function body"):
+            parser.parse_func()
+
+    def test_parse_function_empty_body_void(self):
+        """Test parsing a function with empty body and no return."""
+        parser = ProjParser("pure fn empty() { }")
+        func_op = parser.parse_func()
+        parser.expect_eof()
+
+        assert isinstance(func_op, PureOp)
+        entry_block = func_op.body.blocks[0]
+        ops = list(entry_block.ops)
+        assert len(ops) == 1
+        assert isinstance(ops[0], ReturnOp)
+        assert len(ops[0].arguments) == 0
+
+    def test_parse_function_with_let_and_return(self):
+        """Test parsing a function with let statement and return."""
+        parser = ProjParser(
+            "pure fn with_let(q: qubit) -> proj { let p = q == |0>; p }"
+        )
+        func_op = parser.parse_func()
+        parser.expect_eof()
+
+        assert isinstance(func_op, PureOp)
+        entry_block = func_op.body.blocks[0]
+        ops = list(entry_block.ops)
+        # EqOp, ReturnOp (let doesn't insert ops, just adds to variables)
+        assert len(ops) == 2
+        assert isinstance(ops[0], EqOp)
+        assert isinstance(ops[1], ReturnOp)
+
+    def test_parse_function_all_kinds(self):
+        """Test parsing all three function kinds."""
+        for kind_str, expected_class in [
+            ("pure", PureOp),
+            ("unitary", UnitaryOp),
+            ("mixed", MixedOp),
+        ]:
+            parser = ProjParser(f"{kind_str} fn test() {{ }}")
+            func_op = parser.parse_func()
+            parser.expect_eof()
+            assert isinstance(func_op, expected_class)

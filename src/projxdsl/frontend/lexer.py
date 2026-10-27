@@ -31,6 +31,8 @@ class ProjTokenKind(Enum):
     RBRACE = auto()
     SEMICOLON = auto()
     COLON = auto()
+    COMMA = auto()
+    ARROW = auto()
 
     # Operators
     AND = auto()
@@ -97,6 +99,17 @@ class ProjTokenKind(Enum):
         return self in (
             ProjTokenKind.LESS,
             ProjTokenKind.GREATER,
+            ProjTokenKind.EQUALS,
+            ProjTokenKind.BANG,
+            ProjTokenKind.LPAREN,
+            ProjTokenKind.RPAREN,
+            ProjTokenKind.STAR,
+            ProjTokenKind.LBRACE,
+            ProjTokenKind.RBRACE,
+            ProjTokenKind.SEMICOLON,
+            ProjTokenKind.COLON,
+            ProjTokenKind.COMMA,
+            ProjTokenKind.ARROW,
         )
 
     @staticmethod
@@ -120,6 +133,8 @@ KIND_BY_PUNCTUATION_SPELLING = {
     "}": ProjTokenKind.RBRACE,
     ";": ProjTokenKind.SEMICOLON,
     ":": ProjTokenKind.COLON,
+    ",": ProjTokenKind.COMMA,
+    "->": ProjTokenKind.ARROW,
 }
 
 OPERATOR_SPELLING = {

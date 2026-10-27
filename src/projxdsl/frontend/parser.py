@@ -8,7 +8,7 @@ from typing import NoReturn
 from xdsl.builder import Builder
 from xdsl.dialects.arith import AndIOp, ConstantOp, OrIOp, XOrIOp
 from xdsl.dialects.builtin import IntegerAttr, NoneAttr, i1
-from xdsl.ir import Region, SSAValue, TypeAttribute
+from xdsl.ir import BlockArgument, Region, SSAValue, TypeAttribute
 from xdsl.parser.generic_parser import GenericParser, ParserState
 from xdsl.utils.exceptions import ParseError
 from xdsl.utils.lexer import Input
@@ -23,13 +23,17 @@ from projxdsl.dialects.proj import (
     FromBoolOp,
     IfOp,
     MeasureOp,
+    MixedOp,
     NotOp,
     OrOp,
     PhaseOp,
     ProjectionType,
+    PureOp,
     QubitType,
+    ReturnOp,
     State,
     StateAttr,
+    UnitaryOp,
     XorOp,
     YieldOp,
 )
@@ -213,7 +217,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         variables: dict[str, SSAValue],
         builder: Builder,
         func_kind: FuncKind = FuncKind.MIXED,
-    ) -> None:
+    ) -> SSAValue | None:
         """
         Parse a statement and insert it into the block via builder.
 
@@ -225,6 +229,9 @@ class ProjParser(GenericParser[ProjTokenKind]):
                     | expr
         block ::= "{" statement* "}"
         angle-expr ::= expression that evaluates to an angle type
+
+        Returns:
+            SSAValue if the statement is an expression, None otherwise.
         """
         if self._parse_optional_token(ProjTokenKind.PHASE) is not None:
             if not func_kind.allows_operation("phase"):
@@ -243,17 +250,20 @@ class ProjParser(GenericParser[ProjTokenKind]):
                     )
 
             builder.insert(PhaseOp(angle))
+            return None
         elif self._parse_optional_token(ProjTokenKind.IF) is not None:
             if not func_kind.allows_operation("if"):
                 self.raise_error(
                     f"If operation not allowed in {func_kind.value} functions"
                 )
             self._parse_if_statement(variables, builder, func_kind=func_kind)
+            return None
         elif self._parse_optional_token(ProjTokenKind.LET) is not None:
             self._parse_let_statement(variables, builder, func_kind=func_kind)
+            return None
         else:
-            # Parse as an expression statement (result is discarded)
-            self.parse_expression(
+            # Parse as an expression statement (result is returned)
+            return self.parse_expression(
                 variables,
                 builder,
                 func_kind=func_kind,
@@ -297,6 +307,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 context_msg=" in statement block",
             )
             inner_builder.insert(YieldOp())
+            return None
 
         true_region = Builder.region(parse_statements)
 
@@ -638,4 +649,112 @@ class ProjParser(GenericParser[ProjTokenKind]):
         self.raise_error(
             initial_error
             or f"Unexpected token in expression: {self._current_token.text}"
+        )
+
+    def parse_func(self) -> PureOp | UnitaryOp | MixedOp:
+        """
+        Parse a function definition.
+
+        func-def ::= <kind> "fn" ident "(" params ")" ("->" type)? "{" body "}"
+        kind ::= "pure" | "unitary" | "mixed"
+        params ::= param ("," param)*
+        param ::= ident ":" type
+        body ::= statement* expr?
+
+        Returns:
+            The parsed function operation (PureOp, UnitaryOp, or MixedOp)
+        """
+        # Parse function kind (required)
+        if self._parse_optional_token(ProjTokenKind.PURE) is not None:
+            func_kind = FuncKind.PURE
+            func_op_class = PureOp
+        elif self._parse_optional_token(ProjTokenKind.UNITARY) is not None:
+            func_kind = FuncKind.UNITARY
+            func_op_class = UnitaryOp
+        elif self._parse_optional_token(ProjTokenKind.MIXED) is not None:
+            func_kind = FuncKind.MIXED
+            func_op_class = MixedOp
+        else:
+            self.raise_error("Expected function kind keyword (pure, unitary, or mixed)")
+
+        # Parse "fn" keyword
+        self._parse_token(ProjTokenKind.FN, "Expected 'fn' keyword after function kind")
+
+        # Parse function name
+        name_token = self._parse_token(
+            ProjTokenKind.IDENTIFIER, "Expected function name"
+        )
+        func_name = name_token.text
+
+        # Parse parameter list
+        def parse_param() -> tuple[str, TypeAttribute]:
+            # Parse parameter name
+            param_name_token = self._parse_token(
+                ProjTokenKind.IDENTIFIER, "Expected parameter name"
+            )
+            param_name = param_name_token.text
+
+            # Parse colon
+            self.parse_punctuation(":", " after parameter name")
+
+            # Parse type
+            param_type = self.parse_type()
+            return (param_name, param_type)
+
+        param_list = self.parse_list(
+            delimiter=self.Delimiter.PAREN,
+            parse=parse_param,
+            separator=",",
+            context_msg=" in parameter list",
+        )
+        param_names = [name for name, _ in param_list]
+        input_types = [type for _, type in param_list]
+
+        # Parse optional return type
+        return_types: list[TypeAttribute] = []
+        if self.parse_optional_punctuation("->") is not None:
+            return_type = self.parse_type()
+            return_types.append(return_type)
+
+        # Parse function body
+        @Builder.region(input_types)
+        def parse_body(inner_builder: Builder, args: tuple[BlockArgument, ...]):
+            # Create variables dict with parameters
+            variables: dict[str, SSAValue] = {}
+            for param_name, block_arg in zip(param_names, args, strict=True):
+                variables[param_name] = block_arg
+
+            # Parse statements using parse_list
+            statements = self.parse_list(
+                delimiter=self.Delimiter.BRACES,
+                parse=lambda: self.parse_statement(variables, inner_builder, func_kind),
+                separator=";",
+                context_msg=" in function body",
+            )
+
+            # Handle return value
+            if return_types:
+                # Function has a return type, expect final expression
+                if not statements or statements[-1] is None:
+                    self.raise_error(
+                        f"Expected expression of type {return_types[0]}"
+                        " at end of function body"
+                    )
+                final_expr = statements[-1]
+                if final_expr.type != return_types[0]:
+                    self.raise_typing_error(
+                        f"Expected return type {return_types[0]}, got {final_expr.type}"
+                    )
+                inner_builder.insert(ReturnOp(final_expr))
+            else:
+                # Void function, insert ReturnOp with no arguments
+                inner_builder.insert(ReturnOp())
+
+        body_region = parse_body
+
+        # Create the function operation
+        return func_op_class(
+            sym_name=func_name,
+            function_type=(input_types, return_types),
+            body=body_region,
         )
