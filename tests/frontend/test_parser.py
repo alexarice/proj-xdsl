@@ -581,3 +581,34 @@ class TestIfStatement:
         parser = ProjParser("if p { ph(pi)")
         with pytest.raises(ParseError, match="'\\}' expected"):
             parser.parse_statement({"p": proj_var})
+
+    def test_nested_if_statement(self):
+        """Test parsing nested if statements."""
+
+        class MockQubitOp(Operation):
+            name = "test.qubit"
+
+            def __init__(self):
+                super().__init__(result_types=[QubitType()])
+
+        class MockProjOp(Operation):  # type: ignore[misc]
+            name = "test.proj"
+
+            def __init__(self, qubit: SSAValue):
+                super().__init__(operands=[qubit], result_types=[ProjectionType()])
+
+        qubit_var = MockQubitOp().results[0]
+        proj_var = MockProjOp(qubit_var).results[0]
+        parser = ProjParser("if p { if q { ph(pi) } }")
+        result = parser.parse_statement({"p": proj_var, "q": proj_var})
+        assert isinstance(result, IfOp)
+        assert result.condition is proj_var
+        true_block = result.true_region.blocks[0]
+        ops = list(true_block.ops)
+        assert len(ops) == 2  # Inner IfOp + YieldOp
+        inner_if = ops[0]
+        assert isinstance(inner_if, IfOp)
+        inner_block = inner_if.true_region.blocks[0]
+        inner_ops = list(inner_block.ops)
+        assert len(inner_ops) == 2  # PhaseOp + YieldOp
+        assert isinstance(inner_ops[0], PhaseOp)
