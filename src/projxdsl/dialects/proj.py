@@ -3,9 +3,21 @@ from __future__ import annotations
 from collections.abc import Sequence
 from enum import auto
 
-from xdsl.dialects.builtin import NoneAttr, i1
-from xdsl.dialects.utils import EnumAttribute
+from xdsl.dialects.builtin import (
+    ArrayAttr,
+    FunctionType,
+    NoneAttr,
+    StringAttr,
+    SymbolNameConstraint,
+    i1,
+)
+from xdsl.dialects.utils import (
+    EnumAttribute,
+    parse_func_op_like,
+    print_func_op_like,
+)
 from xdsl.ir import (
+    Attribute,
     Block,
     Dialect,
     Operation,
@@ -13,6 +25,7 @@ from xdsl.ir import (
     Region,
     SSAValue,
     TypeAttribute,
+    VerifyException,
 )
 from xdsl.irdl import (
     IRDLOperation,
@@ -28,7 +41,12 @@ from xdsl.irdl import (
 )
 from xdsl.parser import AttrParser, Parser
 from xdsl.printer import Printer
-from xdsl.traits import IsTerminator, SingleBlockImplicitTerminator
+from xdsl.traits import (
+    HasParent,
+    IsolatedFromAbove,
+    IsTerminator,
+    SingleBlockImplicitTerminator,
+)
 from xdsl.utils.str_enum import StrEnum
 
 from projxdsl.dialects.angle import AngleType
@@ -442,6 +460,147 @@ class IfOp(IRDLOperation):
             printer.print_attr_dict(self.attributes)
 
 
+class FuncOpBase(IRDLOperation):
+    """
+    Base class for function operations.
+    All function kinds share the same structure.
+    """
+
+    body = region_def()
+    sym_name = prop_def(SymbolNameConstraint())
+    function_type = prop_def(FunctionType)
+
+    traits = traits_def(IsolatedFromAbove())
+
+    @classmethod
+    def parse(cls, parser: Parser) -> FuncOpBase:
+        (
+            name,
+            input_types,
+            return_types,
+            region,
+            extra_attrs,
+            _,
+            _,
+        ) = parse_func_op_like(
+            parser,
+            reserved_attr_names=("sym_name", "function_type"),
+        )
+        func = cls(
+            sym_name=name,
+            function_type=(input_types, return_types),
+            body=region,
+        )
+        if extra_attrs is not None:
+            func.attributes.update(extra_attrs.data)
+        return func
+
+    def print(self, printer: Printer) -> None:
+        print_func_op_like(
+            printer,
+            self.sym_name,
+            self.function_type,
+            self.body,
+            self.attributes,
+            reserved_attr_names=(
+                "sym_name",
+                "function_type",
+            ),
+        )
+
+    def verify_(self) -> None:
+        entry_block = self.body.blocks.first
+        assert entry_block is not None
+        block_arg_types = entry_block.arg_types
+        if self.function_type.inputs.data != tuple(block_arg_types):
+            raise VerifyException(
+                "Expected entry block argument types to match function input types"
+            )
+
+    def __init__(
+        self,
+        sym_name: str | StringAttr,
+        function_type: FunctionType | tuple[Sequence[Attribute], Sequence[Attribute]],
+        body: Region | None = None,
+    ):
+        if isinstance(sym_name, str):
+            sym_name = StringAttr(sym_name)
+        if isinstance(function_type, tuple):
+            function_type = FunctionType.from_lists(function_type[0], function_type[1])
+        if body is None:
+            body = Region()
+
+        super().__init__(
+            properties={
+                "function_type": function_type,
+                "sym_name": sym_name,
+            },
+            regions=[body],
+        )
+
+
+@irdl_op_definition
+class PureOp(FuncOpBase):
+    """
+    Pure classical function operation.
+    Classical computation only - no quantum operations allowed.
+    """
+
+    name = "proj.pure"
+
+
+@irdl_op_definition
+class UnitaryOp(FuncOpBase):
+    """
+    Unitary function operation.
+    Quantum operations without measurement or allocation.
+    """
+
+    name = "proj.unitary"
+
+
+@irdl_op_definition
+class MixedOp(FuncOpBase):
+    """
+    Mixed quantum channel function operation.
+    Full quantum operations including measurement and allocation.
+    """
+
+    name = "proj.mixed"
+
+
+@irdl_op_definition
+class ReturnOp(IRDLOperation):
+    """
+    Return operation for function operations.
+    Terminates a proj.pure, proj.unitary, or proj.mixed function.
+    """
+
+    name = "proj.return"
+
+    arguments = var_operand_def()
+
+    assembly_format = "attr-dict ($arguments^ `:` type($arguments))?"
+
+    traits = traits_def(HasParent(FuncOpBase), IsTerminator())
+
+    def verify_(self) -> None:
+        func_op = self.parent_op()
+        assert isinstance(func_op, FuncOpBase)
+
+        function_return_types = func_op.function_type.outputs.data
+        return_types = self.arguments.types
+        if function_return_types != return_types:
+            raise VerifyException(
+                "Expected arguments to have the same types as the function output "
+                f"types: expected {func_op.function_type.outputs}, "
+                f"got {ArrayAttr(return_types)}"
+            )
+
+    def __init__(self, *operands: SSAValue):
+        super().__init__(operands=[operands])
+
+
 Proj = Dialect(
     "proj",
     [
@@ -456,6 +615,10 @@ Proj = Dialect(
         PhaseOp,
         YieldOp,
         IfOp,
+        ReturnOp,
+        PureOp,
+        UnitaryOp,
+        MixedOp,
     ],
     [
         BasisAttr,

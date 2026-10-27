@@ -115,3 +115,39 @@ func.func @test_measure(%arg0: !proj.projection) -> i1 {
   %m = proj.measure %arg0
   func.return %m : i1
 }
+
+// Test proj.pure function
+// CHECK: proj.pure @pure_fn(%a: i1) {
+// CHECK-NEXT:   proj.return
+// CHECK-NEXT: }
+// CHECK-GENERIC: "proj.pure"() <{{.*}}sym_name = "pure_fn"{{.*}}> ({
+// CHECK-GENERIC-NEXT:   ^bb0(%[[A:.*]]: i1):
+// CHECK-GENERIC-NEXT:     "proj.return"() : () -> ()
+// CHECK-GENERIC-NEXT: }) : () -> ()
+proj.pure @pure_fn(%a: i1) {
+  proj.return
+}
+
+// Test proj.unitary function
+// CHECK: proj.unitary @unitary_fn(%q: !proj.qubit) {
+// CHECK-NEXT:   proj.return
+// CHECK-NEXT: }
+// CHECK-GENERIC: "proj.unitary"() <{{.*}}sym_name = "unitary_fn"{{.*}}> ({
+// CHECK-GENERIC-NEXT:   ^bb0(%[[Q:.*]]: !proj.qubit):
+// CHECK-GENERIC-NEXT:     "proj.return"() : () -> ()
+// CHECK-GENERIC-NEXT: }) : () -> ()
+proj.unitary @unitary_fn(%q: !proj.qubit) {
+  proj.return
+}
+
+// Test proj.mixed function
+// CHECK: proj.mixed @mixed_fn(%q: !proj.qubit) -> !proj.qubit {
+// CHECK-NEXT:   proj.return %q : !proj.qubit
+// CHECK-NEXT: }
+// CHECK-GENERIC: "proj.mixed"() <{{.*}}sym_name = "mixed_fn"{{.*}}> ({
+// CHECK-GENERIC-NEXT:   ^bb0(%[[Q:.*]]: !proj.qubit):
+// CHECK-GENERIC-NEXT:     "proj.return"(%[[Q]]) : (!proj.qubit) -> ()
+// CHECK-GENERIC-NEXT: }) : () -> ()
+proj.mixed @mixed_fn(%q: !proj.qubit) -> !proj.qubit {
+  proj.return %q : !proj.qubit
+}
