@@ -3,7 +3,7 @@
 import pytest
 from xdsl.builder import Builder
 from xdsl.dialects.arith import ConstantOp
-from xdsl.dialects.builtin import IntegerAttr, NoneAttr, i1
+from xdsl.dialects.builtin import IntegerAttr, ModuleOp, NoneAttr, i1
 from xdsl.dialects.test import TestOp as XDSLTestOp
 from xdsl.ir import Block, SSAValue
 from xdsl.rewriter import InsertPoint
@@ -1219,3 +1219,83 @@ class TestFuncParsing:
             func_op = parser.parse_func()
             parser.expect_eof()
             assert isinstance(func_op, expected_class)
+
+
+class TestModuleParsing:
+    """Test parsing of modules containing multiple functions."""
+
+    def test_parse_empty_module(self):
+        """Test parsing an empty module."""
+        parser = ProjParser("")
+        module_op = parser.parse_module()
+        parser.expect_eof()
+
+        assert isinstance(module_op, ModuleOp)
+        assert len(list(module_op.body.ops)) == 0
+
+    def test_parse_module_single_function(self):
+        """Test parsing a module with a single function."""
+        parser = ProjParser("pure fn foo() { }")
+        module_op = parser.parse_module()
+        parser.expect_eof()
+
+        assert isinstance(module_op, ModuleOp)
+        ops = list(module_op.body.ops)
+        assert len(ops) == 1
+        assert isinstance(ops[0], PureOp)
+        assert ops[0].sym_name.data == "foo"
+
+    def test_parse_module_multiple_functions(self):
+        """Test parsing a module with multiple functions."""
+        parser = ProjParser(
+            "pure fn foo() { }\n"
+            "unitary fn bar(p: proj) -> proj { p }\n"
+            "mixed fn baz() { }"
+        )
+        module_op = parser.parse_module()
+        parser.expect_eof()
+
+        assert isinstance(module_op, ModuleOp)
+        ops = list(module_op.body.ops)
+        assert len(ops) == 3
+        assert isinstance(ops[0], PureOp)
+        assert ops[0].sym_name.data == "foo"
+        assert isinstance(ops[1], UnitaryOp)
+        assert ops[1].sym_name.data == "bar"
+        assert isinstance(ops[2], MixedOp)
+        assert ops[2].sym_name.data == "baz"
+
+    def test_parse_module_with_whitespace(self):
+        """Test parsing a module with whitespace between functions."""
+        parser = ProjParser(
+            """
+            pure fn foo() { }
+
+            unitary fn bar() { }
+
+            mixed fn baz() { }
+            """
+        )
+        module_op = parser.parse_module()
+        parser.expect_eof()
+
+        assert isinstance(module_op, ModuleOp)
+        ops = list(module_op.body.ops)
+        assert len(ops) == 3
+
+    def test_parse_module_with_comments(self):
+        """Test parsing a module with comments between functions."""
+        parser = ProjParser(
+            """
+            // First function
+            pure fn foo() { }
+            // Second function
+            unitary fn bar() { }
+            """
+        )
+        module_op = parser.parse_module()
+        parser.expect_eof()
+
+        assert isinstance(module_op, ModuleOp)
+        ops = list(module_op.body.ops)
+        assert len(ops) == 2

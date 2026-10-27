@@ -7,7 +7,7 @@ from typing import NoReturn
 
 from xdsl.builder import Builder
 from xdsl.dialects.arith import AndIOp, ConstantOp, OrIOp, XOrIOp
-from xdsl.dialects.builtin import IntegerAttr, NoneAttr, i1
+from xdsl.dialects.builtin import IntegerAttr, ModuleOp, NoneAttr, i1
 from xdsl.ir import BlockArgument, Region, SSAValue, TypeAttribute
 from xdsl.parser.generic_parser import GenericParser, ParserState
 from xdsl.utils.exceptions import ParseError
@@ -758,3 +758,21 @@ class ProjParser(GenericParser[ProjTokenKind]):
             function_type=(input_types, return_types),
             body=body_region,
         )
+
+    def parse_module(self) -> ModuleOp:
+        """
+        Parse a module containing function definitions.
+
+        module ::= func-def*
+
+        Returns:
+            The parsed module operation containing all function definitions
+        """
+        # Parse all function definitions
+        func_ops: list[PureOp | UnitaryOp | MixedOp] = []
+        while self._current_token.kind != ProjTokenKind.EOF:
+            func_op = self.parse_func()
+            func_ops.append(func_op)
+
+        # Create the module operation with all functions
+        return ModuleOp(func_ops)
