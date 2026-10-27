@@ -12,6 +12,7 @@ from xdsl.utils.lexer import Input
 
 from projxdsl.dialects.angle import AngleType, PiOp, ZeroOp
 from projxdsl.dialects.proj import (
+    AllocOp,
     Basis,
     BasisAttr,
     IfOp,
@@ -671,3 +672,52 @@ class TestLetStatement:
         variables = {"q": qubit_var}
         with pytest.raises(TypeCheckError, match="Type mismatch"):
             parser.parse_statement(variables, builder)
+
+
+class TestAllocExpression:
+    """Test parsing of alloc expressions."""
+
+    def test_alloc_expression_zero(self):
+        """Test parsing alloc |0> expression."""
+
+        parser = ProjParser("alloc |0>")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        result = parser.parse_expression({}, builder)
+        parser.expect_eof()
+
+        ops = list(block.ops)
+        assert len(ops) == 1
+        assert isinstance(ops[0], AllocOp)
+        assert result.type == QubitType()
+
+    def test_alloc_expression_all_states(self):
+        """Test parsing alloc with all state types."""
+
+        for state_str in ["|0>", "|1>", "|+>", "|->", "|L>", "|R>"]:
+            parser = ProjParser(f"alloc {state_str}")
+            block = Block()
+            builder = Builder(InsertPoint.at_end(block))
+            result = parser.parse_expression({}, builder)
+            parser.expect_eof()
+
+            ops = list(block.ops)
+            assert len(ops) == 1
+            assert isinstance(ops[0], AllocOp)
+            assert result.type == QubitType()
+
+    def test_alloc_in_let_statement(self):
+        """Test parsing alloc in let statement."""
+
+        parser = ProjParser("let q = alloc |0>")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        variables: dict[str, SSAValue] = {}
+        parser.parse_statement(variables, builder)
+        parser.expect_eof()
+
+        ops = list(block.ops)
+        assert len(ops) == 1
+        assert isinstance(ops[0], AllocOp)
+        assert "q" in variables
+        assert variables["q"].type == QubitType()

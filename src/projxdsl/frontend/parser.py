@@ -15,6 +15,7 @@ from xdsl.utils.lexer import Input
 
 from projxdsl.dialects.angle import AddOp, AngleType, PiOp, ScalarMultOp, ZeroOp
 from projxdsl.dialects.proj import (
+    AllocOp,
     AndOp,
     Basis,
     BasisAttr,
@@ -337,7 +338,8 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
         Grammar:
             expr ::= primary postfix* infix*
-            primary ::= identifier | "true" | "false" | "!" expr | "(" expr ")"
+            primary ::= identifier | "true" | "false" | "!" expr
+                    | "alloc" state | "(" expr ")"
             postfix ::= "==" state
             infix ::= "&&" expr | "||" expr | "^" expr
         """
@@ -481,7 +483,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         Parse prefix operators and primary expressions.
 
         Prefix operators: !
-        Primary expressions: identifier, true, false, parenthesized expression
+        Primary expressions: identifier, true, false, alloc, parenthesized expression
 
         Args:
             variables: Mapping from variable names to SSA values
@@ -544,6 +546,11 @@ class ProjParser(GenericParser[ProjTokenKind]):
                     f"Expected projection or boolean for '!' operator,"
                     f" got {operand.type}"
                 )
+
+        if self._parse_optional_token(ProjTokenKind.ALLOC) is not None:
+            state = self.parse_state()
+            alloc_op = builder.insert(AllocOp(state))
+            return alloc_op.result
 
         if self._parse_optional_token(ProjTokenKind.LPAREN) is not None:
             expr = self.parse_expression(variables, builder, 0)

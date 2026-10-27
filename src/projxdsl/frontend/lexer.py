@@ -52,6 +52,9 @@ class ProjTokenKind(Enum):
     IF = auto()
     LET = auto()
 
+    # Expression keyword
+    ALLOC = auto()
+
     # State (ket states)
     STATE = auto()
 
@@ -134,6 +137,7 @@ KEYWORD_MAP = {
     "ph": ProjTokenKind.PHASE,
     "if": ProjTokenKind.IF,
     "let": ProjTokenKind.LET,
+    "alloc": ProjTokenKind.ALLOC,
 }
 
 ProjToken = Token[ProjTokenKind]
@@ -332,9 +336,14 @@ class ProjLexer(Lexer[ProjTokenKind]):
         return self._try_keyword((ProjTokenKind.PI,))
 
     def _try_statement_keyword(self) -> ProjToken | None:
-        """Try to lex statement keywords (ph, if, let)."""
+        """Try to lex statement keywords (ph, if, let, alloc)."""
         return self._try_keyword(
-            (ProjTokenKind.PHASE, ProjTokenKind.IF, ProjTokenKind.LET)
+            (
+                ProjTokenKind.PHASE,
+                ProjTokenKind.IF,
+                ProjTokenKind.LET,
+                ProjTokenKind.ALLOC,
+            )
         )
 
     def _try_integer(self) -> ProjToken | None:
