@@ -3,7 +3,7 @@
 import pytest
 from xdsl.dialects.arith import ConstantOp
 from xdsl.dialects.builtin import IntegerAttr, NoneAttr, i1
-from xdsl.ir import Operation
+from xdsl.ir import Operation, SSAValue
 from xdsl.utils.exceptions import ParseError
 from xdsl.utils.lexer import Input
 
@@ -11,11 +11,13 @@ from projxdsl.dialects.angle import AngleType, ZeroOp
 from projxdsl.dialects.proj import (
     Basis,
     BasisAttr,
+    IfOp,
     PhaseOp,
     ProjectionType,
     QubitType,
     State,
     StateAttr,
+    YieldOp,
 )
 from projxdsl.frontend.lexer import ProjLexer, ProjTokenKind
 from projxdsl.frontend.parser import ProjParser, TypeCheckError
@@ -400,3 +402,182 @@ class TestPhaseStatement:
         parser = ProjParser("ph(p)")
         with pytest.raises(TypeCheckError, match="Expected angle"):
             parser.parse_statement({"p": p})
+
+
+class TestIfStatement:
+    """Test parsing of if statements."""
+
+    def test_simple_if_statement(self):
+        """Test parsing a simple if statement with one phase."""
+
+        class MockQubitOp(Operation):
+            name = "test.qubit"
+
+            def __init__(self):
+                super().__init__(result_types=[QubitType()])
+
+        class MockProjOp(Operation):  # type: ignore[misc]
+            name = "test.proj"
+
+            def __init__(self, qubit: SSAValue):
+                super().__init__(operands=[qubit], result_types=[ProjectionType()])
+
+        qubit_var = MockQubitOp().results[0]
+        proj_var = MockProjOp(qubit_var).results[0]
+        parser = ProjParser("if p { ph(pi) }")
+        result = parser.parse_statement({"p": proj_var})
+        assert isinstance(result, IfOp)
+        assert result.condition is proj_var
+        assert len(result.true_region.blocks) == 1
+        block = result.true_region.blocks[0]
+        assert len(block.ops) == 2  # PhaseOp + YieldOp
+        assert isinstance(block.first_op, PhaseOp)
+        assert isinstance(block.last_op, YieldOp)
+
+    def test_if_statement_multiple_statements(self):
+        """Test parsing if statement with multiple phase statements."""
+
+        class MockQubitOp(Operation):
+            name = "test.qubit"
+
+            def __init__(self):
+                super().__init__(result_types=[QubitType()])
+
+        class MockProjOp(Operation):  # type: ignore[misc]
+            name = "test.proj"
+
+            def __init__(self, qubit: SSAValue):
+                super().__init__(operands=[qubit], result_types=[ProjectionType()])
+
+        qubit_var = MockQubitOp().results[0]
+        proj_var = MockProjOp(qubit_var).results[0]
+        parser = ProjParser("if p { ph(pi); ph(0) }")
+        result = parser.parse_statement({"p": proj_var})
+        assert isinstance(result, IfOp)
+        block = result.true_region.blocks[0]
+        ops = list(block.ops)
+        assert len(ops) == 3  # Two PhaseOps + YieldOp
+        assert isinstance(ops[0], PhaseOp)
+        assert isinstance(ops[1], PhaseOp)
+        assert isinstance(ops[2], YieldOp)
+
+    def test_if_statement_with_semicolons(self):
+        """Test parsing if statement with semicolons between statements."""
+
+        class MockQubitOp(Operation):
+            name = "test.qubit"
+
+            def __init__(self):
+                super().__init__(result_types=[QubitType()])
+
+        class MockProjOp(Operation):  # type: ignore[misc]
+            name = "test.proj"
+
+            def __init__(self, qubit: SSAValue):
+                super().__init__(operands=[qubit], result_types=[ProjectionType()])
+
+        qubit_var = MockQubitOp().results[0]
+        proj_var = MockProjOp(qubit_var).results[0]
+        parser = ProjParser("if p { ph(pi); ph(0) }")
+        result = parser.parse_statement({"p": proj_var})
+        assert isinstance(result, IfOp)
+        block = result.true_region.blocks[0]
+        ops = list(block.ops)
+        assert len(ops) == 3  # Two PhaseOps + YieldOp
+
+    def test_if_statement_without_semicolons(self):
+        """Test that missing semicolon between statements raises error."""
+
+        class MockQubitOp(Operation):
+            name = "test.qubit"
+
+            def __init__(self):
+                super().__init__(result_types=[QubitType()])
+
+        class MockProjOp(Operation):  # type: ignore[misc]
+            name = "test.proj"
+
+            def __init__(self, qubit: SSAValue):
+                super().__init__(operands=[qubit], result_types=[ProjectionType()])
+
+        qubit_var = MockQubitOp().results[0]
+        proj_var = MockProjOp(qubit_var).results[0]
+        parser = ProjParser("if p { ph(pi) ph(0) }")
+        with pytest.raises(ParseError, match="'\\}' expected"):
+            parser.parse_statement({"p": proj_var})
+
+    def test_if_statement_empty_block(self):
+        """Test parsing if statement with empty block."""
+
+        class MockQubitOp(Operation):
+            name = "test.qubit"
+
+            def __init__(self):
+                super().__init__(result_types=[QubitType()])
+
+        class MockProjOp(Operation):  # type: ignore[misc]
+            name = "test.proj"
+
+            def __init__(self, qubit: SSAValue):
+                super().__init__(operands=[qubit], result_types=[ProjectionType()])
+
+        qubit_var = MockQubitOp().results[0]
+        proj_var = MockProjOp(qubit_var).results[0]
+        parser = ProjParser("if p { }")
+        result = parser.parse_statement({"p": proj_var})
+        assert isinstance(result, IfOp)
+        block = result.true_region.blocks[0]
+        ops = list(block.ops)
+        assert len(ops) == 1  # Just YieldOp
+        assert isinstance(ops[0], YieldOp)
+
+    def test_if_statement_type_error(self):
+        """Test that if with non-projection condition raises error."""
+
+        # Create a boolean variable
+        p = ConstantOp(IntegerAttr(1, 1)).result
+        parser = ProjParser("if p { ph(pi) }")
+        with pytest.raises(TypeCheckError, match="Expected projection"):
+            parser.parse_statement({"p": p})
+
+    def test_if_statement_missing_brace(self):
+        """Test that missing opening brace raises error."""
+
+        class MockQubitOp(Operation):
+            name = "test.qubit"
+
+            def __init__(self):
+                super().__init__(result_types=[QubitType()])
+
+        class MockProjOp(Operation):
+            name = "test.proj"
+
+            def __init__(self, qubit: SSAValue):
+                super().__init__(operands=[qubit], result_types=[ProjectionType()])
+
+        qubit_var = MockQubitOp().results[0]
+        proj_var = MockProjOp(qubit_var).results[0]
+        parser = ProjParser("if p ph(pi) }")
+        with pytest.raises(ParseError, match="'\\{' expected"):
+            parser.parse_statement({"p": proj_var})
+
+    def test_if_statement_missing_closing_brace(self):
+        """Test that missing closing brace raises error."""
+
+        class MockQubitOp(Operation):
+            name = "test.qubit"
+
+            def __init__(self):
+                super().__init__(result_types=[QubitType()])
+
+        class MockProjOp(Operation):  # type: ignore[misc]
+            name = "test.proj"
+
+            def __init__(self, qubit: SSAValue):
+                super().__init__(operands=[qubit], result_types=[ProjectionType()])
+
+        qubit_var = MockQubitOp().results[0]
+        proj_var = MockProjOp(qubit_var).results[0]
+        parser = ProjParser("if p { ph(pi)")
+        with pytest.raises(ParseError, match="'\\}' expected"):
+            parser.parse_statement({"p": proj_var})

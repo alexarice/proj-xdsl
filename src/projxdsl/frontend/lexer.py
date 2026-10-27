@@ -27,6 +27,9 @@ class ProjTokenKind(Enum):
     LPAREN = auto()
     RPAREN = auto()
     STAR = auto()
+    LBRACE = auto()
+    RBRACE = auto()
+    SEMICOLON = auto()
 
     # Operators
     AND = auto()
@@ -45,6 +48,7 @@ class ProjTokenKind(Enum):
 
     # Statement keywords
     PHASE = auto()
+    IF = auto()
 
     # State (ket states)
     STATE = auto()
@@ -100,6 +104,9 @@ KIND_BY_PUNCTUATION_SPELLING = {
     ")": ProjTokenKind.RPAREN,
     "*": ProjTokenKind.STAR,
     "+": ProjTokenKind.PLUS,
+    "{": ProjTokenKind.LBRACE,
+    "}": ProjTokenKind.RBRACE,
+    ";": ProjTokenKind.SEMICOLON,
 }
 
 OPERATOR_SPELLING = {
@@ -122,6 +129,7 @@ KEYWORD_MAP = {
     "pi": ProjTokenKind.PI,
     # Statement keywords
     "ph": ProjTokenKind.PHASE,
+    "if": ProjTokenKind.IF,
 }
 
 ProjToken = Token[ProjTokenKind]
@@ -320,8 +328,8 @@ class ProjLexer(Lexer[ProjTokenKind]):
         return self._try_keyword((ProjTokenKind.PI,))
 
     def _try_statement_keyword(self) -> ProjToken | None:
-        """Try to lex statement keywords (ph)."""
-        return self._try_keyword((ProjTokenKind.PHASE,))
+        """Try to lex statement keywords (ph, if)."""
+        return self._try_keyword((ProjTokenKind.PHASE, ProjTokenKind.IF))
 
     def _try_integer(self) -> ProjToken | None:
         """Try to lex an integer literal."""

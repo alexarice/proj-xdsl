@@ -6,7 +6,7 @@ from typing import NoReturn
 
 from xdsl.dialects.arith import AndIOp, ConstantOp, OrIOp, XOrIOp
 from xdsl.dialects.builtin import IntegerAttr, NoneAttr, i1
-from xdsl.ir import SSAValue, TypeAttribute
+from xdsl.ir import Block, Region, SSAValue, TypeAttribute
 from xdsl.parser.generic_parser import GenericParser, ParserState
 from xdsl.utils.exceptions import ParseError
 from xdsl.utils.lexer import Input
@@ -18,6 +18,7 @@ from projxdsl.dialects.proj import (
     BasisAttr,
     EqOp,
     FromBoolOp,
+    IfOp,
     NotOp,
     OrOp,
     PhaseOp,
@@ -26,6 +27,7 @@ from projxdsl.dialects.proj import (
     State,
     StateAttr,
     XorOp,
+    YieldOp,
 )
 from projxdsl.frontend.lexer import ProjLexer, ProjToken, ProjTokenKind
 
@@ -296,29 +298,104 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
         return lhs
 
-    def parse_statement(self, variables: dict[str, SSAValue]) -> PhaseOp:
+    def parse_optional_statement(
+        self, variables: dict[str, SSAValue]
+    ) -> PhaseOp | IfOp | None:
         """
-        Parse a statement.
+        Parse a statement if present, return None otherwise.
 
-        statement ::= "ph" "(" angle-expr ")"
+        statement ::= "ph" "(" angle-expr ")" | "if" expr block
+        block ::= "{" statement* "}"
         angle-expr ::= expression that evaluates to an angle type
         """
-        self._parse_token(
-            ProjTokenKind.PHASE,
-            "Expected 'ph' keyword for phase statement",
-        )
+        if self._parse_optional_token(ProjTokenKind.PHASE) is not None:
+            with self.in_parens():
+                # Parse the angle expression
+                angle = self.parse_expression(variables)
 
-        with self.in_parens():
-            # Parse the angle expression
-            angle = self.parse_expression(variables)
+                # Check that the expression has angle type
+                if angle.type != AngleType():
+                    self.raise_typing_error(
+                        f"Expected angle expression for phase statement,"
+                        f" got {angle.type}"
+                    )
 
-            # Check that the expression has angle type
-            if angle.type != AngleType():
-                self.raise_typing_error(
-                    f"Expected angle expression for phase statement, got {angle.type}"
-                )
+            return PhaseOp(angle)
+        elif self._parse_optional_token(ProjTokenKind.IF) is not None:
+            return self._parse_if_statement(variables)
 
-        return PhaseOp(angle)
+        return None
+
+    def parse_statement(self, variables: dict[str, SSAValue]) -> PhaseOp | IfOp:
+        """
+        Parse a statement, raising an error if no statement is found.
+
+        statement ::= "ph" "(" angle-expr ")" | "if" expr block
+        block ::= "{" statement* "}"
+        angle-expr ::= expression that evaluates to an angle type
+        """
+        stmt = self.parse_optional_statement(variables)
+        if stmt is None:
+            self.raise_error(
+                f"Expected 'ph' or 'if' keyword for statement,"
+                f" got {self._current_token.text}"
+            )
+        return stmt
+
+    def _parse_if_statement(self, variables: dict[str, SSAValue]) -> IfOp:
+        """
+        Parse an if statement.
+
+        if-stmt ::= "if" expr block
+        block ::= "{" statement* "}"
+        """
+        # Parse the condition expression
+        condition = self.parse_expression(variables)
+
+        # Check that the condition is a projection
+        if condition.type != ProjectionType():
+            self.raise_typing_error(
+                f"Expected projection type for 'if' condition, got {condition.type}"
+            )
+
+        # Parse the true block
+        with self.in_braces():
+            true_region = self._parse_block(variables)
+
+        # Parse the optional else block
+        false_region = Region()
+        if self._current_token.kind == ProjTokenKind.IF:
+            # Check if it's actually 'else' by peeking ahead
+            # For now, we don't support else, so this is a placeholder
+            pass
+
+        return IfOp(condition, true_region, false_region)
+
+    def _parse_block(self, variables: dict[str, SSAValue]) -> Region:
+        """
+        Parse a block of statements.
+
+        block ::= (statement ";")* statement?
+        Statements are separated by semicolons.
+        """
+        region = Region()
+        block = Block()
+        region.add_block(block)
+
+        # Parse optional first statement
+        stmt = self.parse_optional_statement(variables)
+        if stmt is not None:
+            block.add_op(stmt)
+
+            # Parse remaining statements: each must be preceded by a semicolon
+            while self._parse_optional_token(ProjTokenKind.SEMICOLON) is not None:
+                stmt = self.parse_statement(variables)
+                block.add_op(stmt)
+
+        # Add yield terminator
+        block.add_op(YieldOp())
+
+        return region
 
     def _build_binary_predicate_op(
         self,
