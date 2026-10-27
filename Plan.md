@@ -394,36 +394,43 @@ Functions are classified into three kinds based on their effect on quantum state
 - **Semantics**: No quantum operations; classical computation only
 - **Allowed**: Classical control, arithmetic, boolean logic
 - **Disallowed**: Qubit allocation, phase gates, projections, measurement
-- **Return types**: `bool`, `angle` (classical types only)
+- **Return types**: Any type (typically `bool`, `angle`), or void `()`
 - **Use case**: Classical post-processing, computing classical functions from measurement results
 
 ```rust
 pure fn classical_post_process(m1: bool, m2: bool) -> bool {
     return m1 && m2
 }
+
+pure fn add_angles(a1: angle, a2: angle) -> angle {
+    return a1 + a2
+}
 ```
 
 ### `unitary fn` - Unitary Evolution
-- **Semantics**: Reversible quantum operations; no measurement allowed
-- **Allowed**: Qubit allocation, projections, phase gates, unitary transforms
-- **Return types**: `qubit`, `qubit<B>`, `proj` (quantum types only)
-- **Constraint**: IR verifier rejects `proj.measure` operations
-- **Use case**: Oracle construction, ansatz preparation, basis changes
+- **Semantics**: Quantum operations without measurement or allocation
+- **Allowed**: Projections, phase gates, unitary transforms on borrowed qubits
+- **Disallowed**: Qubit allocation (`alloc`), measurement (`measure`)
+- **Return types**: Any type, or void `()`
+- **Use case**: Gates (void), oracles (classical output via phase kickback), basis changes
 
 ```rust
-unitary fn bell_pair(q1: qubit, q2: qubit) -> (qubit, qubit) {
-    // Prepare Bell state
-    let q1 = alloc |0>
-    phase(PI/2)
-    // ... unitary operations
-    return (q1, q2)
+// Gate - transforms borrowed qubits, no return
+unitary fn hadamard(q: qubit<Z>) {
+    // q is borrowed, transformed in place
+}
+
+// Oracle - unitary with classical output (no measurement)
+unitary fn phase_oracle(q: qubit<Z>) -> bool {
+    phase(PI)
+    return true  // computed without measurement
 }
 ```
 
 ### `mixed fn` - General Quantum Channel
 - **Semantics**: Arbitrary CPTP map; full quantum operations with measurement
-- **Allowed**: All operations including mid-circuit measurement
-- **Return types**: Any type
+- **Allowed**: All operations including mid-circuit measurement and allocation
+- **Return types**: Any type, or void `()`
 - **Use case**: Full algorithms, error correction, measurement-based protocols
 
 ```rust
@@ -435,6 +442,10 @@ mixed fn teleport(src: qubit, dst: qubit) -> qubit {
     if m1 { phase(PI) }
     if m2 { ... }
     return dst
+}
+
+mixed fn measure_and_reset(q: qubit) -> bool {
+    return measure(q == |0>)
 }
 ```
 
@@ -450,6 +461,16 @@ pure ⊆ unitary ⊆ mixed
 - A `unitary fn` can be called where `mixed fn` is expected
 - Kind is **not** part of the type system (no subtyping in function signatures)
 - Kind checking is done at call sites via effect validation
+
+### Operation Restrictions
+
+| Kind | Can Measure? | Can Alloc? | Can Use Phase/Projections? |
+|------|-------------|-----------|---------------------------|
+| `pure fn` | ❌ No | ❌ No | ❌ No (classical only) |
+| `unitary fn` | ❌ No | ❌ No | ✅ Yes |
+| `mixed fn` | ✅ Yes | ✅ Yes | ✅ Yes |
+
+**Note**: All three kinds can return any type or be void (`()`). Restrictions are on **operations allowed in the body**, not on return types.
 
 ### IR Representation
 
