@@ -52,6 +52,12 @@ class ProjTokenKind(Enum):
     IF = auto()
     LET = auto()
 
+    # Function keywords
+    PURE = auto()
+    UNITARY = auto()
+    MIXED = auto()
+    FN = auto()
+
     # Expression keywords
     ALLOC = auto()
     MEASURE = auto()
@@ -140,6 +146,11 @@ KEYWORD_MAP = {
     "let": ProjTokenKind.LET,
     "alloc": ProjTokenKind.ALLOC,
     "measure": ProjTokenKind.MEASURE,
+    # Function keywords
+    "pure": ProjTokenKind.PURE,
+    "unitary": ProjTokenKind.UNITARY,
+    "mixed": ProjTokenKind.MIXED,
+    "fn": ProjTokenKind.FN,
 }
 
 ProjToken = Token[ProjTokenKind]

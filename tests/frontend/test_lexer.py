@@ -48,6 +48,36 @@ class TestTypeKeywords:
         ]
 
 
+class TestFunctionKeywords:
+    """Test lexing of function keywords."""
+
+    def test_pure(self):
+        tokens = lex_all("pure")
+        assert tokens == [(ProjTokenKind.PURE, "pure"), (ProjTokenKind.EOF, "")]
+
+    def test_unitary(self):
+        tokens = lex_all("unitary")
+        assert tokens == [(ProjTokenKind.UNITARY, "unitary"), (ProjTokenKind.EOF, "")]
+
+    def test_mixed(self):
+        tokens = lex_all("mixed")
+        assert tokens == [(ProjTokenKind.MIXED, "mixed"), (ProjTokenKind.EOF, "")]
+
+    def test_fn(self):
+        tokens = lex_all("fn")
+        assert tokens == [(ProjTokenKind.FN, "fn"), (ProjTokenKind.EOF, "")]
+
+    def test_all_function_keywords(self):
+        tokens = lex_all("pure unitary mixed fn")
+        assert tokens == [
+            (ProjTokenKind.PURE, "pure"),
+            (ProjTokenKind.UNITARY, "unitary"),
+            (ProjTokenKind.MIXED, "mixed"),
+            (ProjTokenKind.FN, "fn"),
+            (ProjTokenKind.EOF, ""),
+        ]
+
+
 class TestBasisAsIdentifiers:
     """Test that X, Y, Z are lexed as identifiers (parser validates context)."""
 
