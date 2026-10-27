@@ -1,13 +1,15 @@
 """Tests for the proj-xdsl surface syntax parser."""
 
 import pytest
+from xdsl.builder import Builder
 from xdsl.dialects.arith import ConstantOp
 from xdsl.dialects.builtin import IntegerAttr, NoneAttr, i1
-from xdsl.ir import Operation, SSAValue
+from xdsl.ir import Block, Operation, SSAValue
+from xdsl.rewriter import InsertPoint
 from xdsl.utils.exceptions import ParseError
 from xdsl.utils.lexer import Input
 
-from projxdsl.dialects.angle import AngleType, ZeroOp
+from projxdsl.dialects.angle import AngleType, PiOp, ZeroOp
 from projxdsl.dialects.proj import (
     Basis,
     BasisAttr,
@@ -350,16 +352,21 @@ class TestIntegerParsing:
         """Test parsing integers in the parser (only 0 is valid for angles)."""
 
         parser = ProjParser("0")
-        result = parser.parse_expression({})
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        result = parser.parse_expression({}, builder)
         assert isinstance(result.owner, ZeroOp)
         assert result.type == AngleType()
+        assert len(list(block.ops)) == 1  # ZeroOp inserted
 
     def test_invalid_integer_for_angle(self):
         """Test that non-zero integers are rejected for angle context."""
 
         parser = ProjParser("5")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
         with pytest.raises(ParseError, match="Only 0 is a valid angle constant"):
-            parser.parse_expression({})
+            parser.parse_expression({}, builder)
 
 
 class TestPhaseStatement:
@@ -376,23 +383,32 @@ class TestPhaseStatement:
 
         angle_var = MockAngleOp().results[0]
         parser = ProjParser("ph(theta)")
-        result = parser.parse_statement({"theta": angle_var})
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        result = parser.parse_statement({"theta": angle_var}, builder)
         assert isinstance(result, PhaseOp)
         assert result.angle is angle_var
+        assert len(list(block.ops)) == 1  # PhaseOp inserted
 
     def test_phase_statement_with_pi(self):
         """Test parsing ph(pi) statement."""
 
         parser = ProjParser("ph(pi)")
-        result = parser.parse_statement({})
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        result = parser.parse_statement({}, builder)
         assert isinstance(result, PhaseOp)
+        assert len(list(block.ops)) == 2  # PiOp + PhaseOp inserted
 
     def test_phase_statement_with_zero(self):
         """Test parsing ph(0) statement."""
 
         parser = ProjParser("ph(0)")
-        result = parser.parse_statement({})
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        result = parser.parse_statement({}, builder)
         assert isinstance(result, PhaseOp)
+        assert len(list(block.ops)) == 2  # ZeroOp + PhaseOp inserted
 
     def test_phase_statement_type_error(self):
         """Test that ph with non-angle raises error."""
@@ -400,8 +416,10 @@ class TestPhaseStatement:
         # Create a boolean variable
         p = ConstantOp(IntegerAttr(1, 1)).result
         parser = ProjParser("ph(p)")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
         with pytest.raises(TypeCheckError, match="Expected angle"):
-            parser.parse_statement({"p": p})
+            parser.parse_statement({"p": p}, builder)
 
 
 class TestIfStatement:
@@ -425,14 +443,18 @@ class TestIfStatement:
         qubit_var = MockQubitOp().results[0]
         proj_var = MockProjOp(qubit_var).results[0]
         parser = ProjParser("if p { ph(pi) }")
-        result = parser.parse_statement({"p": proj_var})
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        result = parser.parse_statement({"p": proj_var}, builder)
         assert isinstance(result, IfOp)
         assert result.condition is proj_var
         assert len(result.true_region.blocks) == 1
-        block = result.true_region.blocks[0]
-        assert len(block.ops) == 2  # PhaseOp + YieldOp
-        assert isinstance(block.first_op, PhaseOp)
-        assert isinstance(block.last_op, YieldOp)
+        inner_block = result.true_region.blocks[0]
+        ops = list(inner_block.ops)
+        assert len(ops) == 3  # PiOp + PhaseOp + YieldOp
+        assert isinstance(ops[0], PiOp)
+        assert isinstance(ops[1], PhaseOp)
+        assert isinstance(ops[2], YieldOp)
 
     def test_if_statement_multiple_statements(self):
         """Test parsing if statement with multiple phase statements."""
@@ -452,14 +474,18 @@ class TestIfStatement:
         qubit_var = MockQubitOp().results[0]
         proj_var = MockProjOp(qubit_var).results[0]
         parser = ProjParser("if p { ph(pi); ph(0) }")
-        result = parser.parse_statement({"p": proj_var})
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        result = parser.parse_statement({"p": proj_var}, builder)
         assert isinstance(result, IfOp)
-        block = result.true_region.blocks[0]
-        ops = list(block.ops)
-        assert len(ops) == 3  # Two PhaseOps + YieldOp
-        assert isinstance(ops[0], PhaseOp)
+        inner_block = result.true_region.blocks[0]
+        ops = list(inner_block.ops)
+        assert len(ops) == 5  # PiOp + PhaseOp + ZeroOp + PhaseOp + YieldOp
+        assert isinstance(ops[0], PiOp)
         assert isinstance(ops[1], PhaseOp)
-        assert isinstance(ops[2], YieldOp)
+        assert isinstance(ops[2], ZeroOp)
+        assert isinstance(ops[3], PhaseOp)
+        assert isinstance(ops[4], YieldOp)
 
     def test_if_statement_with_semicolons(self):
         """Test parsing if statement with semicolons between statements."""
@@ -479,11 +505,13 @@ class TestIfStatement:
         qubit_var = MockQubitOp().results[0]
         proj_var = MockProjOp(qubit_var).results[0]
         parser = ProjParser("if p { ph(pi); ph(0) }")
-        result = parser.parse_statement({"p": proj_var})
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        result = parser.parse_statement({"p": proj_var}, builder)
         assert isinstance(result, IfOp)
-        block = result.true_region.blocks[0]
-        ops = list(block.ops)
-        assert len(ops) == 3  # Two PhaseOps + YieldOp
+        inner_block = result.true_region.blocks[0]
+        ops = list(inner_block.ops)
+        assert len(ops) == 5  # PiOp + PhaseOp + ZeroOp + PhaseOp + YieldOp
 
     def test_if_statement_without_semicolons(self):
         """Test that missing semicolon between statements raises error."""
@@ -503,8 +531,10 @@ class TestIfStatement:
         qubit_var = MockQubitOp().results[0]
         proj_var = MockProjOp(qubit_var).results[0]
         parser = ProjParser("if p { ph(pi) ph(0) }")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
         with pytest.raises(ParseError, match="'\\}' expected"):
-            parser.parse_statement({"p": proj_var})
+            parser.parse_statement({"p": proj_var}, builder)
 
     def test_if_statement_empty_block(self):
         """Test parsing if statement with empty block."""
@@ -524,10 +554,12 @@ class TestIfStatement:
         qubit_var = MockQubitOp().results[0]
         proj_var = MockProjOp(qubit_var).results[0]
         parser = ProjParser("if p { }")
-        result = parser.parse_statement({"p": proj_var})
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        result = parser.parse_statement({"p": proj_var}, builder)
         assert isinstance(result, IfOp)
-        block = result.true_region.blocks[0]
-        ops = list(block.ops)
+        inner_block = result.true_region.blocks[0]
+        ops = list(inner_block.ops)
         assert len(ops) == 1  # Just YieldOp
         assert isinstance(ops[0], YieldOp)
 
@@ -537,8 +569,10 @@ class TestIfStatement:
         # Create a boolean variable
         p = ConstantOp(IntegerAttr(1, 1)).result
         parser = ProjParser("if p { ph(pi) }")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
         with pytest.raises(TypeCheckError, match="Expected projection"):
-            parser.parse_statement({"p": p})
+            parser.parse_statement({"p": p}, builder)
 
     def test_if_statement_missing_brace(self):
         """Test that missing opening brace raises error."""
@@ -558,8 +592,10 @@ class TestIfStatement:
         qubit_var = MockQubitOp().results[0]
         proj_var = MockProjOp(qubit_var).results[0]
         parser = ProjParser("if p ph(pi) }")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
         with pytest.raises(ParseError, match="'\\{' expected"):
-            parser.parse_statement({"p": proj_var})
+            parser.parse_statement({"p": proj_var}, builder)
 
     def test_if_statement_missing_closing_brace(self):
         """Test that missing closing brace raises error."""
@@ -579,8 +615,10 @@ class TestIfStatement:
         qubit_var = MockQubitOp().results[0]
         proj_var = MockProjOp(qubit_var).results[0]
         parser = ProjParser("if p { ph(pi)")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
         with pytest.raises(ParseError, match="'\\}' expected"):
-            parser.parse_statement({"p": proj_var})
+            parser.parse_statement({"p": proj_var}, builder)
 
     def test_nested_if_statement(self):
         """Test parsing nested if statements."""
@@ -600,7 +638,9 @@ class TestIfStatement:
         qubit_var = MockQubitOp().results[0]
         proj_var = MockProjOp(qubit_var).results[0]
         parser = ProjParser("if p { if q { ph(pi) } }")
-        result = parser.parse_statement({"p": proj_var, "q": proj_var})
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        result = parser.parse_statement({"p": proj_var, "q": proj_var}, builder)
         assert isinstance(result, IfOp)
         assert result.condition is proj_var
         true_block = result.true_region.blocks[0]
@@ -610,5 +650,7 @@ class TestIfStatement:
         assert isinstance(inner_if, IfOp)
         inner_block = inner_if.true_region.blocks[0]
         inner_ops = list(inner_block.ops)
-        assert len(inner_ops) == 2  # PhaseOp + YieldOp
-        assert isinstance(inner_ops[0], PhaseOp)
+        assert len(inner_ops) == 3  # PiOp + PhaseOp + YieldOp
+        assert isinstance(inner_ops[0], PiOp)
+        assert isinstance(inner_ops[1], PhaseOp)
+        assert isinstance(inner_ops[2], YieldOp)

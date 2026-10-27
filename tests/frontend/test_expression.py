@@ -1,9 +1,11 @@
 """Tests for the proj-xdsl expression parser."""
 
 import pytest
+from xdsl.builder import Builder
 from xdsl.dialects.arith import AndIOp, ConstantOp, OrIOp, XOrIOp
 from xdsl.dialects.builtin import IntegerAttr, NoneAttr, i1
-from xdsl.ir import Operation, SSAValue
+from xdsl.ir import Block, Operation, SSAValue
+from xdsl.rewriter import InsertPoint
 from xdsl.utils.exceptions import ParseError
 
 from projxdsl.dialects.angle import AddOp, AngleType, PiOp, ScalarMultOp, ZeroOp
@@ -63,7 +65,9 @@ def parse_expression(code: str, variables: dict[str, SSAValue] | None = None):
     if variables is None:
         variables = {}
     parser = ProjParser(code)
-    result = parser.parse_expression(variables)
+    block = Block()
+    builder = Builder(InsertPoint.at_end(block))
+    result = parser.parse_expression(variables, builder)
     parser.expect_eof()
     return result
 
@@ -131,8 +135,11 @@ class TestNotOperator:
         var = make_qubit_var()
         # Create a projection: q == |0>
         parser = ProjParser("q == |0>")
-        proj = parser.parse_expression({"q": var})
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        proj = parser.parse_expression({"q": var}, builder)
         assert proj.type == ProjectionType()
+        assert len(list(block.ops)) == 1  # EqOp inserted
 
         # Now test !(q == |0>)
         result = parse_expression("!(q == |0>)", {"q": var})
@@ -181,9 +188,12 @@ class TestAndOperator:
         q2 = make_qubit_var()
         # Create projections
         parser = ProjParser("q1 == |0> && q2 == |1>")
-        result = parser.parse_expression({"q1": q1, "q2": q2})
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        result = parser.parse_expression({"q1": q1, "q2": q2}, builder)
         assert isinstance(result.owner, AndOp)
         assert result.type == ProjectionType()
+        assert len(list(block.ops)) == 3  # Two EqOps + AndOp
 
     def test_and_mixed_bool_projection(self):
         """Test parsing p && q where p is boolean and q is projection."""
@@ -224,9 +234,12 @@ class TestOrOperator:
         q2 = make_qubit_var()
         # Create projections
         parser = ProjParser("q1 == |0> || q2 == |1>")
-        result = parser.parse_expression({"q1": q1, "q2": q2})
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        result = parser.parse_expression({"q1": q1, "q2": q2}, builder)
         assert isinstance(result.owner, OrOp)
         assert result.type == ProjectionType()
+        assert len(list(block.ops)) == 3  # Two EqOps + OrOp
 
     def test_or_mixed_bool_projection(self):
         """Test parsing p || q where p is boolean and q is projection."""
@@ -267,9 +280,12 @@ class TestXorOperator:
         q2 = make_qubit_var()
         # Create projections
         parser = ProjParser("q1 == |0> ^ q2 == |1>")
-        result = parser.parse_expression({"q1": q1, "q2": q2})
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        result = parser.parse_expression({"q1": q1, "q2": q2}, builder)
         assert isinstance(result.owner, XorOp)
         assert result.type == ProjectionType()
+        assert len(list(block.ops)) == 3  # Two EqOps + XorOp
 
     def test_xor_mixed_bool_projection(self):
         """Test parsing p ^ q where p is boolean and q is projection."""

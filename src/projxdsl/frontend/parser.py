@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import NoReturn
 
+from xdsl.builder import Builder
 from xdsl.dialects.arith import AndIOp, ConstantOp, OrIOp, XOrIOp
 from xdsl.dialects.builtin import IntegerAttr, NoneAttr, i1
-from xdsl.ir import Block, Region, SSAValue, TypeAttribute
+from xdsl.ir import Region, SSAValue, TypeAttribute
 from xdsl.parser.generic_parser import GenericParser, ParserState
 from xdsl.utils.exceptions import ParseError
 from xdsl.utils.lexer import Input
@@ -203,7 +204,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         )
 
     def parse_optional_statement(
-        self, variables: dict[str, SSAValue]
+        self, variables: dict[str, SSAValue], builder: Builder
     ) -> PhaseOp | IfOp | None:
         """
         Parse a statement if present, return None otherwise.
@@ -215,7 +216,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         if self._parse_optional_token(ProjTokenKind.PHASE) is not None:
             with self.in_parens():
                 # Parse the angle expression
-                angle = self.parse_expression(variables)
+                angle = self.parse_expression(variables, builder)
 
                 # Check that the expression has angle type
                 if angle.type != AngleType():
@@ -224,13 +225,15 @@ class ProjParser(GenericParser[ProjTokenKind]):
                         f" got {angle.type}"
                     )
 
-            return PhaseOp(angle)
+            return builder.insert(PhaseOp(angle))
         elif self._parse_optional_token(ProjTokenKind.IF) is not None:
-            return self._parse_if_statement(variables)
+            return self._parse_if_statement(variables, builder)
 
         return None
 
-    def parse_statement(self, variables: dict[str, SSAValue]) -> PhaseOp | IfOp:
+    def parse_statement(
+        self, variables: dict[str, SSAValue], builder: Builder
+    ) -> PhaseOp | IfOp:
         """
         Parse a statement, raising an error if no statement is found.
 
@@ -238,7 +241,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         block ::= "{" statement* "}"
         angle-expr ::= expression that evaluates to an angle type
         """
-        stmt = self.parse_optional_statement(variables)
+        stmt = self.parse_optional_statement(variables, builder)
         if stmt is None:
             self.raise_error(
                 f"Expected 'ph' or 'if' keyword for statement,"
@@ -246,15 +249,17 @@ class ProjParser(GenericParser[ProjTokenKind]):
             )
         return stmt
 
-    def _parse_if_statement(self, variables: dict[str, SSAValue]) -> IfOp:
+    def _parse_if_statement(
+        self, variables: dict[str, SSAValue], builder: Builder
+    ) -> IfOp:
         """
         Parse an if statement.
 
         if-stmt ::= "if" expr block
         block ::= "{" statement* "}"
         """
-        # Parse the condition expression
-        condition = self.parse_expression(variables)
+        # Parse the condition expression (inserted in parent block)
+        condition = self.parse_expression(variables, builder)
 
         # Check that the condition is a projection
         if condition.type != ProjectionType():
@@ -263,8 +268,16 @@ class ProjParser(GenericParser[ProjTokenKind]):
             )
 
         # Parse the true block
-        with self.in_braces():
-            true_region = self._parse_block(variables)
+        def parse_statements(inner_builder: Builder):
+            self.parse_list(
+                delimiter=self.Delimiter.BRACES,
+                parse=lambda: self.parse_statement(variables, inner_builder),
+                separator=";",
+                context_msg=" in statement block",
+            )
+            inner_builder.insert(YieldOp())
+
+        true_region = Builder.region(parse_statements)
 
         # Parse the optional else block
         false_region = Region()
@@ -273,42 +286,17 @@ class ProjParser(GenericParser[ProjTokenKind]):
             # For now, we don't support else, so this is a placeholder
             pass
 
-        return IfOp(condition, true_region, false_region)
-
-    def _parse_block(self, variables: dict[str, SSAValue]) -> Region:
-        """
-        Parse a block of statements.
-
-        block ::= (statement ";")* statement?
-        Statements are separated by semicolons.
-        """
-        region = Region()
-        block = Block()
-        region.add_block(block)
-
-        # Parse optional first statement
-        stmt = self.parse_optional_statement(variables)
-        if stmt is not None:
-            block.add_op(stmt)
-
-            # Parse remaining statements: each must be preceded by a semicolon
-            while self._parse_optional_token(ProjTokenKind.SEMICOLON) is not None:
-                stmt = self.parse_statement(variables)
-                block.add_op(stmt)
-
-        # Add yield terminator
-        block.add_op(YieldOp())
-
-        return region
+        return builder.insert(IfOp(condition, true_region, false_region))
 
     def parse_expression(
-        self, variables: dict[str, SSAValue], min_bp: int = 0
+        self, variables: dict[str, SSAValue], builder: Builder, min_bp: int = 0
     ) -> SSAValue:
         """
         Parse a projection expression using Pratt parsing.
 
         Args:
             variables: Mapping from variable names to SSA values
+            builder: Builder for inserting operations
             min_bp: Minimum binding power for Pratt parsing (default 0)
 
         Returns:
@@ -320,7 +308,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
             postfix ::= "==" state
             infix ::= "&&" expr | "||" expr | "^" expr
         """
-        lhs = self._parse_prefix_and_primary(variables)
+        lhs = self._parse_prefix_and_primary(variables, builder)
 
         while True:
             if self._current_token.kind == ProjTokenKind.EQ:
@@ -346,30 +334,34 @@ class ProjParser(GenericParser[ProjTokenKind]):
                             f"projected in {state_basis.name} basis"
                         )
 
-                lhs = EqOp(lhs, state).result
+                lhs = builder.insert(EqOp(lhs, state)).result
 
             elif self._current_token.kind == ProjTokenKind.AND:
                 left_bp, right_bp = self._INFIX_AND_BP
                 if min_bp > left_bp:
                     break
                 self._consume_token()
-                rhs = self.parse_expression(variables, right_bp)
-                lhs = self._build_binary_predicate_op(lhs, rhs, AndIOp, AndOp, "&&")
+                rhs = self.parse_expression(variables, builder, right_bp)
+                lhs = self._build_binary_predicate_op(
+                    lhs, rhs, AndIOp, AndOp, "&&", builder
+                )
 
             elif self._current_token.kind == ProjTokenKind.OR:
                 left_bp, right_bp = self._INFIX_OR_BP
                 if min_bp > left_bp:
                     break
                 self._consume_token()
-                rhs = self.parse_expression(variables, right_bp)
-                lhs = self._build_binary_predicate_op(lhs, rhs, OrIOp, OrOp, "||")
+                rhs = self.parse_expression(variables, builder, right_bp)
+                lhs = self._build_binary_predicate_op(
+                    lhs, rhs, OrIOp, OrOp, "||", builder
+                )
 
             elif self._current_token.kind == ProjTokenKind.PLUS:
                 left_bp, right_bp = self._INFIX_ADD_BP
                 if min_bp > left_bp:
                     break
                 self._consume_token()
-                rhs = self.parse_expression(variables, right_bp)
+                rhs = self.parse_expression(variables, builder, right_bp)
 
                 # Check that both operands are angles
                 if lhs.type != AngleType():
@@ -381,15 +373,17 @@ class ProjParser(GenericParser[ProjTokenKind]):
                         f"Expected angle for '+' right operand, got {rhs.type}"
                     )
 
-                lhs = AddOp(lhs, rhs).result
+                lhs = builder.insert(AddOp(lhs, rhs)).result
 
             elif self._current_token.kind == ProjTokenKind.XOR:
                 left_bp, right_bp = self._INFIX_XOR_BP
                 if min_bp > left_bp:
                     break
                 self._consume_token()
-                rhs = self.parse_expression(variables, right_bp)
-                lhs = self._build_binary_predicate_op(lhs, rhs, XOrIOp, XorOp, "^")
+                rhs = self.parse_expression(variables, builder, right_bp)
+                lhs = self._build_binary_predicate_op(
+                    lhs, rhs, XOrIOp, XorOp, "^", builder
+                )
 
             else:
                 break
@@ -403,6 +397,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         classical_op: type[AndIOp | OrIOp | XOrIOp],
         projection_op: type[AndOp | OrOp | XorOp],
         op_name: str,
+        builder: Builder,
     ) -> SSAValue:
         """
         Build a binary operation with proper type checking.
@@ -413,6 +408,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
             classical_op: Classical operation class (arith.andi, arith.ori, arith.xori)
             projection_op: Projection operation class (proj.and, proj.or, proj.xor)
             op_name: Name of the operator for error messages
+            builder: Builder for inserting operations
 
         Returns:
             SSA value of the result
@@ -427,17 +423,17 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
         if lhs_is_bool and rhs_is_bool:
             # Both booleans: use classical operation
-            return classical_op(lhs, rhs).result
+            return builder.insert(classical_op(lhs, rhs)).result
         elif lhs_is_proj and rhs_is_proj:
             # Both projections: use projection operation
-            return projection_op(lhs, rhs).result
+            return builder.insert(projection_op(lhs, rhs)).result
         elif (lhs_is_bool and rhs_is_proj) or (lhs_is_proj and rhs_is_bool):
             # Mixed: convert boolean to projection, then use projection operation
             if lhs_is_bool:
-                lhs = FromBoolOp(lhs).result
+                lhs = builder.insert(FromBoolOp(lhs)).result
             if rhs_is_bool:
-                rhs = FromBoolOp(rhs).result
-            return projection_op(lhs, rhs).result
+                rhs = builder.insert(FromBoolOp(rhs)).result
+            return builder.insert(projection_op(lhs, rhs)).result
         else:
             # Invalid types
             self.raise_typing_error(
@@ -445,7 +441,9 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 f"projection, got {lhs.type} and {rhs.type}"
             )
 
-    def _parse_prefix_and_primary(self, variables: dict[str, SSAValue]) -> SSAValue:
+    def _parse_prefix_and_primary(
+        self, variables: dict[str, SSAValue], builder: Builder
+    ) -> SSAValue:
         """
         Parse prefix operators and primary expressions.
 
@@ -454,6 +452,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
         Args:
             variables: Mapping from variable names to SSA values
+            builder: Builder for inserting operations
         """
         if (token := self._parse_optional_token(ProjTokenKind.IDENTIFIER)) is not None:
             var_name = token.text
@@ -464,22 +463,20 @@ class ProjParser(GenericParser[ProjTokenKind]):
             return variables[var_name]
 
         if self._parse_optional_token(ProjTokenKind.TRUE) is not None:
-            bool_const = ConstantOp(IntegerAttr(1, 1))
-            return bool_const.result
+            return builder.insert(ConstantOp(IntegerAttr(1, 1))).result
 
         if self._parse_optional_token(ProjTokenKind.FALSE) is not None:
-            bool_const = ConstantOp(IntegerAttr(0, 1))
-            return bool_const.result
+            return builder.insert(ConstantOp(IntegerAttr(0, 1))).result
 
         if self._parse_optional_token(ProjTokenKind.PI) is not None:
-            return PiOp().result
+            return builder.insert(PiOp()).result
 
         if (integer := self._parse_optional_token(ProjTokenKind.INTEGER)) is not None:
             # Only 0 is valid as an angle constant
             value = integer.kind.get_integer_value(integer.span)
             if value != 0:
                 self.raise_error(f"Only 0 is a valid angle constant, got {value}")
-            return ZeroOp().result
+            return builder.insert(ZeroOp()).result
 
         if (scalar := self.parse_optional_float()) is not None:
             # Scalar multiplication: `2.0 * a` where `2.0 *` is a prefix operator
@@ -489,7 +486,9 @@ class ProjParser(GenericParser[ProjTokenKind]):
             )
 
             # Parse the angle expression with tight binding
-            angle = self.parse_expression(variables, self._PREFIX_SCALAR_MULT_BP)
+            angle = self.parse_expression(
+                variables, builder, self._PREFIX_SCALAR_MULT_BP
+            )
 
             # Check that the operand is an angle
             if angle.type != AngleType():
@@ -497,16 +496,16 @@ class ProjParser(GenericParser[ProjTokenKind]):
                     f"Expected angle for '*' operand, got {angle.type}"
                 )
 
-            return ScalarMultOp(scalar, angle).result
+            return builder.insert(ScalarMultOp(scalar, angle)).result
 
         if self._parse_optional_token(ProjTokenKind.BANG) is not None:
-            operand = self.parse_expression(variables, self._PREFIX_NOT_BP)
+            operand = self.parse_expression(variables, builder, self._PREFIX_NOT_BP)
 
             if operand.type == ProjectionType():
-                return NotOp(operand).result
+                return builder.insert(NotOp(operand)).result
             elif operand.type == i1:
-                const_one = ConstantOp(IntegerAttr(1, 1))
-                return XOrIOp(operand, const_one.result).result
+                const_one = builder.insert(ConstantOp(IntegerAttr(1, 1))).result
+                return builder.insert(XOrIOp(operand, const_one)).result
             else:
                 self.raise_typing_error(
                     f"Expected projection or boolean for '!' operator,"
@@ -514,7 +513,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 )
 
         if self._parse_optional_token(ProjTokenKind.LPAREN) is not None:
-            expr = self.parse_expression(variables, 0)
+            expr = self.parse_expression(variables, builder, 0)
             self.parse_punctuation(")", " to close parenthesized expression")
             return expr
 
