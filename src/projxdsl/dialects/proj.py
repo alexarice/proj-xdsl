@@ -444,7 +444,7 @@ class IfOp(IRDLOperation):
 
     @classmethod
     def parse(cls, parser: Parser) -> IfOp:
-        condition = parser.parse_operand()
+        condition = parser.parse_operand(ProjectionType())
         true_region = cls.parse_region_with_yield(parser)
         false_region = (
             cls.parse_region_with_yield(parser)

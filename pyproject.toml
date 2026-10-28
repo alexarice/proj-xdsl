@@ -46,6 +46,9 @@ docs = [
 [tool.hatch]
 version.source = "vcs"
 
+[tool.uv]
+sources.xdsl = { git = "https://github.com/xdslproject/xdsl.git", branch = "alexarice/frontend" }
+
 [tool.ruff]
 # Support Python 3.11+.
 target-version = "py311"
