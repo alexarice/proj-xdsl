@@ -39,7 +39,9 @@ def make_angle_var() -> SSAValue:
     return XDSLTestOp(result_types=[AngleType()]).results[0]
 
 
-def parse_expression(code: str, variables: dict[str, SSAValue] | None = None):
+def parse_expression(
+    code: str, variables: dict[str, SSAValue] | None = None
+) -> SSAValue:
     """Helper to parse an expression and return the SSA value."""
     if variables is None:
         variables = {}
@@ -48,6 +50,7 @@ def parse_expression(code: str, variables: dict[str, SSAValue] | None = None):
     builder = Builder(InsertPoint.at_end(block))
     result = parser.parse_expression(variables, builder)
     parser.expect_eof()
+    assert result is not None, "parse_expression returned None in test"
     return result
 
 
@@ -117,6 +120,7 @@ class TestNotOperator:
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         proj = parser.parse_expression({"q": var}, builder)
+        assert proj is not None
         assert proj.type == ProjectionType()
         assert len(list(block.ops)) == 1  # EqOp inserted
 
@@ -170,6 +174,7 @@ class TestAndOperator:
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         result = parser.parse_expression({"q1": q1, "q2": q2}, builder)
+        assert result is not None
         assert isinstance(result.owner, AndOp)
         assert result.type == ProjectionType()
         assert len(list(block.ops)) == 3  # Two EqOps + AndOp
@@ -216,6 +221,7 @@ class TestOrOperator:
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         result = parser.parse_expression({"q1": q1, "q2": q2}, builder)
+        assert result is not None
         assert isinstance(result.owner, OrOp)
         assert result.type == ProjectionType()
         assert len(list(block.ops)) == 3  # Two EqOps + OrOp
@@ -262,6 +268,7 @@ class TestXorOperator:
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         result = parser.parse_expression({"q1": q1, "q2": q2}, builder)
+        assert result is not None
         assert isinstance(result.owner, XorOp)
         assert result.type == ProjectionType()
         assert len(list(block.ops)) == 3  # Two EqOps + XorOp

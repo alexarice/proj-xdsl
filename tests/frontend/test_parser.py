@@ -387,6 +387,7 @@ class TestIntegerParsing:
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         result = parser.parse_expression({}, builder)
+        assert result is not None
         assert isinstance(result.owner, ZeroOp)
         assert result.type == AngleType()
         assert len(list(block.ops)) == 1  # ZeroOp inserted
@@ -719,6 +720,7 @@ class TestAllocExpression:
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         result = parser.parse_expression({}, builder)
+        assert result is not None
         parser.expect_eof()
 
         ops = list(block.ops)
@@ -734,6 +736,7 @@ class TestAllocExpression:
             block = Block()
             builder = Builder(InsertPoint.at_end(block))
             result = parser.parse_expression({}, builder)
+            assert result is not None
             parser.expect_eof()
 
             ops = list(block.ops)
@@ -771,6 +774,7 @@ class TestMeasureExpression:
             local_scope={"p": XDSLTestOp(result_types=[ProjectionType()]).results[0]}
         )
         result = parser.parse_expression(variables, builder)
+        assert result is not None
         parser.expect_eof()
 
         ops = list(block.ops)
@@ -791,6 +795,7 @@ class TestMeasureExpression:
             }
         )
         result = parser.parse_expression(variables, builder)
+        assert result is not None
         parser.expect_eof()
 
         ops = list(block.ops)
@@ -814,6 +819,7 @@ class TestMeasureExpression:
             }
         )
         result = parser.parse_expression(variables, builder)
+        assert result is not None
         parser.expect_eof()
 
         ops = list(block.ops)
@@ -829,6 +835,7 @@ class TestMeasureExpression:
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         result = parser.parse_expression({}, builder)
+        assert result is not None
         parser.expect_eof()
 
         ops = list(block.ops)
@@ -850,6 +857,7 @@ class TestMeasureExpression:
             local_scope={"p": XDSLTestOp(result_types=[ProjectionType()]).results[0]}
         )
         result = parser.parse_expression(variables, builder)
+        assert result is not None
         parser.expect_eof()
 
         ops = list(block.ops)
