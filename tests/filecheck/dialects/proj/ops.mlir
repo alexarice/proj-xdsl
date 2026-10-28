@@ -223,3 +223,17 @@ proj.mixed @measure_mixed(%arg: !proj.projection) -> i1 {
   %m = proj.measure %arg
   proj.return %m : i1
 }
+
+// Test proj.call operation with symbol table verification
+// CHECK-LABEL: proj.pure @callee_fn
+proj.pure @callee_fn(%a: i1) -> i1 {
+  proj.return %a : i1
+}
+
+// CHECK-LABEL: proj.pure @caller_fn
+// CHECK: %[[CALL:.*]] = proj.call @callee_fn(%arg0) : (i1) -> i1
+// CHECK-NEXT: proj.return %[[CALL]] : i1
+proj.pure @caller_fn(%arg0: i1) -> i1 {
+  %call = proj.call @callee_fn(%arg0) : (i1) -> i1
+  proj.return %call : i1
+}

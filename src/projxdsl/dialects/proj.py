@@ -5,10 +5,12 @@ from enum import auto
 
 from xdsl.dialects.builtin import (
     ArrayAttr,
+    FlatSymbolRefAttrConstr,
     FunctionType,
     NoneAttr,
     StringAttr,
     SymbolNameConstraint,
+    SymbolRefAttr,
     i1,
 )
 from xdsl.dialects.utils import (
@@ -38,6 +40,7 @@ from xdsl.irdl import (
     result_def,
     traits_def,
     var_operand_def,
+    var_result_def,
 )
 from xdsl.parser import AttrParser, Parser
 from xdsl.printer import Printer
@@ -46,6 +49,9 @@ from xdsl.traits import (
     IsolatedFromAbove,
     IsTerminator,
     SingleBlockImplicitTerminator,
+    SymbolOpInterface,
+    SymbolTable,
+    SymbolUserOpInterface,
 )
 from xdsl.utils.str_enum import StrEnum
 
@@ -484,7 +490,7 @@ class FuncOpBase(IRDLOperation):
     sym_name = prop_def(SymbolNameConstraint())
     function_type = prop_def(FunctionType)
 
-    traits = traits_def(IsolatedFromAbove())
+    traits = traits_def(IsolatedFromAbove(), SymbolOpInterface())
 
     @classmethod
     def parse(cls, parser: Parser) -> FuncOpBase:
@@ -615,6 +621,118 @@ class ReturnOp(IRDLOperation):
         super().__init__(operands=[operands])
 
 
+class CallOpSymbolUserOpInterface(SymbolUserOpInterface):
+    """Interface for verifying proj.call operations."""
+
+    def verify(self, op: Operation) -> None:
+        from projxdsl.dialects.proj import FuncOpBase
+
+        assert isinstance(op, CallOp)
+
+        found_callee = SymbolTable.lookup_symbol(op, op.callee)
+        if not found_callee:
+            raise VerifyException(f"'{op.callee}' could not be found in symbol table")
+
+        if not isinstance(found_callee, FuncOpBase):
+            raise VerifyException(f"'{op.callee}' does not reference a valid function")
+
+        # Check function kind compatibility
+        # Hierarchy: pure ⊆ unitary ⊆ mixed
+        caller_func = op.parent_op()
+        while caller_func is not None and caller_func.name not in (
+            "proj.pure",
+            "proj.unitary",
+            "proj.mixed",
+        ):
+            caller_func = caller_func.parent_op()
+
+        if caller_func is not None:
+            callee_kind = found_callee.name
+            caller_kind = caller_func.name
+
+            # pure can only call pure
+            # unitary can call pure, unitary
+            # mixed can call pure, unitary, mixed
+            kind_hierarchy = {"proj.pure": 0, "proj.unitary": 1, "proj.mixed": 2}
+            callee_level = kind_hierarchy.get(callee_kind, -1)
+            caller_level = kind_hierarchy.get(caller_kind, -1)
+
+            if callee_level > caller_level:
+                raise VerifyException(
+                    f"Cannot call {callee_kind} function from {caller_kind} function. "
+                    f"{caller_kind} functions can only call functions of equal or "
+                    "lower privilege level."
+                )
+
+        if len(found_callee.function_type.inputs) != len(op.arguments):
+            raise VerifyException(
+                f"incorrect number of operands for callee: "
+                f"expected {len(found_callee.function_type.inputs)}, "
+                f"got {len(op.arguments)}"
+            )
+
+        if len(found_callee.function_type.outputs) != len(op.result_types):
+            raise VerifyException(
+                f"incorrect number of results for callee: "
+                f"expected {len(found_callee.function_type.outputs)}, "
+                f"got {len(op.result_types)}"
+            )
+
+        for idx, (found_operand, operand) in enumerate(
+            zip(found_callee.function_type.inputs, (arg.type for arg in op.arguments))
+        ):
+            if found_operand != operand:
+                raise VerifyException(
+                    f"operand type mismatch: expected operand type {found_operand}, "
+                    f"but provided {operand} for operand number {idx}"
+                )
+
+        for idx, (found_res, res) in enumerate(
+            zip(found_callee.function_type.outputs, op.result_types)
+        ):
+            if found_res != res:
+                raise VerifyException(
+                    f"result type mismatch: expected result type {found_res}, "
+                    f"but provided {res} for result number {idx}"
+                )
+
+
+@irdl_op_definition
+class CallOp(IRDLOperation):
+    """
+    Function call operation.
+    Calls a function by symbol reference with the given arguments.
+    """
+
+    name = "proj.call"
+
+    callee = prop_def(FlatSymbolRefAttrConstr)
+    arguments = var_operand_def()
+    res = var_result_def()
+
+    traits = traits_def(
+        CallOpSymbolUserOpInterface(),
+    )
+
+    assembly_format = (
+        "$callee `(` $arguments `)` attr-dict `:` functional-type($arguments, $res)"
+    )
+
+    def __init__(
+        self,
+        callee: str | SymbolRefAttr,
+        arguments: Sequence[SSAValue],
+        result_types: Sequence[Attribute],
+    ):
+        if isinstance(callee, str):
+            callee = SymbolRefAttr(callee)
+        super().__init__(
+            operands=[arguments],
+            result_types=[result_types],
+            properties={"callee": callee},
+        )
+
+
 Proj = Dialect(
     "proj",
     [
@@ -630,6 +748,7 @@ Proj = Dialect(
         YieldOp,
         IfOp,
         ReturnOp,
+        CallOp,
         PureOp,
         UnitaryOp,
         MixedOp,
