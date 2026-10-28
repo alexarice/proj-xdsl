@@ -257,10 +257,11 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 angle = self.parse_expression(variables, builder, func_kind=func_kind)
 
                 # Check that the expression has angle type
-                if angle.type != AngleType():
+                if angle is None or angle.type != AngleType():
+                    error_type = angle.type if angle else "()"
                     self.raise_typing_error(
                         f"Expected angle expression for phase statement,"
-                        f" got {angle.type}"
+                        f" got {error_type}"
                     )
 
             builder.insert(PhaseOp(angle))
@@ -303,9 +304,10 @@ class ProjParser(GenericParser[ProjTokenKind]):
         condition = self.parse_expression(variables, builder, func_kind=func_kind)
 
         # Check that the condition is a projection
-        if condition.type != ProjectionType():
+        if condition is None or condition.type != ProjectionType():
+            error_type = condition.type if condition else "()"
             self.raise_typing_error(
-                f"Expected projection type for 'if' condition, got {condition.type}"
+                f"Expected projection type for 'if' condition, got {error_type}"
             )
 
         # Parse the true block (with scoped variables)
@@ -364,6 +366,12 @@ class ProjParser(GenericParser[ProjTokenKind]):
         # Parse the expression
         expr_value = self.parse_expression(variables, builder, func_kind=func_kind)
 
+        # Let statements require a value
+        if expr_value is None:
+            self.raise_typing_error(
+                "Expected expression value for 'let' statement, got '()'"
+            )
+
         # Validate type if annotation was provided
         if expected_type is not None and expr_value.type != expected_type:
             self.raise_typing_error(
@@ -384,7 +392,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         min_bp: int = 0,
         initial_error: str | None = None,
         func_kind: FuncKind = FuncKind.MIXED,
-    ) -> SSAValue:
+    ) -> SSAValue | None:
         """
         Parse a projection expression using Pratt parsing.
 
@@ -397,7 +405,8 @@ class ProjParser(GenericParser[ProjTokenKind]):
             func_kind: Function kind for operation validation
 
         Returns:
-            SSA value of the parsed expression
+            SSA value of the parsed expression, or None for void expressions
+            (e.g., function calls with no return value)
 
         Grammar:
             expr ::= primary postfix* infix*
@@ -417,9 +426,10 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 self._consume_token()
                 state = self.parse_state()
 
-                if not isinstance(lhs.type, QubitType):
+                if lhs is None or not isinstance(lhs.type, QubitType):
+                    error_type = lhs.type if lhs else "()"
                     self.raise_typing_error(
-                        f"Expected qubit type for '==' operator, got {lhs.type}"
+                        f"Expected qubit type for '==' operator, got {error_type}"
                     )
 
                 # Check basis compatibility
@@ -470,13 +480,15 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 )
 
                 # Check that both operands are angles
-                if lhs.type != AngleType():
+                if lhs is None or lhs.type != AngleType():
+                    error_type = lhs.type if lhs else "()"
                     self.raise_typing_error(
-                        f"Expected angle for '+' left operand, got {lhs.type}"
+                        f"Expected angle for '+' left operand, got {error_type}"
                     )
-                if rhs.type != AngleType():
+                if rhs is None or rhs.type != AngleType():
+                    error_type = rhs.type if rhs else "()"
                     self.raise_typing_error(
-                        f"Expected angle for '+' right operand, got {rhs.type}"
+                        f"Expected angle for '+' right operand, got {error_type}"
                     )
 
                 lhs = builder.insert(AddOp(lhs, rhs)).result
@@ -500,13 +512,13 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
     def _build_binary_predicate_op(
         self,
-        lhs: SSAValue,
-        rhs: SSAValue,
+        lhs: SSAValue | None,
+        rhs: SSAValue | None,
         classical_op: type[AndIOp | OrIOp | XOrIOp],
         projection_op: type[AndOp | OrOp | XorOp],
         op_name: str,
         builder: Builder,
-    ) -> SSAValue:
+    ) -> SSAValue | None:
         """
         Build a binary operation with proper type checking.
 
@@ -524,6 +536,17 @@ class ProjParser(GenericParser[ProjTokenKind]):
         Raises:
             TypeCheckError: If operand types are incompatible
         """
+        if lhs is None:
+            self.raise_typing_error(
+                f"Invalid left operand for '{op_name}':"
+                f" expected boolean or projection, got '()'"
+            )
+        if rhs is None:
+            self.raise_typing_error(
+                f"Invalid right operand for '{op_name}':"
+                f" expected boolean or projection, got '()'"
+            )
+
         lhs_is_bool = lhs.type == i1
         rhs_is_bool = rhs.type == i1
         lhs_is_proj = lhs.type == ProjectionType()
@@ -555,7 +578,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         builder: Builder,
         initial_error: str | None = None,
         func_kind: FuncKind = FuncKind.MIXED,
-    ) -> SSAValue:
+    ) -> SSAValue | None:
         """
         Parse prefix operators and primary expressions.
 
@@ -568,6 +591,9 @@ class ProjParser(GenericParser[ProjTokenKind]):
             initial_error: Error message if first token cannot start
                 an expression (should mention the unexpected token)
             func_kind: Function kind for operation validation
+
+        Returns:
+            SSA value of the parsed primary expression, or None for void expressions
         """
         if (token := self._parse_optional_token(ProjTokenKind.IDENTIFIER)) is not None:
             var_name = token.text
@@ -606,9 +632,10 @@ class ProjParser(GenericParser[ProjTokenKind]):
             )
 
             # Check that the operand is an angle
-            if angle.type != AngleType():
+            if angle is None or angle.type != AngleType():
+                error_type = angle.type if angle else "()"
                 self.raise_typing_error(
-                    f"Expected angle for '*' operand, got {angle.type}"
+                    f"Expected angle for '*' operand, got {error_type}"
                 )
 
             return builder.insert(ScalarMultOp(scalar, angle)).result
@@ -617,6 +644,11 @@ class ProjParser(GenericParser[ProjTokenKind]):
             operand = self.parse_expression(
                 variables, builder, self._PREFIX_NOT_BP, func_kind=func_kind
             )
+
+            if operand is None:
+                self.raise_typing_error(
+                    "Expected projection or boolean for '!' operator, got '()'"
+                )
 
             if operand.type == ProjectionType():
                 return builder.insert(NotOp(operand)).result
@@ -646,6 +678,10 @@ class ProjParser(GenericParser[ProjTokenKind]):
             operand = self.parse_expression(
                 variables, builder, self._PREFIX_MEASURE_BP, func_kind=func_kind
             )
+            if operand is None:
+                self.raise_typing_error(
+                    "Expected projection or boolean for 'measure' operator, got '()'"
+                )
             if operand.type == ProjectionType():
                 return builder.insert(MeasureOp(operand)).result
             elif operand.type == i1:
