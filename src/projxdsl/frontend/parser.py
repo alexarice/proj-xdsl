@@ -21,6 +21,7 @@ from projxdsl.dialects.proj import (
     AndOp,
     Basis,
     BasisAttr,
+    CallOp,
     EqOp,
     FromBoolOp,
     IfOp,
@@ -598,10 +599,18 @@ class ProjParser(GenericParser[ProjTokenKind]):
         if (token := self._parse_optional_token(ProjTokenKind.IDENTIFIER)) is not None:
             var_name = token.text
 
-            if var_name not in variables:
-                self.raise_error(f"Undefined variable: {var_name}")
+            # Check if this is a function call by peeking at the next token
+            if self._current_token.kind == ProjTokenKind.LPAREN:
+                # Function call
+                return self._parse_function_call(
+                    var_name, variables, builder, func_kind
+                )
+            else:
+                # Variable reference
+                if var_name not in variables:
+                    self.raise_error(f"Undefined variable: {var_name}")
 
-            return variables[var_name]
+                return variables[var_name]
 
         if self._parse_optional_token(ProjTokenKind.TRUE) is not None:
             return builder.insert(ConstantOp(IntegerAttr(1, 1))).result
@@ -702,6 +711,116 @@ class ProjParser(GenericParser[ProjTokenKind]):
             initial_error
             or f"Unexpected token in expression: {self._current_token.text}"
         )
+
+    def _parse_function_call_argument(
+        self,
+        variables: Mapping[str, SSAValue],
+        builder: Builder,
+        func_kind: FuncKind,
+    ) -> SSAValue:
+        """
+        Parse a single function call argument.
+
+        Args:
+            variables: Mapping from variable names to SSA values
+            builder: Builder for inserting operations
+            func_kind: Function kind of the caller (for validation)
+
+        Returns:
+            SSA value of the parsed argument
+
+        Raises:
+            TypeCheckError: If the argument is a void expression
+        """
+        arg = self.parse_expression(variables, builder, func_kind=func_kind)
+        if arg is None:
+            self.raise_typing_error(
+                "Invalid argument for function call: expected value, got '()'"
+            )
+        return arg
+
+    def _parse_function_call(
+        self,
+        func_name: str,
+        variables: Mapping[str, SSAValue],
+        builder: Builder,
+        func_kind: FuncKind,
+    ) -> SSAValue | None:
+        """
+        Parse a function call expression.
+
+        Args:
+            func_name: Name of the function being called
+            variables: Mapping from variable names to SSA values
+            builder: Builder for inserting operations
+            func_kind: Function kind of the caller (for validation)
+
+        Returns:
+            SSA value of the call result, or None if the function returns void
+        """
+        # Parse opening parenthesis and argument list
+        args = self.parse_list(
+            delimiter=self.Delimiter.PAREN,
+            parse=lambda: self._parse_function_call_argument(
+                variables, builder, func_kind
+            ),
+            separator=",",
+            context_msg=" in function call arguments",
+        )
+
+        # Look up function signature
+        if func_name not in self.functions:
+            self.raise_error(f"Undefined function: {func_name}")
+
+        func_sig = self.functions[func_name]
+
+        # Validate function kind compatibility
+        # Hierarchy: pure ⊆ unitary ⊆ mixed
+        caller_kind = func_kind.value
+        callee_kind = func_sig.kind.value
+
+        # pure can only call pure
+        # unitary can call pure, unitary
+        # mixed can call pure, unitary, mixed
+        kind_hierarchy = {"pure": 0, "unitary": 1, "mixed": 2}
+        if kind_hierarchy[callee_kind] > kind_hierarchy[caller_kind]:
+            self.raise_error(
+                f"Cannot call {callee_kind} function from {caller_kind} function"
+            )
+
+        # Validate argument count
+        expected_arg_count = len(func_sig.function_type.inputs.data)
+        if len(args) != expected_arg_count:
+            self.raise_error(
+                f"Function '{func_name}' expects {expected_arg_count} argument(s),"
+                f" got {len(args)}"
+            )
+
+        # Validate argument types
+        input_types = func_sig.function_type.inputs.data
+        for i, (arg, expected_type) in enumerate(zip(args, input_types, strict=False)):
+            if arg.type != expected_type:
+                self.raise_typing_error(
+                    f"Type mismatch for argument {i + 1} of function '{func_name}':"
+                    f" expected {expected_type}, got {arg.type}"
+                )
+
+        # Get result types
+        result_types = func_sig.function_type.outputs.data
+
+        # Create the call operation
+        call_op = builder.insert(
+            CallOp(func_name, args, result_types if result_types else [])
+        )
+
+        # Return result or None for void functions
+        if len(result_types) == 0:
+            return None
+        elif len(result_types) == 1:
+            return call_op.res[0]
+        else:
+            # Multiple results - for now return first (should handle tuples)
+            return call_op.res[0]
 
     def parse_func(self) -> PureOp | UnitaryOp | MixedOp:
         """

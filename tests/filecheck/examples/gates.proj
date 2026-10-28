@@ -118,3 +118,29 @@ unitary fn CondX(b: bool, q: qubit<X>) {
     ph(pi)
   }
 }
+
+// CHECK-LABEL: proj.unitary @CX_call
+// CHECK:        proj.eq %c : !proj.qubit<z>, #proj.state<one>
+// CHECK-NEXT:   proj.if %[[EQ:.*]] {
+// CHECK-NEXT:     proj.call @X(%q) : (!proj.qubit<x>) -> ()
+// CHECK-NEXT:     proj.yield
+// CHECK-NEXT:   }
+// CHECK-NEXT:   proj.return
+unitary fn CX_call(c: qubit<Z>, q: qubit<X>) {
+  if c == |1> {
+    X(q)
+  }
+}
+
+// CHECK-LABEL: proj.unitary @CZ_call
+// CHECK:        proj.eq %c : !proj.qubit<z>, #proj.state<one>
+// CHECK-NEXT:   proj.if %[[EQ:.*]] {
+// CHECK-NEXT:     proj.call @Z(%q) : (!proj.qubit<z>) -> ()
+// CHECK-NEXT:     proj.yield
+// CHECK-NEXT:   }
+// CHECK-NEXT:   proj.return
+unitary fn CZ_call(c: qubit<Z>, q: qubit<Z>) {
+  if c == |1> {
+    Z(q)
+  }
+}

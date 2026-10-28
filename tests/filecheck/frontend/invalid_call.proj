@@ -1,0 +1,121 @@
+// RUN: xdsl-opt %s --parsing-diagnostics --split-input-file | filecheck %s
+
+// -----
+// Test: Undefined function
+// CHECK: Undefined function: nonexistent
+pure fn caller(q: qubit) -> proj {
+    let p = q == |0>;
+    nonexistent(p)
+}
+
+// -----
+// Test: Pure calling unitary
+// CHECK: Cannot call unitary function from pure function
+unitary fn unitary_fn(p: proj) -> proj { p }
+pure fn caller(q: qubit) -> proj {
+    let p = q == |0>;
+    unitary_fn(p)
+}
+
+// -----
+// Test: Pure calling mixed
+// CHECK: Cannot call mixed function from pure function
+mixed fn mixed_fn(p: proj) -> proj { p }
+pure fn caller(q: qubit) -> proj {
+    let p = q == |0>;
+    mixed_fn(p)
+}
+
+// -----
+// Test: Unitary calling mixed
+// CHECK: Cannot call mixed function from unitary function
+mixed fn mixed_fn(p: proj) -> proj { p }
+unitary fn caller(q: qubit) -> proj {
+    let p = q == |0>;
+    mixed_fn(p)
+}
+
+// -----
+// Test: Wrong argument count (too few)
+// CHECK: Function 'expects_two' expects 2 argument(s), got 1
+pure fn expects_two(p1: proj, p2: proj) -> proj { p1 && p2 }
+pure fn caller(q: qubit) -> proj {
+    let p = q == |0>;
+    expects_two(p)
+}
+
+// -----
+// Test: Wrong argument count (too many)
+// CHECK: Function 'expects_one' expects 1 argument(s), got 2
+pure fn expects_one(p: proj) -> proj { p }
+pure fn caller(q: qubit) -> proj {
+    let p1 = q == |0>;
+    let p2 = q == |1>;
+    expects_one(p1, p2)
+}
+
+// -----
+// Test: Type mismatch (bool instead of proj)
+// CHECK: Type mismatch for argument 1 of function 'expects_proj': expected !proj.projection, got i1
+pure fn expects_proj(p: proj) -> proj { p }
+pure fn caller(q: qubit) -> proj {
+    expects_proj(true)
+}
+
+// -----
+// Test: Type mismatch (proj instead of bool)
+// CHECK: Type mismatch for argument 1 of function 'expects_bool': expected i1, got !proj.projection
+pure fn expects_bool(b: bool) -> bool { b }
+pure fn caller(q: qubit) -> bool {
+    let p = q == |0>;
+    expects_bool(p)
+}
+
+// -----
+// Test: Type mismatch (qubit instead of proj)
+// CHECK: Type mismatch for argument 1 of function 'expects_proj': expected !proj.projection, got !proj.qubit
+pure fn expects_proj(p: proj) -> proj { p }
+pure fn caller(q: qubit) -> proj {
+    expects_proj(q)
+}
+
+// -----
+// Test: Type mismatch in second argument
+// CHECK: Type mismatch for argument 2 of function 'and_fn': expected !proj.projection, got i1
+pure fn and_fn(p1: proj, p2: proj) -> proj { p1 && p2 }
+pure fn caller(q: qubit) -> proj {
+    let p = q == |0>;
+    and_fn(p, true)
+}
+
+// -----
+// Test: Void expression as argument
+// CHECK: Invalid argument for function call: expected value, got '()'
+pure fn void_fn() { }
+pure fn expects_arg(p: proj) -> proj { p }
+pure fn caller(q: qubit) -> proj {
+    let p = q == |0>;
+    expects_arg(void_fn())
+}
+
+// -----
+// Test: Multiple void arguments (first is void)
+// CHECK: Invalid argument for function call: expected value, got '()'
+pure fn void_fn() { }
+pure fn expects_two(p1: proj, p2: proj) -> proj { p1 && p2 }
+pure fn caller(q: qubit) -> proj {
+    let p = q == |0>;
+    expects_two(void_fn(), p)
+}
+
+// -----
+// Test: Void expression in middle of argument list
+// CHECK: Invalid argument for function call: expected value, got '()'
+pure fn void_fn() { }
+pure fn expects_three(p1: proj, p2: proj, p3: proj) -> proj { p1 && p2 && p3 }
+pure fn caller(q: qubit) -> proj {
+    let p1 = q == |0>;
+    let p2 = q == |1>;
+    let p3 = q == |+>;
+    expects_three(p1, void_fn(), p3)
+}
