@@ -327,7 +327,7 @@ class EqOp(IRDLOperation):
     state = prop_def(StateAttr)
     result = result_def(ProjectionType)
 
-    assembly_format = "$qubit `,` $state attr-dict `:` type($qubit)"
+    assembly_format = "$qubit `:` type($qubit) `,` qualified($state) attr-dict"
 
     def __init__(self, qubit: SSAValue, state: StateAttr):
         super().__init__(
