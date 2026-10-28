@@ -7,7 +7,7 @@
 // CHECK-NEXT:     proj.phase %[[PI]]
 // CHECK-NEXT:     proj.yield
 // CHECK-NEXT:   }
-// CHECK-NEXT:   proj.return
+// CHECK-NEXT:   proj.return	
 unitary fn X(q: qubit<X>) {
   if q == |-> {
     ph(pi)

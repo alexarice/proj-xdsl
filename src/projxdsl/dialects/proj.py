@@ -508,7 +508,7 @@ class FuncOpBase(IRDLOperation):
         )
         func = cls(
             sym_name=name,
-            function_type=(input_types, return_types),
+            function_type=FunctionType.from_lists(input_types, return_types),
             body=region,
         )
         if extra_attrs is not None:
@@ -540,13 +540,11 @@ class FuncOpBase(IRDLOperation):
     def __init__(
         self,
         sym_name: str | StringAttr,
-        function_type: FunctionType | tuple[Sequence[Attribute], Sequence[Attribute]],
+        function_type: FunctionType,
         body: Region | None = None,
     ):
         if isinstance(sym_name, str):
             sym_name = StringAttr(sym_name)
-        if isinstance(function_type, tuple):
-            function_type = FunctionType.from_lists(function_type[0], function_type[1])
         if body is None:
             body = Region()
 

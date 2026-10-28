@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import NoReturn
+from dataclasses import dataclass
+from typing import NamedTuple, NoReturn
 
 from xdsl.builder import Builder
 from xdsl.dialects.arith import AndIOp, ConstantOp, OrIOp, XOrIOp
-from xdsl.dialects.builtin import IntegerAttr, ModuleOp, NoneAttr, i1
+from xdsl.dialects.builtin import FunctionType, IntegerAttr, ModuleOp, NoneAttr, i1
 from xdsl.ir import BlockArgument, Region, SSAValue, TypeAttribute
 from xdsl.parser.generic_parser import GenericParser, ParserState
 from xdsl.utils.exceptions import ParseError
@@ -48,23 +49,35 @@ class TypeCheckError(ParseError):
     pass
 
 
-class ProjParserState(ParserState[ProjTokenKind]):
-    """Parser state for proj-xdsl surface syntax."""
+class FuncSignature(NamedTuple):
+    """
+    Function signature information for function call resolution.
 
-    def __init__(self, lexer: ProjLexer):
-        super().__init__(lexer)
+    Stores the essential type information needed to validate function calls.
+    """
+
+    kind: FuncKind
+    function_type: FunctionType
 
 
+@dataclass
 class ProjParser(GenericParser[ProjTokenKind]):
     """
     Recursive descent parser for proj-xdsl surface syntax.
     Extends xDSL's GenericParser infrastructure.
     """
 
+    functions: dict[str, FuncSignature]
+    """
+    Symbol table mapping function names to their signatures.
+    Populated during module parsing, used for function call resolution.
+    """
+
     def __init__(self, code: str, filename: str = "<input>"):
         input = Input(code, filename)
         lexer = ProjLexer(input)
-        super().__init__(ProjParserState(lexer))
+        self.functions = {}
+        super().__init__(ParserState(lexer))
 
     # Binding powers for Pratt parsing
     # Higher number = tighter binding
@@ -719,6 +732,14 @@ class ProjParser(GenericParser[ProjTokenKind]):
             return_type = self.parse_type()
             return_types.append(return_type)
 
+        # Create FunctionType and register in symbol table
+        func_type = FunctionType.from_lists(input_types, return_types)
+        signature = FuncSignature(
+            kind=func_kind,
+            function_type=func_type,
+        )
+        self.functions[func_name] = signature
+
         # Parse function body
         @Builder.region(input_types)
         def parse_body(inner_builder: Builder, args: tuple[BlockArgument, ...]):
@@ -759,7 +780,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         # Create the function operation
         return func_op_class(
             sym_name=func_name,
-            function_type=(input_types, return_types),
+            function_type=func_type,
             body=body_region,
         )
 
@@ -772,6 +793,9 @@ class ProjParser(GenericParser[ProjTokenKind]):
         Returns:
             The parsed module operation containing all function definitions
         """
+        # Clear function symbol table for fresh parsing
+        self.functions = {}
+
         # Parse all function definitions
         func_ops: list[PureOp | UnitaryOp | MixedOp] = []
         while self._current_token.kind != ProjTokenKind.EOF:

@@ -1359,3 +1359,67 @@ class TestModuleParsing:
         assert isinstance(module_op, ModuleOp)
         ops = list(module_op.body.ops)
         assert len(ops) == 2
+
+    def test_parse_module_function_signature_table(self):
+        """Test that function signatures are registered in the symbol table."""
+        from projxdsl.frontend.parser import FuncSignature
+
+        parser = ProjParser(
+            "pure fn foo(a: bool, b: bool) -> bool { a && b }\n"
+            "unitary fn bar(p: proj) -> proj { p }\n"
+            "mixed fn baz() { }"
+        )
+        module_op = parser.parse_module()
+        parser.expect_eof()
+
+        assert isinstance(module_op, ModuleOp)
+
+        # Check symbol table has all three functions
+        assert len(parser.functions) == 3
+        assert "foo" in parser.functions
+        assert "bar" in parser.functions
+        assert "baz" in parser.functions
+
+        # Verify foo signature
+        foo_sig = parser.functions["foo"]
+        assert isinstance(foo_sig, FuncSignature)
+        assert foo_sig.kind.value == "pure"
+        assert len(foo_sig.function_type.inputs.data) == 2
+        assert foo_sig.function_type.inputs.data[0] == i1
+        assert foo_sig.function_type.inputs.data[1] == i1
+        assert len(foo_sig.function_type.outputs.data) == 1
+        assert foo_sig.function_type.outputs.data[0] == i1
+
+        # Verify bar signature
+        bar_sig = parser.functions["bar"]
+        assert isinstance(bar_sig, FuncSignature)
+        assert bar_sig.kind.value == "unitary"
+        assert len(bar_sig.function_type.inputs.data) == 1
+        assert bar_sig.function_type.inputs.data[0] == ProjectionType()
+        assert len(bar_sig.function_type.outputs.data) == 1
+        assert bar_sig.function_type.outputs.data[0] == ProjectionType()
+
+        # Verify baz signature
+        baz_sig = parser.functions["baz"]
+        assert isinstance(baz_sig, FuncSignature)
+        assert baz_sig.kind.value == "mixed"
+        assert len(baz_sig.function_type.inputs.data) == 0
+        assert len(baz_sig.function_type.outputs.data) == 0
+
+    def test_parse_module_clears_symbol_table(self):
+        """Test that symbol table is cleared between module parses."""
+        parser = ProjParser("pure fn first() { }")
+        parser.parse_module()
+
+        # First parse should have 'first'
+        assert "first" in parser.functions
+        assert len(parser.functions) == 1
+
+        # Parse a new module - should clear old symbols
+        parser2 = ProjParser("pure fn second() { }")
+        parser2.parse_module()
+
+        # Second parse should only have 'second', not 'first'
+        assert "second" in parser2.functions
+        assert "first" not in parser2.functions
+        assert len(parser2.functions) == 1
