@@ -361,6 +361,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         # Check if already defined in current scope only
         if var_name in variables.local_scope:
             self.raise_error(f"Variable '{var_name}' is already defined")
+        expr_value.name_hint = var_name
         variables[var_name] = expr_value
 
     def parse_expression(
@@ -724,6 +725,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
             # Create variables scoped dict with parameters
             variables = ScopedDict[str, SSAValue](name=func_name)
             for param_name, block_arg in zip(param_names, args, strict=True):
+                block_arg.name_hint = param_name
                 variables[param_name] = block_arg
 
             # Parse statements using parse_list
