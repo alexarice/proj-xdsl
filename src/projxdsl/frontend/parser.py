@@ -12,6 +12,7 @@ from xdsl.ir import BlockArgument, Region, SSAValue, TypeAttribute
 from xdsl.parser.generic_parser import GenericParser, ParserState
 from xdsl.utils.exceptions import ParseError
 from xdsl.utils.lexer import Input
+from xdsl.utils.scoped_dict import ScopedDict
 
 from projxdsl.dialects.angle import AddOp, AngleType, PiOp, ScalarMultOp, ZeroOp
 from projxdsl.dialects.proj import (
@@ -214,7 +215,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
     def parse_statement(
         self,
-        variables: dict[str, SSAValue],
+        variables: ScopedDict[str, SSAValue],
         builder: Builder,
         func_kind: FuncKind = FuncKind.MIXED,
     ) -> SSAValue | None:
@@ -275,7 +276,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
     def _parse_if_statement(
         self,
-        variables: dict[str, SSAValue],
+        variables: ScopedDict[str, SSAValue],
         builder: Builder,
         func_kind: FuncKind,
     ) -> IfOp:
@@ -296,12 +297,12 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
         # Parse the true block (with scoped variables)
         def parse_statements(inner_builder: Builder):
-            # Create a copy of variables for scoping
-            block_variables = dict(variables)
+            # Create a child scope - modifications won't affect parent
+            scoped_vars = ScopedDict[str, SSAValue](parent=variables)
             self.parse_list(
                 delimiter=self.Delimiter.BRACES,
                 parse=lambda: self.parse_statement(
-                    block_variables, inner_builder, func_kind
+                    scoped_vars, inner_builder, func_kind
                 ),
                 separator=";",
                 context_msg=" in statement block",
@@ -322,7 +323,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
     def _parse_let_statement(
         self,
-        variables: dict[str, SSAValue],
+        variables: ScopedDict[str, SSAValue],
         builder: Builder,
         func_kind: FuncKind,
     ) -> None:
@@ -356,8 +357,9 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 f"Type mismatch: expected {expected_type}, got {expr_value.type}"
             )
 
-        # Add the binding to variables (mutates the dict)
-        if var_name in variables:
+        # Add the binding to variables (mutates the current scope)
+        # Check if already defined in current scope only
+        if var_name in variables.local_scope:
             self.raise_error(f"Variable '{var_name}' is already defined")
         variables[var_name] = expr_value
 
@@ -719,8 +721,8 @@ class ProjParser(GenericParser[ProjTokenKind]):
         # Parse function body
         @Builder.region(input_types)
         def parse_body(inner_builder: Builder, args: tuple[BlockArgument, ...]):
-            # Create variables dict with parameters
-            variables: dict[str, SSAValue] = {}
+            # Create variables scoped dict with parameters
+            variables = ScopedDict[str, SSAValue](name=func_name)
             for param_name, block_arg in zip(param_names, args, strict=True):
                 variables[param_name] = block_arg
 
