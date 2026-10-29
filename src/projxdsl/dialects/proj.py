@@ -32,7 +32,12 @@ from xdsl.ir import (
     VerifyException,
 )
 from xdsl.irdl import (
+    AnyAttr,
+    AttrConstraint,
+    IRDLAttrConstraint,
     IRDLOperation,
+    ParamAttrConstraint,
+    VarConstraint,
     irdl_attr_definition,
     irdl_op_definition,
     irdl_to_attr_constraint,
@@ -199,6 +204,18 @@ class QubitType(ParametrizedAttribute, TypeAttribute):
 
     def __init__(self, borrow_type: BasisAttr | NoneAttr = NoneAttr()):
         super().__init__(borrow_type)
+
+    @staticmethod
+    def constr(
+        borrow_type: IRDLAttrConstraint[BasisAttr | NoneAttr] | None = None,
+    ) -> AttrConstraint[QubitType]:
+        """
+        Create a constraint for QubitType with optional borrow_type constraint.
+        """
+        return ParamAttrConstraint.get(
+            QubitType,
+            borrow_type if borrow_type is not None else AnyAttr(),
+        )
 
 
 class FuncOpBase(IRDLOperation):
@@ -413,6 +430,32 @@ class FromBoolOp(IRDLOperation):
 
     def __init__(self, input: SSAValue):
         super().__init__(operands=[input], result_types=[ProjectionType()])
+
+
+@irdl_op_definition
+class BorrowBasisOp(IRDLOperation):
+    """
+    Cast operation that restricts a qubit to a specific basis.
+    Takes an unrestricted qubit and returns a basis-restricted qubit.
+    This is a no-op at runtime, but enables static basis checking.
+    """
+
+    name = "proj.borrow_basis"
+
+    _B: ClassVar = VarConstraint[BasisAttr].get("B", BasisAttr)
+
+    qubit = operand_def(QubitType.constr(NoneAttr))
+    basis = prop_def(_B)
+    result = result_def(QubitType.constr(_B))
+
+    assembly_format = "$qubit `,` qualified($basis) attr-dict"
+
+    def __init__(self, qubit: SSAValue, basis: BasisAttr):
+        super().__init__(
+            operands=[qubit],
+            properties={"basis": basis},
+            result_types=[QubitType(basis)],
+        )
 
 
 @irdl_op_definition
@@ -784,6 +827,7 @@ Proj = Dialect(
     "proj",
     [
         AllocOp,
+        BorrowBasisOp,
         NotOp,
         AndOp,
         OrOp,

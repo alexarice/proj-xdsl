@@ -237,3 +237,34 @@ proj.pure @caller_fn(%arg0: i1) -> i1 {
   %call = proj.call @callee_fn(%arg0) : (i1) -> i1
   proj.return %call : i1
 }
+
+// Test proj.borrow_basis with different bases
+func.func @test_borrow_basis_x(%arg0: !proj.qubit) -> !proj.qubit<x> {
+  // CHECK: %[[X:.*]] = proj.borrow_basis %arg0, #proj.basis<x>
+  %x = proj.borrow_basis %arg0, #proj.basis<x>
+  func.return %x : !proj.qubit<x>
+}
+
+func.func @test_borrow_basis_y(%arg0: !proj.qubit) -> !proj.qubit<y> {
+  // CHECK: %[[Y:.*]] = proj.borrow_basis %arg0, #proj.basis<y>
+  %y = proj.borrow_basis %arg0, #proj.basis<y>
+  func.return %y : !proj.qubit<y>
+}
+
+func.func @test_borrow_basis_z(%arg0: !proj.qubit) -> !proj.qubit<z> {
+  // CHECK: %[[Z:.*]] = proj.borrow_basis %arg0, #proj.basis<z>
+  %z = proj.borrow_basis %arg0, #proj.basis<z>
+  func.return %z : !proj.qubit<z>
+}
+
+// Test proj.borrow_basis in unitary function with eq
+// CHECK: proj.unitary @borrow_and_project(%arg0: !proj.qubit) {
+// CHECK-NEXT:   %[[XB:.*]] = proj.borrow_basis %arg0, #proj.basis<x>
+// CHECK-NEXT:   %[[P:.*]] = proj.eq %[[XB]] : !proj.qubit<x>, #proj.state<plus>
+// CHECK-NEXT:   proj.return
+// CHECK-NEXT: }
+proj.unitary @borrow_and_project(%arg0: !proj.qubit) {
+  %xb = proj.borrow_basis %arg0, #proj.basis<x>
+  %p = proj.eq %xb : !proj.qubit<x>, #proj.state<plus>
+  proj.return
+}
