@@ -361,132 +361,116 @@ fn return_borrowed(q1: qubit, q2: qubit) -> qubit {
 
 ## Borrow Analysis Algorithm
 
-### Phase 1: Signature Inference
+The borrow checker is a forward dataflow analysis that runs after liveness analysis. It tracks which qubits are borrowed, in which bases, and by which projections.
 
-For each function:
-1. Walk function body
-2. Track active borrows per qubit (SSA value → set of bases)
-3. At control flow merge points: union of bases from all paths
-4. Multiple bases for same qubit → mark as total borrow
-5. Determine which borrows escape in return value
+### Borrow State
 
-### Phase 2: Body Validation
-
-For each function:
-1. Verify qubit parameter usage matches signature
-2. Verify returned projections only borrow from input `proj` parameters
-3. Verify returned qubits are locally allocated (not parameters)
-4. Verify no incompatible borrows at any program point
-5. Verify total borrows don't have new borrows created
-
-### Phase 3: Call-Site Validation
-
-For each call:
-1. Check actual qubit params have required basis availability
-2. Check actual projection params are not currently borrowed
-3. Check no conflicts between new borrows and existing borrows
-
-## Function Kinds
-
-Functions are classified into three kinds based on their effect on quantum state:
-
-### `pure fn` - Purely Classical Computation
-- **Semantics**: No quantum operations; classical computation only
-- **Allowed**: Classical control, arithmetic, boolean logic
-- **Disallowed**: Qubit allocation, phase gates, projections, measurement
-- **Return types**: Any type (typically `bool`, `angle`), or void `()`
-- **Use case**: Classical post-processing, computing classical functions from measurement results
-
-```rust
-pure fn classical_post_process(m1: bool, m2: bool) -> bool {
-    return m1 && m2
-}
-
-pure fn add_angles(a1: angle, a2: angle) -> angle {
-    return a1 + a2
-}
-```
-
-### `unitary fn` - Unitary Evolution
-- **Semantics**: Quantum operations without measurement or allocation
-- **Allowed**: Projections, phase gates, unitary transforms on borrowed qubits
-- **Disallowed**: Qubit allocation (`alloc`), measurement (`measure`)
-- **Return types**: Any type, or void `()`
-- **Use case**: Gates (void), oracles (classical output via phase kickback), basis changes
-
-```rust
-// Gate - transforms borrowed qubits, no return
-unitary fn hadamard(q: qubit<Z>) {
-    // q is borrowed, transformed in place
-}
-
-// Oracle - unitary with classical output (no measurement)
-unitary fn phase_oracle(q: qubit<Z>) -> bool {
-    phase(PI)
-    return true  // computed without measurement
-}
-```
-
-### `mixed fn` - General Quantum Channel
-- **Semantics**: Arbitrary CPTP map; full quantum operations with measurement
-- **Allowed**: All operations including mid-circuit measurement and allocation
-- **Return types**: Any type, or void `()`
-- **Use case**: Full algorithms, error correction, measurement-based protocols
-
-```rust
-mixed fn teleport(src: qubit, dst: qubit) -> qubit {
-    // Bell measurement
-    let m1 = measure(src == |0>)
-    let m2 = measure(src == |+>)
-    // Classical correction
-    if m1 { phase(PI) }
-    if m2 { ... }
-    return dst
-}
-
-mixed fn measure_and_reset(q: qubit) -> bool {
-    return measure(q == |0>)
-}
-```
-
-### Kind Hierarchy
+For each qubit, the analysis maintains a borrow state:
 
 ```
-pure ⊆ unitary ⊆ mixed
+BorrowState:
+  borrow_type: None | X | Y | Z | Total
+  projections: set[SSAValue]  // live projections borrowing this qubit
 ```
 
-- `pure` functions are a subset of `unitary` (classical ops are trivially unitary)
-- `unitary` functions are a subset of `mixed` (unitary ops are a special case of channels)
-- A `pure fn` can be called where `unitary fn` or `mixed fn` is expected
-- A `unitary fn` can be called where `mixed fn` is expected
-- Kind is **not** part of the type system (no subtyping in function signatures)
-- Kind checking is done at call sites via effect validation
+- **`None`**: qubit is not borrowed (free to use in any basis)
+- **`X`/`Y`/`Z`**: qubit is borrowed in a specific basis
+- **`Total`**: control flow disagreement; no new borrows allowed
 
-### Operation Restrictions
+### Analysis State
 
-| Kind | Can Measure? | Can Alloc? | Can Use Phase/Projections? |
-|------|-------------|-----------|---------------------------|
-| `pure fn` | ❌ No | ❌ No | ❌ No (classical only) |
-| `unitary fn` | ❌ No | ❌ No | ✅ Yes |
-| `mixed fn` | ✅ Yes | ✅ Yes | ✅ Yes |
+The analysis state at each program point is a mapping:
 
-**Note**: All three kinds can return any type or be void (`()`). Restrictions are on **operations allowed in the body**, not on return types.
-
-### IR Representation
-
-Each kind maps to a distinct operation in the `proj` dialect:
-
-```mlir
-proj.pure @classical_fn(...) attributes { ... }
-proj.unitary @bell_pair(...) attributes { ... }
-proj.mixed @teleport(...) attributes { ... }
+```
+AnalysisState = dict[SSAValue, BorrowState]  // qubit SSA → borrow state
 ```
 
-**Benefits of separate operations**:
-- IR-level verification (e.g., reject `proj.measure` in `proj.unitary`)
-- Explicit semantics in operation name
-- Enables kind-specific optimizations
-- Clear intent when reading/generated IR
+### Forward Dataflow
+
+The analysis processes operations in forward order through each block:
+
+1. **Projection creation** (`q == |0>`, `q == |+>`, `q == |L>`):
+   - Determine basis from state notation (Z, X, Y)
+   - Check qubit's current borrow state:
+     - `None`: OK, set borrow_type to basis, add projection to set
+     - Same basis: OK, add projection to set
+     - Different basis: ERROR (incompatible borrows)
+     - `Total`: ERROR (cannot borrow totally-borrowed qubit)
+
+2. **Compound projections** (`p1 && p2`, `!p`, `p1 ^ p2`, `p1 || p2`):
+   - Result projection inherits borrows from all operand projections
+   - For each qubit borrowed by any operand, add result to that qubit's borrow set
+
+3. **Projection use** (e.g., `if p`):
+   - No change to borrow state (projections are copyable)
+
+4. **Projection release** (when projection goes dead):
+   - Use liveness info to detect when projection is no longer live
+   - Remove projection from all qubits it borrows
+   - If no projections remain for a qubit, reset to `None`
+
+5. **Control flow merge** (if/else, loops):
+   - Union borrow types from all predecessor paths:
+     - All `None` → `None`
+     - All same basis → that basis
+     - Different bases → `Total`
+   - Union projection sets from all paths, then filter by liveness at join point
+
+### Integration with Liveness
+
+The borrow checker takes `LivenessInfo` as input and uses it to detect when projections are released:
+
+```
+for op in forward_order(block):
+    live_after = liveness.get_live_after(op)
+    
+    # Remove projections that are no longer live
+    for proj in current_projections - live_after:
+        release_borrows(proj)
+    
+    # Process operation's effect on borrows
+    if is_projection_create(op):
+        add_borrow(op.result, op.qubit, op.basis)
+```
+
+### Function Borrow Signature
+
+The borrow signature is inferred from the analysis:
+
+**Assumptions**:
+- Returned projections inherit borrows from input projection parameters
+- Returned projections can borrow input qubit parameters (in appropriate bases)
+- Returned projections **cannot** borrow locally allocated qubits
+
+**Qubit Tracking**:
+The analysis tracks which qubits are:
+- **Parameters**: Can be borrowed by returned projections (identified by definition point)
+- **Locally allocated**: Cannot be borrowed by returned projections (identified by definition point)
+
+**Inference**:
+1. Run forward borrow analysis on function body
+2. Track which qubits are parameters vs. locally allocated (by definition point)
+3. At function exit, validate:
+   - All locally allocated qubits have no active borrows (borrow_type = None)
+   - This ensures returned projections don't borrow local qubits
+4. Signature includes borrows from:
+   - Input qubit parameters (based on basis annotations)
+   - Input projection parameters (inherited by returned projections)
+
+### Call-Site Validation
+
+At each call site:
+
+1. **Check qubit availability**: actual qubit args must have compatible basis with callee's signature
+2. **Check projection availability**: actual projection args must not be currently borrowed
+3. **Check for conflicts**: borrows introduced by call must not conflict with caller's active borrows
+
+### Error Reporting
+
+When an incompatible borrow is detected, report:
+- The qubit involved
+- The conflicting bases (existing vs. requested)
+- The operation/line where the conflict occurs
 
 
 
@@ -512,9 +496,7 @@ proj.mixed @teleport(...) attributes { ... }
 | Scalar mult | `c * a` | `2.0 * PI` |
 | Scalar div | `a / c` | `PI / 3.0` |
 | Angle constants | `PI`, `π`, `0` | `phase(PI)` |
-| Pure function | `pure fn name(params) -> ret { ... }` | `pure fn f(b: bool) -> bool { ... }` |
-| Unitary function | `unitary fn name(params) -> ret { ... }` | `unitary fn u(q: qubit) -> qubit { ... }` |
-| Mixed function | `mixed fn name(params) -> ret { ... }` | `mixed fn m(q: qubit) -> bool { ... }` |
+| Function | `fn name(params) -> ret { ... }` | `fn f(q: qubit) { ... }` |
 
 **Note**: State notation accepts both ASCII (`|0>`) and Unicode (`|0⟩`) syntax. Angle constant `PI` also accepts Unicode `π`.
 
@@ -522,12 +504,6 @@ proj.mixed @teleport(...) attributes { ... }
 - Booleans can be used in `if` statements
 - Boolean connectives (`&&`, `||`, `^`, `!`) work on both `bool` and `proj`
 - Measurement results (`bool`) can be used directly in quantum conditionals
-
-**Function Kinds**: `pure ⊆ unitary ⊆ mixed` - function kinds form a hierarchy. This means:
-- `pure fn` can be called where `unitary fn` or `mixed fn` is expected
-- `unitary fn` can be called where `mixed fn` is expected
-- Kind is checked at call sites, not part of the type system
-- IR uses separate operations: `proj.pure`, `proj.unitary`, `proj.mixed`
 
 ## References
 
