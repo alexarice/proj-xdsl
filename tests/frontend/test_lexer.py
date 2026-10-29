@@ -48,6 +48,26 @@ class TestTypeKeywords:
         ]
 
 
+class TestAngleConstants:
+    """Test lexing of angle constants."""
+
+    def test_pi_ascii(self):
+        tokens = lex_all("pi")
+        assert tokens == [(ProjTokenKind.PI, "pi"), (ProjTokenKind.EOF, "")]
+
+    def test_pi_unicode(self):
+        tokens = lex_all("π")
+        assert tokens == [(ProjTokenKind.PI, "π"), (ProjTokenKind.EOF, "")]
+
+    def test_pi_both_forms(self):
+        tokens = lex_all("pi π")
+        assert tokens == [
+            (ProjTokenKind.PI, "pi"),
+            (ProjTokenKind.PI, "π"),
+            (ProjTokenKind.EOF, ""),
+        ]
+
+
 class TestFunctionKeywords:
     """Test lexing of function keywords."""
 

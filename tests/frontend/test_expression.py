@@ -554,6 +554,29 @@ class TestAngleConstants:
         assert isinstance(result.owner, PiOp)
         assert result.type == AngleType()
 
+    def test_pi_unicode_constant(self):
+        """Test parsing Unicode π constant."""
+
+        result = parse_expression("π", {})
+        assert isinstance(result.owner, PiOp)
+        assert result.type == AngleType()
+
+    def test_pi_unicode_in_expression(self):
+        """Test using Unicode π in expressions."""
+
+        result = parse_expression("π + 0", {})
+        assert isinstance(result.owner, AddOp)
+        assert isinstance(result.owner.operands[0].owner, PiOp)
+        assert isinstance(result.owner.operands[1].owner, ZeroOp)
+
+    def test_pi_mixed_ascii_unicode(self):
+        """Test mixing ASCII pi and Unicode π."""
+
+        result = parse_expression("pi + π", {})
+        assert isinstance(result.owner, AddOp)
+        assert isinstance(result.owner.operands[0].owner, PiOp)
+        assert isinstance(result.owner.operands[1].owner, PiOp)
+
     def test_zero_constant(self):
         """Test parsing 0 constant."""
 

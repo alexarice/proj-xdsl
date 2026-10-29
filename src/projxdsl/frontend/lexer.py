@@ -155,6 +155,7 @@ KEYWORD_MAP = {
     "false": ProjTokenKind.FALSE,
     # Angle constants
     "pi": ProjTokenKind.PI,
+    "π": ProjTokenKind.PI,
     # Statement keywords
     "ph": ProjTokenKind.PHASE,
     "if": ProjTokenKind.IF,
