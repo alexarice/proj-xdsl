@@ -55,14 +55,6 @@ pure fn caller(q: qubit) -> proj {
 }
 
 // -----
-// Test: Type mismatch (bool instead of proj)
-// CHECK: Type mismatch for argument 1 of function 'expects_proj': expected !proj.projection, got i1
-pure fn expects_proj(p: proj) -> proj { p }
-pure fn caller(q: qubit) -> proj {
-    expects_proj(true)
-}
-
-// -----
 // Test: Type mismatch (proj instead of bool)
 // CHECK: Type mismatch for argument 1 of function 'expects_bool': expected i1, got !proj.projection
 pure fn expects_bool(b: bool) -> bool { b }
@@ -77,15 +69,6 @@ pure fn caller(q: qubit) -> bool {
 pure fn expects_proj(p: proj) -> proj { p }
 pure fn caller(q: qubit) -> proj {
     expects_proj(q)
-}
-
-// -----
-// Test: Type mismatch in second argument
-// CHECK: Type mismatch for argument 2 of function 'and_fn': expected !proj.projection, got i1
-pure fn and_fn(p1: proj, p2: proj) -> proj { p1 && p2 }
-pure fn caller(q: qubit) -> proj {
-    let p = q == |0>;
-    and_fn(p, true)
 }
 
 // -----

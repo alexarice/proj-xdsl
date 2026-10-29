@@ -1232,7 +1232,7 @@ class TestFuncParsing:
     def test_parse_function_return_type_mismatch(self):
         """Test that return type mismatch raises error."""
         parser = ProjParser("pure fn foo() -> bool { 0 }")
-        with pytest.raises(TypeCheckError, match="Expected return type"):
+        with pytest.raises(TypeCheckError, match="Type mismatch.*for return value"):
             parser.parse_func()
 
     def test_parse_function_missing_final_expr(self):

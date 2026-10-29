@@ -9,7 +9,7 @@ from typing import NamedTuple, NoReturn
 from xdsl.builder import Builder
 from xdsl.dialects.arith import AndIOp, ConstantOp, OrIOp, XOrIOp
 from xdsl.dialects.builtin import FunctionType, IntegerAttr, ModuleOp, NoneAttr, i1
-from xdsl.ir import BlockArgument, Region, SSAValue, TypeAttribute
+from xdsl.ir import Attribute, BlockArgument, Region, SSAValue, TypeAttribute
 from xdsl.parser.generic_parser import GenericParser, ParserState
 from xdsl.utils.exceptions import ParseError
 from xdsl.utils.lexer import Input
@@ -21,6 +21,7 @@ from projxdsl.dialects.proj import (
     AndOp,
     Basis,
     BasisAttr,
+    BorrowBasisOp,
     CallOp,
     EqOp,
     FromBoolOp,
@@ -166,6 +167,47 @@ class ProjParser(GenericParser[ProjTokenKind]):
     def raise_typing_error(self, msg: str) -> NoReturn:
         """Raise a type checking error."""
         raise TypeCheckError(self._current_token.span, msg)
+
+    def coerce_to(
+        self,
+        value: SSAValue,
+        expected_type: Attribute,
+        builder: Builder,
+        context_msg: str = "",
+    ) -> SSAValue:
+        """
+        Coerce value to expected type using subtyping rules.
+
+        Supported coercions:
+        - bool (i1) → proj (via FromBoolOp)
+        - qubit → qubit<B> (via BorrowBasisOp)
+        - T → T (identity, no coercion needed)
+
+        Raises TypeCheckError if coercion is not possible.
+        """
+        # Equality check (no coercion needed)
+        if value.type == expected_type:
+            return value
+
+        # bool → proj
+        if value.type == i1 and expected_type == ProjectionType():
+            return builder.insert(FromBoolOp(value)).result
+
+        # qubit → qubit<B>
+        if (
+            isinstance(value.type, QubitType)
+            and isinstance(value.type.borrow_type, NoneAttr)
+            and isinstance(expected_type, QubitType)
+            and isinstance(expected_type.borrow_type, BasisAttr)
+        ):
+            return builder.insert(
+                BorrowBasisOp(value, expected_type.borrow_type)
+            ).result
+
+        # Coercion not possible
+        self.raise_typing_error(
+            f"Type mismatch{context_msg}: expected {expected_type}, got {value.type}"
+        )
 
     def parse_state(self) -> StateAttr:
         """
@@ -374,10 +416,10 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 "Expected expression value for 'let' statement, got '()'"
             )
 
-        # Validate type if annotation was provided
-        if expected_type is not None and expr_value.type != expected_type:
-            self.raise_typing_error(
-                f"Type mismatch: expected {expected_type}, got {expr_value.type}"
+        # Coerce to expected type if annotation was provided
+        if expected_type is not None:
+            expr_value = self.coerce_to(
+                expr_value, expected_type, builder, f" for let binding '{var_name}'"
             )
 
         # Add the binding to variables (mutates the current scope)
@@ -524,6 +566,9 @@ class ProjParser(GenericParser[ProjTokenKind]):
         """
         Build a binary operation with proper type checking.
 
+        If both operands are i1, uses classical operation.
+        Otherwise, coerces both to projections and uses projection operation.
+
         Args:
             lhs: Left-hand side operand
             rhs: Right-hand side operand
@@ -549,30 +594,20 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 f" expected boolean or projection, got '()'"
             )
 
-        lhs_is_bool = lhs.type == i1
-        rhs_is_bool = rhs.type == i1
-        lhs_is_proj = lhs.type == ProjectionType()
-        rhs_is_proj = rhs.type == ProjectionType()
-
-        if lhs_is_bool and rhs_is_bool:
-            # Both booleans: use classical operation
+        # If both are i1, use classical operation
+        if lhs.type == i1 and rhs.type == i1:
             return builder.insert(classical_op(lhs, rhs)).result
-        elif lhs_is_proj and rhs_is_proj:
-            # Both projections: use projection operation
-            return builder.insert(projection_op(lhs, rhs)).result
-        elif (lhs_is_bool and rhs_is_proj) or (lhs_is_proj and rhs_is_bool):
-            # Mixed: convert boolean to projection, then use projection operation
-            if lhs_is_bool:
-                lhs = builder.insert(FromBoolOp(lhs)).result
-            if rhs_is_bool:
-                rhs = builder.insert(FromBoolOp(rhs)).result
-            return builder.insert(projection_op(lhs, rhs)).result
-        else:
-            # Invalid types
-            self.raise_typing_error(
-                f"Invalid operand types for '{op_name}': expected boolean or "
-                f"projection, got {lhs.type} and {rhs.type}"
-            )
+
+        # Otherwise, coerce both to projections and use projection operation
+        # Handles: proj×proj (no-op), bool×proj/coerce, proj×bool/coerce
+        # Raises error for invalid types (qubit, angle, etc.)
+        lhs = self.coerce_to(
+            lhs, ProjectionType(), builder, f" for '{op_name}' left operand"
+        )
+        rhs = self.coerce_to(
+            rhs, ProjectionType(), builder, f" for '{op_name}' right operand"
+        )
+        return builder.insert(projection_op(lhs, rhs)).result
 
     def _parse_prefix_and_primary(
         self,
@@ -692,16 +727,11 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 self.raise_typing_error(
                     "Expected projection or boolean for 'measure' operator, got '()'"
                 )
-            if operand.type == ProjectionType():
-                return builder.insert(MeasureOp(operand)).result
-            elif operand.type == i1:
-                proj = builder.insert(FromBoolOp(operand)).result
-                return builder.insert(MeasureOp(proj)).result
-            else:
-                self.raise_typing_error(
-                    f"Expected projection or boolean for 'measure' operator,"
-                    f" got {operand.type}"
-                )
+            # Coerce to projection (bool → proj or identity for proj)
+            operand = self.coerce_to(
+                operand, ProjectionType(), builder, " for 'measure' operator"
+            )
+            return builder.insert(MeasureOp(operand)).result
 
         if self._parse_optional_token(ProjTokenKind.LPAREN) is not None:
             expr = self.parse_expression(variables, builder, 0, func_kind=func_kind)
@@ -796,14 +826,18 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 f" got {len(args)}"
             )
 
-        # Validate argument types
+        # Coerce arguments to expected types
         input_types = func_sig.function_type.inputs.data
+        coerced_args: list[SSAValue] = []
         for i, (arg, expected_type) in enumerate(zip(args, input_types, strict=False)):
-            if arg.type != expected_type:
-                self.raise_typing_error(
-                    f"Type mismatch for argument {i + 1} of function '{func_name}':"
-                    f" expected {expected_type}, got {arg.type}"
-                )
+            coerced_arg = self.coerce_to(
+                arg,
+                expected_type,
+                builder,
+                f" for argument {i + 1} of function '{func_name}'",
+            )
+            coerced_args.append(coerced_arg)
+        args = coerced_args
 
         # Get result types
         result_types = func_sig.function_type.outputs.data
@@ -921,10 +955,10 @@ class ProjParser(GenericParser[ProjTokenKind]):
                         " at end of function body"
                     )
                 final_expr = statements[-1]
-                if final_expr.type != return_types[0]:
-                    self.raise_typing_error(
-                        f"Expected return type {return_types[0]}, got {final_expr.type}"
-                    )
+                # Coerce to return type
+                final_expr = self.coerce_to(
+                    final_expr, return_types[0], inner_builder, " for return value"
+                )
                 inner_builder.insert(ReturnOp(final_expr))
             else:
                 # Void function, insert ReturnOp with no arguments
