@@ -251,7 +251,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         if self._parse_optional_token(ProjTokenKind.PHASE) is not None:
             if not func_kind.allows_operation("phase"):
                 self.raise_error(
-                    f"Phase operation not allowed in {func_kind.value} functions"
+                    f"Phase operation not allowed in {func_kind.value} context"
                 )
             with self.in_parens():
                 # Parse the angle expression
@@ -270,7 +270,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         elif self._parse_optional_token(ProjTokenKind.IF) is not None:
             if not func_kind.allows_operation("if"):
                 self.raise_error(
-                    f"If operation not allowed in {func_kind.value} functions"
+                    f"If operation not allowed in {func_kind.value} context"
                 )
             self._parse_if_statement(variables, builder, func_kind=func_kind)
             return None
@@ -312,13 +312,14 @@ class ProjParser(GenericParser[ProjTokenKind]):
             )
 
         # Parse the true block (with scoped variables)
+        # If blocks are restricted to unitary operations (no measure/alloc)
         def parse_statements(inner_builder: Builder):
             # Create a child scope - modifications won't affect parent
             scoped_vars = ScopedDict[str, SSAValue](parent=variables)
             self.parse_list(
                 delimiter=self.Delimiter.BRACES,
                 parse=lambda: self.parse_statement(
-                    scoped_vars, inner_builder, func_kind
+                    scoped_vars, inner_builder, FuncKind.UNITARY
                 ),
                 separator=";",
                 context_msg=" in statement block",
@@ -673,7 +674,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         if self._parse_optional_token(ProjTokenKind.ALLOC) is not None:
             if not func_kind.allows_operation("alloc"):
                 self.raise_error(
-                    f"Alloc operation not allowed in {func_kind.value} functions"
+                    f"Alloc operation not allowed in {func_kind.value} context"
                 )
             state = self.parse_state()
             alloc_op = builder.insert(AllocOp(state))
@@ -682,7 +683,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         if self._parse_optional_token(ProjTokenKind.MEASURE) is not None:
             if not func_kind.allows_operation("measure"):
                 self.raise_error(
-                    f"Measure operation not allowed in {func_kind.value} functions"
+                    f"Measure operation not allowed in {func_kind.value} context"
                 )
             operand = self.parse_expression(
                 variables, builder, self._PREFIX_MEASURE_BP, func_kind=func_kind
