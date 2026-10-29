@@ -32,9 +32,9 @@ from projxdsl.dialects.proj import (
     UnitaryOp,
     YieldOp,
 )
-from projxdsl.frontend.func_kind import FuncKind
 from projxdsl.frontend.lexer import ProjLexer, ProjTokenKind
 from projxdsl.frontend.parser import ProjParser, TypeCheckError
+from projxdsl.func_kind import FuncKind
 
 
 def parse_type(code: str):
@@ -1391,7 +1391,7 @@ class TestModuleParsing:
         # Verify foo signature
         foo_sig = parser.functions["foo"]
         assert isinstance(foo_sig, FuncSignature)
-        assert foo_sig.kind.value == "pure"
+        assert foo_sig.kind.display_name == "pure"
         assert len(foo_sig.function_type.inputs.data) == 2
         assert foo_sig.function_type.inputs.data[0] == i1
         assert foo_sig.function_type.inputs.data[1] == i1
@@ -1401,7 +1401,7 @@ class TestModuleParsing:
         # Verify bar signature
         bar_sig = parser.functions["bar"]
         assert isinstance(bar_sig, FuncSignature)
-        assert bar_sig.kind.value == "unitary"
+        assert bar_sig.kind.display_name == "unitary"
         assert len(bar_sig.function_type.inputs.data) == 1
         assert bar_sig.function_type.inputs.data[0] == ProjectionType()
         assert len(bar_sig.function_type.outputs.data) == 1
@@ -1410,7 +1410,7 @@ class TestModuleParsing:
         # Verify baz signature
         baz_sig = parser.functions["baz"]
         assert isinstance(baz_sig, FuncSignature)
-        assert baz_sig.kind.value == "mixed"
+        assert baz_sig.kind.display_name == "mixed"
         assert len(baz_sig.function_type.inputs.data) == 0
         assert len(baz_sig.function_type.outputs.data) == 0
 

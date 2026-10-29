@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from enum import auto
+from typing import ClassVar
 
 from xdsl.dialects.builtin import (
     ArrayAttr,
@@ -23,6 +24,7 @@ from xdsl.ir import (
     Block,
     Dialect,
     Operation,
+    OpTrait,
     ParametrizedAttribute,
     Region,
     SSAValue,
@@ -56,7 +58,7 @@ from xdsl.traits import (
 from xdsl.utils.str_enum import StrEnum
 
 from projxdsl.dialects.angle import AngleType
-from projxdsl.traits import AllowedInFuncKinds
+from projxdsl.func_kind import FuncKind
 
 
 class Basis(StrEnum):
@@ -199,6 +201,124 @@ class QubitType(ParametrizedAttribute, TypeAttribute):
         super().__init__(borrow_type)
 
 
+class FuncOpBase(IRDLOperation):
+    """
+    Base class for function operations.
+    All function kinds share the same structure.
+    """
+
+    FUNC_KIND: ClassVar[FuncKind]
+
+    body = region_def()
+    sym_name = prop_def(SymbolNameConstraint())
+    function_type = prop_def(FunctionType)
+
+    traits = traits_def(IsolatedFromAbove(), SymbolOpInterface())
+
+    @classmethod
+    def parse(cls, parser: Parser) -> FuncOpBase:
+        (
+            name,
+            input_types,
+            return_types,
+            region,
+            extra_attrs,
+            _,
+            _,
+        ) = parse_func_op_like(
+            parser,
+            reserved_attr_names=("sym_name", "function_type"),
+        )
+        func = cls(
+            sym_name=name,
+            function_type=FunctionType.from_lists(input_types, return_types),
+            body=region,
+        )
+        if extra_attrs is not None:
+            func.attributes.update(extra_attrs.data)
+        return func
+
+    def print(self, printer: Printer) -> None:
+        print_func_op_like(
+            printer,
+            self.sym_name,
+            self.function_type,
+            self.body,
+            self.attributes,
+            reserved_attr_names=(
+                "sym_name",
+                "function_type",
+            ),
+        )
+
+    def verify_(self) -> None:
+        entry_block = self.body.blocks.first
+        assert entry_block is not None
+        block_arg_types = entry_block.arg_types
+        if self.function_type.inputs.data != tuple(block_arg_types):
+            raise VerifyException(
+                "Expected entry block argument types to match function input types"
+            )
+
+    def __init__(
+        self,
+        sym_name: str | StringAttr,
+        function_type: FunctionType,
+        body: Region | None = None,
+    ):
+        if isinstance(sym_name, str):
+            sym_name = StringAttr(sym_name)
+        if body is None:
+            body = Region()
+
+        super().__init__(
+            properties={
+                "function_type": function_type,
+                "sym_name": sym_name,
+            },
+            regions=[body],
+        )
+
+
+class AllowedInFuncKinds(OpTrait):
+    """
+    Trait that verifies an operation only appears in specific function kinds.
+
+    Uses the function kind hierarchy: PURE ⊆ UNITARY ⊆ MIXED
+    Operations specify a minimum required kind, and can only appear in
+    functions of that kind or higher.
+    """
+
+    def __init__(self, min_kind: FuncKind):
+        """
+        Initialize the trait with a minimum required function kind.
+
+        Args:
+            min_kind: Minimum FuncKind required for this operation
+                     (e.g., FuncKind.MIXED for alloc/measure)
+        """
+        self.min_kind = min_kind
+
+    def verify(self, op: Operation) -> None:
+        """Verify that the operation appears only in allowed function kinds."""
+
+        # Find the ancestor function operation
+        func_op = op.parent_op()
+        while func_op is not None and not isinstance(func_op, FuncOpBase):
+            func_op = func_op.parent_op()
+
+        if func_op is None:
+            # No function ancestor, allow the operation
+            return
+
+        if func_op.FUNC_KIND < self.min_kind:
+            raise VerifyException(
+                f"Operation '{op.name}' is not allowed in"
+                f" {func_op.FUNC_KIND.display_name} contexts."
+                f" Context must be at least {self.min_kind.display_name}."
+            )
+
+
 ProjectionConstr = irdl_to_attr_constraint(ProjectionType)
 
 
@@ -308,7 +428,7 @@ class AllocOp(IRDLOperation):
     state = prop_def(StateAttr)
     result = result_def(QubitType)
 
-    traits = traits_def(AllowedInFuncKinds(("proj.mixed",)))
+    traits = traits_def(AllowedInFuncKinds(FuncKind.MIXED))
 
     assembly_format = "`` $state attr-dict `:` type($result)"
 
@@ -355,7 +475,7 @@ class PhaseOp(IRDLOperation):
 
     angle = operand_def(AngleType)
 
-    traits = traits_def(AllowedInFuncKinds(("proj.unitary", "proj.mixed")))
+    traits = traits_def(AllowedInFuncKinds(FuncKind.UNITARY))
 
     assembly_format = "$angle attr-dict"
 
@@ -395,7 +515,7 @@ class MeasureOp(IRDLOperation):
     projection = operand_def(ProjectionType)
     result = result_def(i1)
 
-    traits = traits_def(AllowedInFuncKinds(("proj.mixed",)))
+    traits = traits_def(AllowedInFuncKinds(FuncKind.MIXED))
 
     assembly_format = "$projection attr-dict"
 
@@ -419,7 +539,7 @@ class IfOp(IRDLOperation):
 
     traits = traits_def(
         SingleBlockImplicitTerminator(YieldOp),
-        AllowedInFuncKinds(("proj.unitary", "proj.mixed")),
+        AllowedInFuncKinds(FuncKind.UNITARY),
     )
 
     def __init__(
@@ -480,83 +600,6 @@ class IfOp(IRDLOperation):
             printer.print_attr_dict(self.attributes)
 
 
-class FuncOpBase(IRDLOperation):
-    """
-    Base class for function operations.
-    All function kinds share the same structure.
-    """
-
-    body = region_def()
-    sym_name = prop_def(SymbolNameConstraint())
-    function_type = prop_def(FunctionType)
-
-    traits = traits_def(IsolatedFromAbove(), SymbolOpInterface())
-
-    @classmethod
-    def parse(cls, parser: Parser) -> FuncOpBase:
-        (
-            name,
-            input_types,
-            return_types,
-            region,
-            extra_attrs,
-            _,
-            _,
-        ) = parse_func_op_like(
-            parser,
-            reserved_attr_names=("sym_name", "function_type"),
-        )
-        func = cls(
-            sym_name=name,
-            function_type=FunctionType.from_lists(input_types, return_types),
-            body=region,
-        )
-        if extra_attrs is not None:
-            func.attributes.update(extra_attrs.data)
-        return func
-
-    def print(self, printer: Printer) -> None:
-        print_func_op_like(
-            printer,
-            self.sym_name,
-            self.function_type,
-            self.body,
-            self.attributes,
-            reserved_attr_names=(
-                "sym_name",
-                "function_type",
-            ),
-        )
-
-    def verify_(self) -> None:
-        entry_block = self.body.blocks.first
-        assert entry_block is not None
-        block_arg_types = entry_block.arg_types
-        if self.function_type.inputs.data != tuple(block_arg_types):
-            raise VerifyException(
-                "Expected entry block argument types to match function input types"
-            )
-
-    def __init__(
-        self,
-        sym_name: str | StringAttr,
-        function_type: FunctionType,
-        body: Region | None = None,
-    ):
-        if isinstance(sym_name, str):
-            sym_name = StringAttr(sym_name)
-        if body is None:
-            body = Region()
-
-        super().__init__(
-            properties={
-                "function_type": function_type,
-                "sym_name": sym_name,
-            },
-            regions=[body],
-        )
-
-
 @irdl_op_definition
 class PureOp(FuncOpBase):
     """
@@ -565,6 +608,8 @@ class PureOp(FuncOpBase):
     """
 
     name = "proj.pure"
+
+    FUNC_KIND: ClassVar = FuncKind.PURE
 
 
 @irdl_op_definition
@@ -576,6 +621,8 @@ class UnitaryOp(FuncOpBase):
 
     name = "proj.unitary"
 
+    FUNC_KIND: ClassVar = FuncKind.UNITARY
+
 
 @irdl_op_definition
 class MixedOp(FuncOpBase):
@@ -585,6 +632,8 @@ class MixedOp(FuncOpBase):
     """
 
     name = "proj.mixed"
+
+    FUNC_KIND: ClassVar = FuncKind.MIXED
 
 
 @irdl_op_definition

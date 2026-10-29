@@ -5,7 +5,7 @@
   ^bb0():
     %0 = "proj.alloc"() <{state = #proj.state<zero>}> : () -> !proj.qubit
     "proj.return"() : () -> ()
-  // CHECK: Operation 'proj.alloc' is not allowed in proj.pure functions. Allowed in: proj.mixed
+  // CHECK: Operation 'proj.alloc' is not allowed in pure contexts. Context must be at least mixed
 }) : () -> ()
 
 // -----
@@ -15,7 +15,7 @@
   ^bb0():
     %0 = "proj.alloc"() <{state = #proj.state<zero>}> : () -> !proj.qubit
     "proj.return"() : () -> ()
-  // CHECK: Operation 'proj.alloc' is not allowed in proj.unitary functions. Allowed in: proj.mixed
+  // CHECK: Operation 'proj.alloc' is not allowed in unitary contexts. Context must be at least mixed
 }) : () -> ()
 
 // -----
@@ -27,7 +27,7 @@
     %1 = "proj.from_bool"(%0) : (i1) -> !proj.projection
     %2 = "proj.measure"(%1) : (!proj.projection) -> i1
     "proj.return"() : () -> ()
-  // CHECK: Operation 'proj.measure' is not allowed in proj.pure functions. Allowed in: proj.mixed
+  // CHECK: Operation 'proj.measure' is not allowed in pure contexts. Context must be at least mixed
 }) : () -> ()
 
 // -----
@@ -39,7 +39,7 @@
     %1 = "proj.from_bool"(%0) : (i1) -> !proj.projection
     %2 = "proj.measure"(%1) : (!proj.projection) -> i1
     "proj.return"() : () -> ()
-  // CHECK: Operation 'proj.measure' is not allowed in proj.unitary functions. Allowed in: proj.mixed
+  // CHECK: Operation 'proj.measure' is not allowed in unitary contexts. Context must be at least mixed
 }) : () -> ()
 
 // -----
@@ -55,7 +55,7 @@
       "proj.yield"() : () -> ()
     }) : (!proj.projection) -> ()
     "proj.return"() : () -> ()
-  // CHECK: Operation 'proj.if' is not allowed in proj.pure functions. Allowed in: proj.unitary or proj.mixed
+  // CHECK: Operation 'proj.if' is not allowed in pure contexts. Context must be at least unitary
 }) : () -> ()
 
 // -----
@@ -66,5 +66,5 @@
     %0 = "angle.zero"() : () -> !angle.type
     "proj.phase"(%0) : (!angle.type) -> ()
     "proj.return"() : () -> ()
-  // CHECK: Operation 'proj.phase' is not allowed in proj.pure functions. Allowed in: proj.unitary or proj.mixed
+  // CHECK: Operation 'proj.phase' is not allowed in pure contexts. Context must be at least unitary
 }) : () -> ()

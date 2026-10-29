@@ -1,40 +1,63 @@
 """Tests for FuncKind enumeration."""
 
-from projxdsl.frontend.func_kind import FuncKind
+from projxdsl.func_kind import FuncKind
 
 
-class TestFuncKindAllowsOperation:
-    """Test FuncKind.allows_operation method."""
+class TestFuncKindOrdering:
+    """Test FuncKind ordering for operation validation."""
 
-    def test_pure_allows_nothing(self):
-        """Pure functions don't allow phase, if, alloc, or measure."""
-        assert not FuncKind.PURE.allows_operation("phase")
-        assert not FuncKind.PURE.allows_operation("if")
-        assert not FuncKind.PURE.allows_operation("alloc")
-        assert not FuncKind.PURE.allows_operation("measure")
+    def test_pure_is_lowest(self):
+        """Pure is the lowest kind - phase and if require UNITARY."""
+        assert FuncKind.PURE < FuncKind.UNITARY
+        assert FuncKind.PURE < FuncKind.MIXED
 
     def test_unitary_allows_phase_and_if(self):
-        """Unitary functions allow phase and if, but not alloc or measure."""
-        assert FuncKind.UNITARY.allows_operation("phase")
-        assert FuncKind.UNITARY.allows_operation("if")
-        assert not FuncKind.UNITARY.allows_operation("alloc")
-        assert not FuncKind.UNITARY.allows_operation("measure")
+        """Unitary functions allow phase and if (UNITARY <= UNITARY)."""
+        assert FuncKind.UNITARY <= FuncKind.UNITARY
+        # But not alloc or measure (require MIXED)
+        assert FuncKind.UNITARY < FuncKind.MIXED
 
-    def test_mixed_allows_all(self):
+    def test_mixed_is_highest(self):
         """Mixed functions allow all operations."""
-        assert FuncKind.MIXED.allows_operation("phase")
-        assert FuncKind.MIXED.allows_operation("if")
-        assert FuncKind.MIXED.allows_operation("alloc")
-        assert FuncKind.MIXED.allows_operation("measure")
+        assert FuncKind.MIXED >= FuncKind.PURE
+        assert FuncKind.MIXED >= FuncKind.UNITARY
+        assert FuncKind.MIXED >= FuncKind.MIXED
 
-    def test_unknown_operation(self):
-        """Unknown operations should be allowed by default."""
-        assert FuncKind.PURE.allows_operation("unknown")
-        assert FuncKind.UNITARY.allows_operation("unknown")
-        assert FuncKind.MIXED.allows_operation("unknown")
+    def test_values_are_ordered(self):
+        """Test that values follow the hierarchy order."""
+        assert FuncKind.PURE.value == 1
+        assert FuncKind.UNITARY.value == 2
+        assert FuncKind.MIXED.value == 3
+        assert FuncKind.PURE.value < FuncKind.UNITARY.value < FuncKind.MIXED.value
 
-    def test_value_property(self):
-        """Test that value property returns correct string."""
-        assert FuncKind.PURE.value == "pure"
-        assert FuncKind.UNITARY.value == "unitary"
-        assert FuncKind.MIXED.value == "mixed"
+
+class TestFuncKindHierarchy:
+    """Test FuncKind.__le__ method for hierarchy checking."""
+
+    def test_reflexive(self):
+        """Each kind is a subtype of itself."""
+        assert FuncKind.PURE <= FuncKind.PURE
+        assert FuncKind.UNITARY <= FuncKind.UNITARY
+        assert FuncKind.MIXED <= FuncKind.MIXED
+
+    def test_pure_is_subtype_of_all(self):
+        """PURE is a subtype of all function kinds."""
+        assert FuncKind.PURE <= FuncKind.PURE
+        assert FuncKind.PURE <= FuncKind.UNITARY
+        assert FuncKind.PURE <= FuncKind.MIXED
+
+    def test_unitary_is_subtype_of_mixed(self):
+        """UNITARY is a subtype of MIXED."""
+        assert FuncKind.UNITARY <= FuncKind.MIXED
+        assert not (FuncKind.UNITARY <= FuncKind.PURE)
+
+    def test_mixed_is_not_subtype_of_others(self):
+        """MIXED is not a subtype of PURE or UNITARY."""
+        assert not (FuncKind.MIXED <= FuncKind.PURE)
+        assert not (FuncKind.MIXED <= FuncKind.UNITARY)
+
+    def test_transitivity(self):
+        """Hierarchy is transitive: if A <= B and B <= C, then A <= C."""
+        assert FuncKind.PURE <= FuncKind.UNITARY
+        assert FuncKind.UNITARY <= FuncKind.MIXED
+        assert FuncKind.PURE <= FuncKind.MIXED

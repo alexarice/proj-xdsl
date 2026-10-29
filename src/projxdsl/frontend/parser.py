@@ -40,8 +40,8 @@ from projxdsl.dialects.proj import (
     XorOp,
     YieldOp,
 )
-from projxdsl.frontend.func_kind import FuncKind
 from projxdsl.frontend.lexer import ProjLexer, ProjToken, ProjTokenKind
+from projxdsl.func_kind import FuncKind
 
 
 class TypeCheckError(ParseError):
@@ -249,9 +249,9 @@ class ProjParser(GenericParser[ProjTokenKind]):
             SSAValue if the statement is an expression, None otherwise.
         """
         if self._parse_optional_token(ProjTokenKind.PHASE) is not None:
-            if not func_kind.allows_operation("phase"):
-                self.raise_error(
-                    f"Phase operation not allowed in {func_kind.value} context"
+            if func_kind < FuncKind.UNITARY:
+                self.raise_typing_error(
+                    f"Phase operation not allowed in {func_kind.display_name} context"
                 )
             with self.in_parens():
                 # Parse the angle expression
@@ -268,9 +268,9 @@ class ProjParser(GenericParser[ProjTokenKind]):
             builder.insert(PhaseOp(angle))
             return None
         elif self._parse_optional_token(ProjTokenKind.IF) is not None:
-            if not func_kind.allows_operation("if"):
-                self.raise_error(
-                    f"If operation not allowed in {func_kind.value} context"
+            if func_kind < FuncKind.UNITARY:
+                self.raise_typing_error(
+                    f"If operation not allowed in {func_kind.display_name} context"
                 )
             self._parse_if_statement(variables, builder, func_kind=func_kind)
             return None
@@ -672,18 +672,18 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 )
 
         if self._parse_optional_token(ProjTokenKind.ALLOC) is not None:
-            if not func_kind.allows_operation("alloc"):
-                self.raise_error(
-                    f"Alloc operation not allowed in {func_kind.value} context"
+            if func_kind < FuncKind.MIXED:
+                self.raise_typing_error(
+                    f"Alloc operation not allowed in {func_kind.display_name} context"
                 )
             state = self.parse_state()
             alloc_op = builder.insert(AllocOp(state))
             return alloc_op.result
 
         if self._parse_optional_token(ProjTokenKind.MEASURE) is not None:
-            if not func_kind.allows_operation("measure"):
-                self.raise_error(
-                    f"Measure operation not allowed in {func_kind.value} context"
+            if func_kind < FuncKind.MIXED:
+                self.raise_typing_error(
+                    f"Measure operation not allowed in {func_kind.display_name} context"
                 )
             operand = self.parse_expression(
                 variables, builder, self._PREFIX_MEASURE_BP, func_kind=func_kind
@@ -777,16 +777,15 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
         # Validate function kind compatibility
         # Hierarchy: pure ⊆ unitary ⊆ mixed
-        caller_kind = func_kind.value
-        callee_kind = func_sig.kind.value
+        callee_kind = func_sig.kind
 
         # pure can only call pure
         # unitary can call pure, unitary
         # mixed can call pure, unitary, mixed
-        kind_hierarchy = {"pure": 0, "unitary": 1, "mixed": 2}
-        if kind_hierarchy[callee_kind] > kind_hierarchy[caller_kind]:
-            self.raise_error(
-                f"Cannot call {callee_kind} function from {caller_kind} function"
+        if callee_kind > func_kind:
+            self.raise_typing_error(
+                f"Cannot call {callee_kind.display_name} function from "
+                f"{func_kind.display_name} function"
             )
 
         # Validate argument count
