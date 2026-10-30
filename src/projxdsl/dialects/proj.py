@@ -49,7 +49,7 @@ from xdsl.traits import (
     HasParent,
     IsolatedFromAbove,
     IsTerminator,
-    SingleBlockImplicitTerminator,
+    NoTerminator,
     SymbolOpInterface,
     SymbolTable,
     SymbolUserOpInterface,
@@ -436,25 +436,6 @@ class PhaseOp(IRDLOperation):
 
 
 @irdl_op_definition
-class YieldOp(IRDLOperation):
-    """
-    Yield operation for proj control flow.
-    Terminates a proj.if region.
-    """
-
-    name = "proj.yield"
-
-    arguments = var_operand_def()
-
-    assembly_format = "attr-dict ($arguments^ `:` type($arguments))?"
-
-    traits = traits_def(IsTerminator())
-
-    def __init__(self, *operands: SSAValue):
-        super().__init__(operands=[operands])
-
-
-@irdl_op_definition
 class MeasureOp(IRDLOperation):
     """
     Measurement operation.
@@ -490,7 +471,7 @@ class IfOp(IRDLOperation):
     false_region = region_def()
 
     traits = traits_def(
-        SingleBlockImplicitTerminator(YieldOp),
+        NoTerminator(),
         AllowedInFuncKinds(FuncKind.UNITARY),
     )
 
@@ -507,27 +488,16 @@ class IfOp(IRDLOperation):
             regions=[true_region, false_region],
         )
 
-    @staticmethod
-    def parse_region_with_yield(parser: Parser) -> Region:
-        region = parser.parse_region()
-        block = region.blocks.last
-        if block is None:
-            block = Block()
-            region.add_block(block)
-        last_op = block.last_op
-        if last_op is not None and last_op.has_trait(IsTerminator):
-            return region
-        block.add_op(YieldOp())
-        return region
-
     @classmethod
     def parse(cls, parser: Parser) -> IfOp:
         condition = parser.parse_operand(ProjectionType())
-        true_region = cls.parse_region_with_yield(parser)
+        true_region = parser.parse_region()
+        # Ensure true_region has at least one block
+        # (required by single_block constraint)
+        if not true_region.blocks:
+            true_region.add_block(Block())
         false_region = (
-            cls.parse_region_with_yield(parser)
-            if parser.parse_optional_keyword("else")
-            else Region()
+            parser.parse_region() if parser.parse_optional_keyword("else") else Region()
         )
         parser.parse_optional_attr_dict()
         return cls(condition, true_region, false_region)
@@ -744,7 +714,6 @@ Proj = Dialect(
         EqOp,
         MeasureOp,
         PhaseOp,
-        YieldOp,
         IfOp,
         ReturnOp,
         CallOp,

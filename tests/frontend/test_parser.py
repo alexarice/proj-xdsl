@@ -29,7 +29,6 @@ from projxdsl.dialects.proj import (
     State,
     StateAttr,
     UnitaryOp,
-    YieldOp,
 )
 from projxdsl.frontend.lexer import ProjLexer, ProjTokenKind
 from projxdsl.frontend.parser import ProjParser, TypeCheckError
@@ -405,10 +404,9 @@ class TestIfStatement:
         assert len(if_op.true_region.blocks) == 1
         inner_block = if_op.true_region.blocks[0]
         inner_ops = list(inner_block.ops)
-        assert len(inner_ops) == 3  # PiOp + PhaseOp + YieldOp
+        assert len(inner_ops) == 2  # PiOp + PhaseOp (no YieldOp)
         assert isinstance(inner_ops[0], PiOp)
         assert isinstance(inner_ops[1], PhaseOp)
-        assert isinstance(inner_ops[2], YieldOp)
 
     def test_if_statement_multiple_statements(self):
         """Test parsing if statement with multiple phase statements."""
@@ -428,12 +426,11 @@ class TestIfStatement:
         assert isinstance(if_op, IfOp)
         inner_block = if_op.true_region.blocks[0]
         inner_ops = list(inner_block.ops)
-        assert len(inner_ops) == 5  # PiOp + PhaseOp + ZeroOp + PhaseOp + YieldOp
+        assert len(inner_ops) == 4  # PiOp + PhaseOp + ZeroOp + PhaseOp (no YieldOp)
         assert isinstance(inner_ops[0], PiOp)
         assert isinstance(inner_ops[1], PhaseOp)
         assert isinstance(inner_ops[2], ZeroOp)
         assert isinstance(inner_ops[3], PhaseOp)
-        assert isinstance(inner_ops[4], YieldOp)
 
     def test_if_statement_with_semicolons(self):
         """Test parsing if statement with semicolons between statements."""
@@ -452,7 +449,7 @@ class TestIfStatement:
         assert isinstance(if_op, IfOp)
         inner_block = if_op.true_region.blocks[0]
         inner_ops = list(inner_block.ops)
-        assert len(inner_ops) == 5  # PiOp + PhaseOp + ZeroOp + PhaseOp + YieldOp
+        assert len(inner_ops) == 4  # PiOp + PhaseOp + ZeroOp + PhaseOp (no YieldOp)
 
     def test_if_statement_without_semicolons(self):
         """Test that missing semicolon between statements raises error."""
@@ -484,8 +481,7 @@ class TestIfStatement:
         assert isinstance(if_op, IfOp)
         inner_block = if_op.true_region.blocks[0]
         inner_ops = list(inner_block.ops)
-        assert len(inner_ops) == 1  # Just YieldOp
-        assert isinstance(inner_ops[0], YieldOp)
+        assert len(inner_ops) == 0  # Empty block (no YieldOp)
 
     def test_if_statement_type_error(self):
         """Test that if with non-projection condition raises error."""
@@ -545,15 +541,14 @@ class TestIfStatement:
         assert if_op.condition is proj_var
         true_block = if_op.true_region.blocks[0]
         inner_ops = list(true_block.ops)
-        assert len(inner_ops) == 2  # Inner IfOp + YieldOp
+        assert len(inner_ops) == 1  # Inner IfOp (no YieldOp)
         inner_if = inner_ops[0]
         assert isinstance(inner_if, IfOp)
         inner_block = inner_if.true_region.blocks[0]
         inner_inner_ops = list(inner_block.ops)
-        assert len(inner_inner_ops) == 3  # PiOp + PhaseOp + YieldOp
+        assert len(inner_inner_ops) == 2  # PiOp + PhaseOp (no YieldOp)
         assert isinstance(inner_inner_ops[0], PiOp)
         assert isinstance(inner_inner_ops[1], PhaseOp)
-        assert isinstance(inner_inner_ops[2], YieldOp)
 
 
 class TestLetStatement:
@@ -609,7 +604,7 @@ class TestLetStatement:
         assert isinstance(if_op, IfOp)
         inner_block = if_op.true_region.blocks[0]
         inner_ops = list(inner_block.ops)
-        assert len(inner_ops) == 2  # EqOp + YieldOp
+        assert len(inner_ops) == 1  # EqOp (no YieldOp)
 
     def test_let_statement_shadowing_error(self):
         """Test that redefining a variable raises an error."""

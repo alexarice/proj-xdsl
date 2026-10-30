@@ -56,11 +56,13 @@ proj.phase %angle
 // Test proj.if with true region
 func.func @test_if(%arg0: !proj.projection) {
   // CHECK: proj.if %arg0 {
+  // CHECK-NEXT:   ^bb0:
+  // CHECK-NEXT:   }
   // CHECK-GENERIC: "proj.if"(%[[ARG0:.*]]) ({
-  // CHECK-GENERIC:   "proj.yield"() : () -> ()
-  // CHECK-GENERIC: }) : (!proj.projection) -> ()
+  // CHECK-GENERIC-NEXT:   ^bb0:
+  // CHECK-GENERIC-NEXT:   }, {
+  // CHECK-GENERIC-NEXT:   }) : (!proj.projection) -> ()
   proj.if %arg0 {
-    proj.yield
   }
   func.return
 }
@@ -68,19 +70,14 @@ func.func @test_if(%arg0: !proj.projection) {
 // Test proj.if with else region
 func.func @test_if_else(%arg0: !proj.projection) {
   // CHECK: proj.if %arg0 {
-  // CHECK:   proj.yield
-  // CHECK: } else {
-  // CHECK:   proj.yield
-  // CHECK: }
+  // CHECK-NEXT:   ^bb0:
+  // CHECK-NEXT:   }
   // CHECK-GENERIC: "proj.if"(%[[ARG0:.*]]) ({
-  // CHECK-GENERIC:   "proj.yield"() : () -> ()
-  // CHECK-GENERIC: }, {
-  // CHECK-GENERIC:   "proj.yield"() : () -> ()
-  // CHECK-GENERIC: }) : (!proj.projection) -> ()
+  // CHECK-GENERIC-NEXT:   ^bb0:
+  // CHECK-GENERIC-NEXT:   }, {
+  // CHECK-GENERIC-NEXT:   }) : (!proj.projection) -> ()
   proj.if %arg0 {
-    proj.yield
   } else {
-    proj.yield
   }
   func.return
 }
@@ -179,13 +176,12 @@ proj.mixed @phase_mixed() {
 // Test proj.if in unitary function
 // CHECK: proj.unitary @if_unitary(%arg: !proj.projection) {
 // CHECK-NEXT:   proj.if %arg {
-// CHECK-NEXT:     proj.yield
+// CHECK-NEXT:   ^bb0:
 // CHECK-NEXT:   }
 // CHECK-NEXT:   proj.return
 // CHECK-NEXT: }
 proj.unitary @if_unitary(%arg: !proj.projection) {
   proj.if %arg {
-    proj.yield
   }
   proj.return
 }
@@ -193,13 +189,12 @@ proj.unitary @if_unitary(%arg: !proj.projection) {
 // Test proj.if in mixed function
 // CHECK: proj.mixed @if_mixed(%arg: !proj.projection) {
 // CHECK-NEXT:   proj.if %arg {
-// CHECK-NEXT:     proj.yield
+// CHECK-NEXT:   ^bb0:
 // CHECK-NEXT:   }
 // CHECK-NEXT:   proj.return
 // CHECK-NEXT: }
 proj.mixed @if_mixed(%arg: !proj.projection) {
   proj.if %arg {
-    proj.yield
   }
   proj.return
 }

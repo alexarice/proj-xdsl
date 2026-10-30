@@ -36,7 +36,6 @@ from projxdsl.dialects.proj import (
     StateAttr,
     UnitaryOp,
     XorOp,
-    YieldOp,
 )
 from projxdsl.frontend.lexer import ProjLexer, ProjToken, ProjTokenKind
 from projxdsl.func_kind import FuncKind
@@ -322,7 +321,6 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 separator=";",
                 context_msg=" in statement block",
             )
-            inner_builder.insert(YieldOp())
             return None
 
         true_region = Builder.region(parse_statements)

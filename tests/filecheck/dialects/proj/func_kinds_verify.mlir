@@ -50,9 +50,9 @@
     %0 = "arith.constant"() <{value = 1 : i1}> : () -> i1
     %1 = "proj.from_bool"(%0) : (i1) -> !proj.projection
     "proj.if"(%1) ({
-      "proj.yield"() : () -> ()
+      ^bb0:
     }, {
-      "proj.yield"() : () -> ()
+      ^bb0:
     }) : (!proj.projection) -> ()
     "proj.return"() : () -> ()
   // CHECK: Operation 'proj.if' is not allowed in pure contexts. Context must be at least unitary
