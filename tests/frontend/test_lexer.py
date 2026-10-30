@@ -167,6 +167,79 @@ class TestPunctuation:
         assert ProjTokenKind.COMMA.is_punctuation()
 
 
+class TestOperators:
+    """Test lexing of operators including minus and arrow."""
+
+    def test_minus(self):
+        """Test that minus is lexed as MINUS token."""
+        tokens = lex_all("-")
+        assert tokens == [(ProjTokenKind.MINUS, "-"), (ProjTokenKind.EOF, "")]
+        assert ProjTokenKind.MINUS.is_punctuation()
+
+    def test_minus_in_expression(self):
+        """Test minus in a scalar multiplication expression."""
+        tokens = lex_all("-1.0")
+        assert tokens == [
+            (ProjTokenKind.MINUS, "-"),
+            (ProjTokenKind.FLOAT, "1.0"),
+            (ProjTokenKind.EOF, ""),
+        ]
+
+    def test_arrow_vs_minus(self):
+        """Test that -> is lexed as ARROW, not MINUS then GREATER."""
+        tokens = lex_all("->")
+        assert tokens == [(ProjTokenKind.ARROW, "->"), (ProjTokenKind.EOF, "")]
+        # Ensure it's not lexed as separate tokens
+        assert tokens != [
+            (ProjTokenKind.MINUS, "-"),
+            (ProjTokenKind.GREATER, ">"),
+            (ProjTokenKind.EOF, ""),
+        ]
+
+    def test_arrow_in_type_signature(self):
+        """Test arrow in function type signature."""
+        tokens = lex_all("() -> ()")
+        assert tokens == [
+            (ProjTokenKind.LPAREN, "("),
+            (ProjTokenKind.RPAREN, ")"),
+            (ProjTokenKind.ARROW, "->"),
+            (ProjTokenKind.LPAREN, "("),
+            (ProjTokenKind.RPAREN, ")"),
+            (ProjTokenKind.EOF, ""),
+        ]
+
+    def test_minus_and_arrow_separate(self):
+        """Test that minus and arrow are properly distinguished."""
+        tokens = lex_all("-> -")
+        assert tokens == [
+            (ProjTokenKind.ARROW, "->"),
+            (ProjTokenKind.MINUS, "-"),
+            (ProjTokenKind.EOF, ""),
+        ]
+
+    def test_double_equals(self):
+        """Test == is lexed as EQ, not two EQUALS."""
+        tokens = lex_all("==")
+        assert tokens == [(ProjTokenKind.EQ, "=="), (ProjTokenKind.EOF, "")]
+
+    def test_and_operator(self):
+        tokens = lex_all("&&")
+        assert tokens == [(ProjTokenKind.AND, "&&"), (ProjTokenKind.EOF, "")]
+
+    def test_or_operator(self):
+        tokens = lex_all("||")
+        assert tokens == [(ProjTokenKind.OR, "||"), (ProjTokenKind.EOF, "")]
+
+    def test_xor_operator(self):
+        tokens = lex_all("^")
+        assert tokens == [(ProjTokenKind.XOR, "^"), (ProjTokenKind.EOF, "")]
+
+    def test_plus_operator(self):
+        tokens = lex_all("+")
+        assert tokens == [(ProjTokenKind.PLUS, "+"), (ProjTokenKind.EOF, "")]
+        assert ProjTokenKind.PLUS.is_punctuation()
+
+
 class TestWhitespace:
     """Test whitespace handling."""
 

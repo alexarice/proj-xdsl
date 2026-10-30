@@ -95,21 +95,7 @@ class ProjTokenKind(Enum):
 
     def is_punctuation(self) -> bool:
         """Check if this token kind is punctuation."""
-        return self in (
-            ProjTokenKind.LESS,
-            ProjTokenKind.GREATER,
-            ProjTokenKind.EQUALS,
-            ProjTokenKind.BANG,
-            ProjTokenKind.LPAREN,
-            ProjTokenKind.RPAREN,
-            ProjTokenKind.STAR,
-            ProjTokenKind.LBRACE,
-            ProjTokenKind.RBRACE,
-            ProjTokenKind.SEMICOLON,
-            ProjTokenKind.COLON,
-            ProjTokenKind.COMMA,
-            ProjTokenKind.ARROW,
-        )
+        return self in KIND_BY_PUNCTUATION_SPELLING.values()
 
     @staticmethod
     def get_punctuation_kind_from_spelling(spelling: str) -> ProjTokenKind:
