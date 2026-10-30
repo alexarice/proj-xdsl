@@ -1,9 +1,11 @@
 """Tests for projection liveness analysis."""
 
-from xdsl.ir import Operation
+from typing import cast
+
+from xdsl.ir import Block, Operation
 
 from projxdsl.analysis.liveness import compute_liveness
-from projxdsl.dialects.proj import FuncOpBase, ProjectionType
+from projxdsl.dialects.proj import FuncOpBase, IfOp, ProjectionType
 from projxdsl.frontend.parser import ProjParser
 
 
@@ -16,6 +18,11 @@ def parse_function(code: str) -> FuncOpBase:
 def get_ops_by_name(func: FuncOpBase, name: str) -> list[Operation]:
     """Helper to get operations by name from a function."""
     block = func.body.blocks[0]
+    return [op for op in block.ops if op.name == name]
+
+
+def get_ops_in_block(block: Block, name: str) -> list[Operation]:
+    """Helper to get operations by name in a block."""
     return [op for op in block.ops if op.name == name]
 
 
@@ -167,11 +174,22 @@ unitary fn test(q: qubit) {
         assert len(if_ops) == 1
         assert len(eq_ops) == 1
 
+        # Get operations inside if region
+        if_op = cast(IfOp, if_ops[0])
+        true_block = if_op.true_region.blocks[0]
+        phase_ops = get_ops_in_block(true_block, "proj.phase")
+        assert len(phase_ops) == 1
+
         # Before if: p is live (used by the if condition)
-        assert len(liveness.get_live_before(if_ops[0])) == 1
+        assert len(liveness.get_live_before(if_op)) == 1
 
         # After if: p is dead (consumed by the if)
-        assert len(liveness.get_live_after(if_ops[0])) == 0
+        # Note: condition is live WITHIN the if region, but not after
+        assert len(liveness.get_live_after(if_op)) == 0
+
+        # Within if region: p is live (condition persists through region)
+        assert len(liveness.get_live_before(phase_ops[0])) == 1
+        assert len(liveness.get_live_after(phase_ops[0])) == 1
 
         # After eq: p is live
         live_after_eq = liveness.get_live_after(eq_ops[0])

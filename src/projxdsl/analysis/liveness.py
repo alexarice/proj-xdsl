@@ -94,7 +94,7 @@ def compute_liveness(func_op: FuncOpBase) -> LivenessInfo:
                      ∪ live_in[after_if]
 
     Args:
-        func_op: The function operation to analyze
+        func_op: The function operation to analyse
 
     Returns:
         LivenessInfo with live-before and live-after sets for each operation
@@ -106,7 +106,7 @@ def compute_liveness(func_op: FuncOpBase) -> LivenessInfo:
 
     assert func_block is not None
 
-    def analyze_block(block: Block, live_out: set[SSAValue]) -> set[SSAValue]:
+    def analyse_block(block: Block, live_out: set[SSAValue]) -> set[SSAValue]:
         """Analyze a block, handling IfOp regions. Returns live_in for the block."""
         next_live_before = live_out
 
@@ -118,19 +118,17 @@ def compute_liveness(func_op: FuncOpBase) -> LivenessInfo:
             live_before[op] = uses | (live_after[op] - defs)
 
             if isinstance(op, IfOp):
-                if op.true_region.blocks:
-                    live_before[op] |= analyze_block(
-                        op.true_region.blocks[0], live_after[op]
-                    )
-                if op.false_region.blocks:
-                    live_before[op] |= analyze_block(
-                        op.false_region.blocks[0], live_after[op]
-                    )
+                # Condition projection remains live through both regions
+                region_live_out = live_after[op] | {op.condition}
+                if (true_block := op.true_region.first_block) is not None:
+                    live_before[op] |= analyse_block(true_block, region_live_out)
+                if (false_block := op.false_region.first_block) is not None:
+                    live_before[op] |= analyse_block(false_block, region_live_out)
 
             next_live_before = live_before[op]
 
         return next_live_before
 
-    analyze_block(func_block, set())
+    analyse_block(func_block, set())
 
     return LivenessInfo(_live_before=live_before, _live_after=live_after)
