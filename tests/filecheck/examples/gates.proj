@@ -134,3 +134,22 @@ unitary fn CZ_call(c: qubit, q: qubit) {
     Z(q)
   }
 }
+
+// CHECK-LABEL: proj.unitary @RZ
+// CHECK:        %[[HALF:.*]] = angle.scalar_mult 5.000000e-01, %[[THETA:.*]]
+// CHECK:        proj.eq %q : !proj.qubit, #proj.state<one>
+// CHECK-NEXT:   proj.if %[[EQ:.*]] {
+// CHECK-NEXT:     proj.phase %[[HALF]]
+// CHECK-NEXT:   } else {
+// CHECK-NEXT:     %[[NEG_HALF:.*]] = angle.scalar_mult -1.000000e+00, %[[HALF]]
+// CHECK-NEXT:     proj.phase %[[NEG_HALF]]
+// CHECK-NEXT:   }
+// CHECK-NEXT:   proj.return
+unitary fn RZ(theta: angle, q: qubit) {
+  let half = 0.5 * theta;
+  if q == |1> {
+    ph(half)
+  } else {
+    ph(-half)
+  }
+}

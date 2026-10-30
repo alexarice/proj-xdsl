@@ -98,7 +98,6 @@ unitary fn test(q: qubit) {
         assert borrow_info is not None
         assert eq_op.result in borrow_info.projections
 
-    @pytest.mark.xfail(reason="if-else not yet supported in parser")
     def test_if_else_borrow_persists(self):
         """Test that condition borrow persists through both if and else regions."""
         func = parse_function("""
@@ -155,12 +154,24 @@ unitary fn test(q: qubit) {
         with pytest.raises(BorrowError, match="Cannot borrow qubit in X basis"):
             BorrowAnalysis.compute(func, liveness)
 
-    @pytest.mark.xfail(reason="if-else not yet supported in parser")
     def test_if_else_conflicting_borrows(self):
         """Test that conflicting borrows between if/else are detected."""
-        # Note: This test would check cross-region borrow conflicts
-        # For now, just mark as xfail since parser doesn't support else
-        pytest.fail("Parser does not support if-else yet")
+        func = parse_function("""
+unitary fn test(q: qubit) {
+    let p = q == |0>;
+    if p {
+        let p_true = q == |+>;
+        ph(0)
+    } else {
+        let p_false = q == |->;
+        ph(0)
+    }
+}
+""")
+        liveness = LivenessAnalysis.compute(func)
+
+        with pytest.raises(BorrowError):
+            BorrowAnalysis.compute(func, liveness)
 
 
 class TestBorrowReturn:

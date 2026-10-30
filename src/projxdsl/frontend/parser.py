@@ -297,7 +297,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         """
         Parse an if statement.
 
-        if-stmt ::= "if" expr block
+        if-stmt ::= "if" expr block ("else" block)?
         block ::= "{" statement* "}"
         """
         # Parse the condition expression (inserted in parent block)
@@ -329,10 +329,8 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
         # Parse the optional else block
         false_region = Region()
-        if self._current_token.kind == ProjTokenKind.IF:
-            # Check if it's actually 'else' by peeking ahead
-            # For now, we don't support else, so this is a placeholder
-            pass
+        if self._parse_optional_token(ProjTokenKind.ELSE) is not None:
+            false_region = Builder.region(parse_statements)
 
         return builder.insert(IfOp(condition, true_region, false_region))
 

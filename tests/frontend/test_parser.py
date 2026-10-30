@@ -550,6 +550,62 @@ class TestIfStatement:
         assert isinstance(inner_inner_ops[0], PiOp)
         assert isinstance(inner_inner_ops[1], PhaseOp)
 
+    def test_if_else_statement(self):
+        """Test parsing if statement with else clause."""
+
+        qubit_var = make_qubit_var()
+        proj_var = make_proj_var(qubit_var)
+        parser = ProjParser("if p { ph(pi) } else { ph(0) }")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        parser.parse_statement(
+            ScopedDict[str, SSAValue](local_scope={"p": proj_var}), builder
+        )
+        ops = list(block.ops)
+        assert len(ops) == 1
+        if_op = ops[0]
+        assert isinstance(if_op, IfOp)
+        assert if_op.condition is proj_var
+
+        # Check true region
+        assert len(if_op.true_region.blocks) == 1
+        true_block = if_op.true_region.blocks[0]
+        true_ops = list(true_block.ops)
+        assert len(true_ops) == 2  # PiOp + PhaseOp
+        assert isinstance(true_ops[0], PiOp)
+        assert isinstance(true_ops[1], PhaseOp)
+
+        # Check false region
+        assert len(if_op.false_region.blocks) == 1
+        false_block = if_op.false_region.blocks[0]
+        false_ops = list(false_block.ops)
+        assert len(false_ops) == 2  # ZeroOp + PhaseOp
+        assert isinstance(false_ops[0], ZeroOp)
+        assert isinstance(false_ops[1], PhaseOp)
+
+    def test_if_else_empty_blocks(self):
+        """Test parsing if statement with empty else clause."""
+
+        qubit_var = make_qubit_var()
+        proj_var = make_proj_var(qubit_var)
+        parser = ProjParser("if p { } else { }")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        parser.parse_statement(
+            ScopedDict[str, SSAValue](local_scope={"p": proj_var}), builder
+        )
+        ops = list(block.ops)
+        assert len(ops) == 1
+        if_op = ops[0]
+        assert isinstance(if_op, IfOp)
+
+        # Both regions should have empty blocks
+        true_block = if_op.true_region.blocks[0]
+        assert len(list(true_block.ops)) == 0
+
+        false_block = if_op.false_region.blocks[0]
+        assert len(list(false_block.ops)) == 0
+
 
 class TestLetStatement:
     """Test parsing of let statements."""
