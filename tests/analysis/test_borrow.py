@@ -5,8 +5,8 @@ from typing import cast
 import pytest
 from xdsl.ir import Block, Operation
 
-from projxdsl.analysis.borrow import BorrowError, BorrowType, compute_borrows
-from projxdsl.analysis.liveness import compute_liveness
+from projxdsl.analysis.borrow import BorrowAnalysis, BorrowError, BorrowType
+from projxdsl.analysis.liveness import LivenessAnalysis
 from projxdsl.dialects.proj import EqOp, FuncOpBase, IfOp, PhaseOp
 from projxdsl.frontend.parser import ProjParser
 
@@ -39,8 +39,8 @@ pure fn test(q: qubit) -> proj {
     p
 }
 """)
-        liveness = compute_liveness(func)
-        borrows = compute_borrows(func, liveness)
+        liveness = LivenessAnalysis.compute(func)
+        borrows = BorrowAnalysis.compute(func, liveness)
 
         eq_ops = get_ops_by_name(func, "proj.eq")
         assert len(eq_ops) == 1
@@ -68,8 +68,8 @@ unitary fn test(q: qubit) {
     }
 }
 """)
-        liveness = compute_liveness(func)
-        borrows = compute_borrows(func, liveness)
+        liveness = LivenessAnalysis.compute(func)
+        borrows = BorrowAnalysis.compute(func, liveness)
 
         if_ops = get_ops_by_name(func, "proj.if")
         eq_ops = get_ops_by_name(func, "proj.eq")
@@ -111,8 +111,8 @@ unitary fn test(q1: qubit, q2: qubit) {
     }
 }
 """)
-        liveness = compute_liveness(func)
-        borrows = compute_borrows(func, liveness)
+        liveness = LivenessAnalysis.compute(func)
+        borrows = BorrowAnalysis.compute(func, liveness)
 
         if_ops = get_ops_by_name(func, "proj.if")
         eq_ops = get_ops_by_name(func, "proj.eq")
@@ -149,11 +149,11 @@ unitary fn test(q: qubit) {
     }
 }
 """)
-        liveness = compute_liveness(func)
+        liveness = LivenessAnalysis.compute(func)
 
         # Should raise BorrowError due to conflicting basis borrows (Z vs X)
         with pytest.raises(BorrowError, match="Cannot borrow qubit in X basis"):
-            compute_borrows(func, liveness)
+            BorrowAnalysis.compute(func, liveness)
 
     @pytest.mark.xfail(reason="if-else not yet supported in parser")
     def test_if_else_conflicting_borrows(self):
@@ -175,11 +175,11 @@ mixed fn test() -> proj {
     p
 }
 """)
-        liveness = compute_liveness(func)
+        liveness = LivenessAnalysis.compute(func)
 
         # Should raise BorrowError because q is locally allocated and still borrowed
         with pytest.raises(BorrowError, match="Locally allocated qubit"):
-            compute_borrows(func, liveness)
+            BorrowAnalysis.compute(func, liveness)
 
     def test_return_without_borrowed_local_qubit(self):
         """Test that returning without borrowed local qubits is fine."""
@@ -192,10 +192,10 @@ mixed fn test() {
     }
 }
 """)
-        liveness = compute_liveness(func)
+        liveness = LivenessAnalysis.compute(func)
 
         # This should not raise an error (p is consumed by if, q not borrowed at return)
-        borrows = compute_borrows(func, liveness)
+        borrows = BorrowAnalysis.compute(func, liveness)
         assert borrows is not None
 
     def test_return_with_parameter_qubit(self):
@@ -206,8 +206,8 @@ pure fn test(q: qubit) -> proj {
     p
 }
 """)
-        liveness = compute_liveness(func)
+        liveness = LivenessAnalysis.compute(func)
 
         # This should not raise an error (q is a parameter, not locally allocated)
-        borrows = compute_borrows(func, liveness)
+        borrows = BorrowAnalysis.compute(func, liveness)
         assert borrows is not None

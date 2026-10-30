@@ -4,7 +4,7 @@ from typing import cast
 
 from xdsl.ir import Block, Operation
 
-from projxdsl.analysis.liveness import compute_liveness
+from projxdsl.analysis.liveness import LivenessAnalysis
 from projxdsl.dialects.proj import FuncOpBase, IfOp, ProjectionType
 from projxdsl.frontend.parser import ProjParser
 
@@ -37,7 +37,7 @@ pure fn test(q: qubit) -> proj {
     p
 }
 """)
-        liveness = compute_liveness(func)
+        liveness = LivenessAnalysis.compute(func)
 
         eq_ops = get_ops_by_name(func, "proj.eq")
         return_ops = get_ops_by_name(func, "proj.return")
@@ -70,7 +70,7 @@ pure fn test(q1: qubit, q2: qubit) -> proj {
     p1 && p2
 }
 """)
-        liveness = compute_liveness(func)
+        liveness = LivenessAnalysis.compute(func)
 
         eq_ops = get_ops_by_name(func, "proj.eq")
         and_ops = get_ops_by_name(func, "proj.and")
@@ -97,7 +97,7 @@ pure fn test(q: qubit) -> proj {
     p2
 }
 """)
-        liveness = compute_liveness(func)
+        liveness = LivenessAnalysis.compute(func)
 
         eq_ops = get_ops_by_name(func, "proj.eq")
 
@@ -123,7 +123,7 @@ pure fn test(q1: qubit, q2: qubit) -> proj {
     p1 && p2
 }
 """)
-        liveness = compute_liveness(func)
+        liveness = LivenessAnalysis.compute(func)
 
         and_ops = get_ops_by_name(func, "proj.and")
         assert len(and_ops) == 1
@@ -142,7 +142,7 @@ pure fn test(q: qubit) -> proj {
     !p
 }
 """)
-        liveness = compute_liveness(func)
+        liveness = LivenessAnalysis.compute(func)
 
         not_ops = get_ops_by_name(func, "proj.not")
         assert len(not_ops) == 1
@@ -167,7 +167,7 @@ unitary fn test(q: qubit) {
     }
 }
 """)
-        liveness = compute_liveness(func)
+        liveness = LivenessAnalysis.compute(func)
 
         if_ops = get_ops_by_name(func, "proj.if")
         eq_ops = get_ops_by_name(func, "proj.eq")
@@ -208,7 +208,7 @@ mixed fn test(q1: qubit, q2: qubit) -> proj {
     p1
 }
 """)
-        liveness = compute_liveness(func)
+        liveness = LivenessAnalysis.compute(func)
 
         if_ops = get_ops_by_name(func, "proj.if")
         eq_ops = get_ops_by_name(func, "proj.eq")
@@ -235,8 +235,8 @@ mixed fn test(q1: qubit, q2: qubit) -> proj {
         assert len(liveness.get_live_before(return_op)) == 1
 
 
-class TestLivenessInfo:
-    """Tests for LivenessInfo helper methods."""
+class TestLivenessAnalysis:
+    """Tests for LivenessAnalysis helper methods."""
 
     def test_is_live_before_and_after(self):
         """Test is_live_before and is_live_after methods."""
@@ -246,7 +246,7 @@ pure fn test(q: qubit) -> proj {
     p
 }
 """)
-        liveness = compute_liveness(func)
+        liveness = LivenessAnalysis.compute(func)
 
         eq_ops = get_ops_by_name(func, "proj.eq")
         assert len(eq_ops) == 1
@@ -272,7 +272,7 @@ pure fn test(q: qubit) -> proj {
     p
 }
 """)
-        liveness = compute_liveness(func)
+        liveness = LivenessAnalysis.compute(func)
 
         return_ops = get_ops_by_name(func, "proj.return")
         assert len(return_ops) == 1

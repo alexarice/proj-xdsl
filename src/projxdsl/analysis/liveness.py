@@ -6,7 +6,6 @@ tracking which projection values are live at each program point.
 Handles IfOp regions with control flow merging.
 """
 
-from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 from xdsl.ir import Block, Operation, SSAValue
@@ -15,9 +14,9 @@ from projxdsl.dialects.proj import FuncOpBase, IfOp, ProjectionType
 
 
 @dataclass
-class LivenessInfo:
+class LivenessAnalysis:
     """
-    Liveness information for a function.
+    Liveness analysis for projection SSA values.
 
     Maps each operation to the set of projection SSA values
     that are live immediately before and after that operation executes.
@@ -42,93 +41,83 @@ class LivenessInfo:
         """Get the set of values live after an operation."""
         return self._live_after.get(op, set())
 
+    @staticmethod
+    def compute(func_op: FuncOpBase) -> "LivenessAnalysis":
+        """
+        Compute liveness information for projection values in a function.
 
-def _is_projection(value: SSAValue) -> bool:
-    """Check if an SSA value has projection type."""
-    return isinstance(value.type, ProjectionType)
+        Uses backward dataflow analysis:
+        - live_in[block] = uses_in_block ∪ (live_out[block] - defs_in_block)
+        - live_out[block] = union of live_in[succ] for all successors
 
+        Handles IfOp regions:
+        - true_region and false_region are separate control flow paths
+        - Both merge back after the IfOp
 
-def _get_defined_projections(op: Operation) -> Iterable[SSAValue]:
-    """Get projection values defined by an operation."""
-    for result in op.results:
-        if _is_projection(result):
-            yield result
+        For a structure like:
+        ```
+        before-if
+        if_op
+          true_region:
+            true_stmts
+            yield
+          false_region:
+            false_stmts
+            yield
+        after_if
+        ```
 
+        The liveness flows:
+        - live_out[before-if] = live_in[true_region] ∪ live_in[false_region]
+        - live_in[if_op] = live_out[true_region]
+                             ∪ live_out[false_region]
+                             ∪ live_in[after_if]
 
-def _get_used_projections(op: Operation) -> Iterable[SSAValue]:
-    """Get projection values used by an operation."""
-    for operand in op.operands:
-        if _is_projection(operand):
-            yield operand
+        Args:
+            func_op: The function operation to analyse
 
+        Returns:
+            LivenessAnalysis with live-before and live-after sets for each operation
+        """
+        live_before: dict[Operation, set[SSAValue]] = {}
+        live_after: dict[Operation, set[SSAValue]] = {}
 
-def compute_liveness(func_op: FuncOpBase) -> LivenessInfo:
-    """
-    Compute liveness information for projection values in a function.
+        func_block = func_op.body.first_block
 
-    Uses backward dataflow analysis:
-    - live_in[block] = uses_in_block ∪ (live_out[block] - defs_in_block)
-    - live_out[block] = union of live_in[succ] for all successors
+        assert func_block is not None
 
-    Handles IfOp regions:
-    - true_region and false_region are separate control flow paths
-    - Both merge back after the IfOp
+        def analyse_block(block: Block, live_out: set[SSAValue]) -> set[SSAValue]:
+            """Analyse a block, handling IfOp regions."""
+            next_live_before = live_out
 
-    For a structure like:
-    ```
-    before-if
-    if_op
-      true_region:
-        true_stmts
-        yield
-      false_region:
-        false_stmts
-        yield
-    after_if
-    ```
+            for op in reversed(block.ops):
+                live_after[op] = next_live_before.copy()
 
-    The liveness flows:
-    - live_out[before-if] = live_in[true_region] ∪ live_in[false_region]
-    - live_in[if_op] = live_out[true_region]
-                     ∪ live_out[false_region]
-                     ∪ live_in[after_if]
+                # Inline helper functions for projection analysis
+                uses = {
+                    operand
+                    for operand in op.operands
+                    if isinstance(operand.type, ProjectionType)
+                }
+                defs = {
+                    result
+                    for result in op.results
+                    if isinstance(result.type, ProjectionType)
+                }
+                live_before[op] = uses | (live_after[op] - defs)
 
-    Args:
-        func_op: The function operation to analyse
+                if isinstance(op, IfOp):
+                    # Condition projection remains live through both regions
+                    region_live_out = live_after[op] | {op.condition}
+                    if (true_block := op.true_region.first_block) is not None:
+                        live_before[op] |= analyse_block(true_block, region_live_out)
+                    if (false_block := op.false_region.first_block) is not None:
+                        live_before[op] |= analyse_block(false_block, region_live_out)
 
-    Returns:
-        LivenessInfo with live-before and live-after sets for each operation
-    """
-    live_before: dict[Operation, set[SSAValue]] = {}
-    live_after: dict[Operation, set[SSAValue]] = {}
+                next_live_before = live_before[op]
 
-    func_block = func_op.body.first_block
+            return next_live_before
 
-    assert func_block is not None
+        analyse_block(func_block, set())
 
-    def analyse_block(block: Block, live_out: set[SSAValue]) -> set[SSAValue]:
-        """Analyze a block, handling IfOp regions. Returns live_in for the block."""
-        next_live_before = live_out
-
-        for op in reversed(block.ops):
-            live_after[op] = next_live_before.copy()
-
-            uses = set(_get_used_projections(op))
-            defs = set(_get_defined_projections(op))
-            live_before[op] = uses | (live_after[op] - defs)
-
-            if isinstance(op, IfOp):
-                # Condition projection remains live through both regions
-                region_live_out = live_after[op] | {op.condition}
-                if (true_block := op.true_region.first_block) is not None:
-                    live_before[op] |= analyse_block(true_block, region_live_out)
-                if (false_block := op.false_region.first_block) is not None:
-                    live_before[op] |= analyse_block(false_block, region_live_out)
-
-            next_live_before = live_before[op]
-
-        return next_live_before
-
-    analyse_block(func_block, set())
-
-    return LivenessInfo(_live_before=live_before, _live_after=live_after)
+        return LivenessAnalysis(_live_before=live_before, _live_after=live_after)

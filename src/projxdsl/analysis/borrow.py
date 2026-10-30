@@ -13,7 +13,7 @@ from enum import Enum, auto
 
 from xdsl.ir import Block, Operation, SSAValue
 
-from projxdsl.analysis.liveness import LivenessInfo
+from projxdsl.analysis.liveness import LivenessAnalysis
 from projxdsl.dialects.proj import (
     AllocOp,
     EqOp,
@@ -145,101 +145,103 @@ class BorrowAnalysis:
         """Get the borrow state after an operation."""
         return self._after.get(op, BorrowState())
 
+    @staticmethod
+    def compute(func_op: FuncOpBase, liveness: LivenessAnalysis) -> "BorrowAnalysis":
+        """
+        Compute borrow information for projection values in a function.
 
-def compute_borrows(func_op: FuncOpBase, liveness: LivenessInfo) -> BorrowAnalysis:
-    """
-    Compute borrow information for projection values in a function.
+        Uses forward dataflow analysis with propagation rule:
+        "If qubit q is borrowed by P before op, and P is live after op,
+         then q is borrowed by P after op"
 
-    Uses forward dataflow analysis with propagation rule:
-    "If qubit q is borrowed by P before op, and P is live after op,
-     then q is borrowed by P after op"
+        Args:
+            func_op: The function operation to analyse
+            liveness: Pre-computed liveness information
 
-    Args:
-        func_op: The function operation to analyse
-        liveness: Pre-computed liveness information
+        Returns:
+            BorrowAnalysis with borrow state before and after each operation
+        """
+        before: dict[Operation, BorrowState] = {}
+        after: dict[Operation, BorrowState] = {}
 
-    Returns:
-        BorrowAnalysis with borrow state before and after each operation
-    """
-    before: dict[Operation, BorrowState] = {}
-    after: dict[Operation, BorrowState] = {}
+        func_block = func_op.body.first_block
+        assert func_block is not None
 
-    func_block = func_op.body.first_block
-    assert func_block is not None
+        def analyse_block(block: Block, state_in: BorrowState) -> BorrowState:
+            """Analyse a block, handling IfOp regions."""
+            next_state_after = state_in
 
-    def analyse_block(block: Block, state_in: BorrowState) -> BorrowState:
-        """Analyze a block, handling IfOp regions. Returns state_out for the block."""
-        next_state_after = state_in
+            for op in block.ops:
+                # State before this op = state after previous op
+                before_state = next_state_after
 
-        for op in block.ops:
-            # State before this op = state after previous op
-            before_state = next_state_after
+                # Apply propagation rule:
+                # "If qubit q is borrowed by P before op, and P is live after op,
+                #  then q is borrowed by P after op"
+                live_after = liveness.get_live_after(op)
+                after_state = BorrowState()
+                for qubit, borrows_before in before_state.items():
+                    filtered_projs = borrows_before.projections & live_after
+                    if filtered_projs:
+                        after_state.add(
+                            qubit, borrows_before.borrow_type, *filtered_projs
+                        )
 
-            # Apply propagation rule:
-            # "If qubit q is borrowed by P before op, and P is live after op,
-            #  then q is borrowed by P after op"
-            live_after = liveness.get_live_after(op)
-            after_state = BorrowState()
-            for qubit, borrows_before in before_state.items():
-                filtered_projs = borrows_before.projections & live_after
-                if filtered_projs:
-                    after_state.add(qubit, borrows_before.borrow_type, *filtered_projs)
+                # EqOp creates a new borrow: the result projection borrows the qubit
+                if isinstance(op, EqOp):
+                    qubit = op.qubit
+                    basis = BorrowType[op.state.data.get_basis().name]
+                    after_state.add(qubit, basis, op.result)
+                else:
+                    # Generic rule for all other ops:
+                    # If there are result projections, inherit borrows from input
+                    # projections and totally borrow input qubits
+                    result_projs = [
+                        r for r in op.results if isinstance(r.type, ProjectionType)
+                    ]
 
-            # EqOp creates a new borrow: the result projection borrows the qubit
-            if isinstance(op, EqOp):
-                qubit = op.qubit
-                basis = BorrowType[op.state.data.get_basis().name]
-                after_state.add(qubit, basis, op.result)
-            else:
-                # Generic rule for all other ops:
-                # If there are result projections, inherit borrows from input
-                # projections and totally borrow input qubits
-                result_projs = [
-                    r for r in op.results if isinstance(r.type, ProjectionType)
-                ]
+                    if result_projs:
+                        # Collect all input projections
+                        input_projs = {
+                            o for o in op.operands if isinstance(o.type, ProjectionType)
+                        }
 
-                if result_projs:
-                    # Collect all input projections
-                    input_projs = {
-                        o for o in op.operands if isinstance(o.type, ProjectionType)
-                    }
+                        # Inherit borrows from input projections
+                        for qubit, borrows_before in before_state.items():
+                            if input_projs & borrows_before.projections:
+                                after_state.add(
+                                    qubit, borrows_before.borrow_type, *result_projs
+                                )
 
-                    # Inherit borrows from input projections
-                    for qubit, borrows_before in before_state.items():
-                        if input_projs & borrows_before.projections:
-                            after_state.add(
-                                qubit, borrows_before.borrow_type, *result_projs
-                            )
+                        # Totally borrow any input qubits with the result projections
+                        for qubit in op.operands:
+                            if isinstance(qubit.type, QubitType):
+                                after_state.add(qubit, BorrowType.Total, *result_projs)
 
-                    # Totally borrow any input qubits with the result projections
-                    for qubit in op.operands:
-                        if isinstance(qubit.type, QubitType):
-                            after_state.add(qubit, BorrowType.Total, *result_projs)
+                # Recurse into IfOp regions
+                if isinstance(op, IfOp):
+                    if (true_block := op.true_region.first_block) is not None:
+                        analyse_block(true_block, before_state)
+                    if (false_block := op.false_region.first_block) is not None:
+                        analyse_block(false_block, before_state)
 
-            # Recurse into IfOp regions
-            if isinstance(op, IfOp):
-                if (true_block := op.true_region.first_block) is not None:
-                    analyse_block(true_block, before_state)
-                if (false_block := op.false_region.first_block) is not None:
-                    analyse_block(false_block, before_state)
+                before[op] = before_state
+                after[op] = after_state
+                next_state_after = after_state
 
-            before[op] = before_state
-            after[op] = after_state
-            next_state_after = after_state
+            return next_state_after
 
-        return next_state_after
+        analyse_block(func_block, BorrowState())
 
-    analyse_block(func_block, BorrowState())
+        # Check borrow state at function terminator
+        terminator = func_block.last_op
+        if terminator is not None:
+            state_before_return = before.get(terminator, BorrowState())
+            for qubit, borrows in state_before_return.items():
+                if isinstance(qubit.owner, AllocOp):
+                    raise BorrowError(
+                        f"Locally allocated qubit is still borrowed at return: "
+                        f"borrowed by {[p.name_hint for p in borrows.projections]}"
+                    )
 
-    # Check borrow state at function terminator
-    terminator = func_block.last_op
-    if terminator is not None:
-        state_before_return = before.get(terminator, BorrowState())
-        for qubit, borrows in state_before_return.items():
-            if isinstance(qubit.owner, AllocOp):
-                raise BorrowError(
-                    f"Locally allocated qubit is still borrowed at return: "
-                    f"borrowed by {[p.name_hint for p in borrows.projections]}"
-                )
-
-    return BorrowAnalysis(_before=before, _after=after)
+        return BorrowAnalysis(_before=before, _after=after)
