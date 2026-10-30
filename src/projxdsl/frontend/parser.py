@@ -80,10 +80,12 @@ class ProjParser(GenericParser[ProjTokenKind]):
     # Binding powers for Pratt parsing
     # Higher number = tighter binding
     _PREFIX_SCALAR_MULT_BP = 11  # Prefix operator (single binding power) - tightest
+    _PREFIX_MINUS_BP = 11  # Prefix negation operator - same as scalar mult
     _PREFIX_MEASURE_BP = 7
     _PREFIX_NOT_BP = 7
     _POSTFIX_EQ_BP = 9  # Postfix operator (single binding power)
     _INFIX_ADD_BP = (8, 9)  # (left_bp, right_bp) - tighter than not
+    _INFIX_SUB_BP = (8, 9)  # (left_bp, right_bp) - same as add
     _INFIX_XOR_BP = (5, 6)  # (left_bp, right_bp)
     _INFIX_AND_BP = (3, 4)
     _INFIX_OR_BP = (1, 2)
@@ -479,6 +481,31 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
                 lhs = builder.insert(AddOp(lhs, rhs)).result
 
+            elif self._current_token.kind == ProjTokenKind.MINUS:
+                left_bp, right_bp = self._INFIX_SUB_BP
+                if min_bp > left_bp:
+                    break
+                self._consume_token()
+                rhs = self.parse_expression(
+                    variables, builder, right_bp, func_kind=func_kind
+                )
+
+                # Check that both operands are angles
+                if lhs is None or lhs.type != AngleType():
+                    error_type = lhs.type if lhs else "()"
+                    self.raise_typing_error(
+                        f"Expected angle for '-' left operand, got {error_type}"
+                    )
+                if rhs is None or rhs.type != AngleType():
+                    error_type = rhs.type if rhs else "()"
+                    self.raise_typing_error(
+                        f"Expected angle for '-' right operand, got {error_type}"
+                    )
+
+                # a - b = a + (-1.0 * b)
+                neg_rhs = builder.insert(ScalarMultOp(-1.0, rhs)).result
+                lhs = builder.insert(AddOp(lhs, neg_rhs)).result
+
             elif self._current_token.kind == ProjTokenKind.XOR:
                 left_bp, right_bp = self._INFIX_XOR_BP
                 if min_bp > left_bp:
@@ -647,6 +674,20 @@ class ProjParser(GenericParser[ProjTokenKind]):
                     f"Expected projection or boolean for '!' operator,"
                     f" got {operand.type}"
                 )
+
+        # Prefix minus: `-angle` -> scalar_mult(-1.0, angle)
+        if self._parse_optional_token(ProjTokenKind.MINUS) is not None:
+            operand = self.parse_expression(
+                variables, builder, self._PREFIX_MINUS_BP, func_kind=func_kind
+            )
+
+            if operand is None or operand.type != AngleType():
+                error_type = operand.type if operand else "()"
+                self.raise_typing_error(
+                    f"Expected angle for '-' prefix operator, got {error_type}"
+                )
+
+            return builder.insert(ScalarMultOp(-1.0, operand)).result
 
         if self._parse_optional_token(ProjTokenKind.ALLOC) is not None:
             if func_kind < FuncKind.MIXED:

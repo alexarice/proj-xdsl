@@ -464,6 +464,92 @@ class TestAngleExpressions:
         with pytest.raises(TypeCheckError, match="Expected angle"):
             parse_expression("2.0 * p", {"p": p})
 
+    def test_angle_prefix_minus(self):
+        """Test parsing prefix minus: -a."""
+
+        a = make_angle_var()
+        result = parse_expression("-a", {"a": a})
+        assert isinstance(result.owner, ScalarMultOp)
+        assert result.type == AngleType()
+
+    def test_angle_infix_minus(self):
+        """Test parsing angle subtraction: a - b."""
+
+        a = make_angle_var()
+        b = make_angle_var()
+        result = parse_expression("a - b", {"a": a, "b": b})
+        # a - b = a + (-1.0 * b)
+        assert isinstance(result.owner, AddOp)
+        assert isinstance(result.owner.operands[1].owner, ScalarMultOp)
+        assert result.type == AngleType()
+
+    def test_angle_minus_binds_same_as_add(self):
+        """Test that minus binds same as add."""
+
+        a = make_angle_var()
+        b = make_angle_var()
+        c = make_angle_var()
+        # a - b + c should parse as ((a - b) + c)
+        result = parse_expression("a - b + c", {"a": a, "b": b, "c": c})
+        assert isinstance(result.owner, AddOp)
+        assert isinstance(result.owner.operands[0].owner, AddOp)
+
+    def test_angle_minus_binds_looser_than_scalar_mult(self):
+        """Test that minus binds looser than scalar_mult."""
+
+        a = make_angle_var()
+        b = make_angle_var()
+        # 2.0 * a - b should parse as ((2.0 * a) - b)
+        result = parse_expression("2.0 * a - b", {"a": a, "b": b})
+        assert isinstance(result.owner, AddOp)
+        assert isinstance(result.owner.operands[0].owner, ScalarMultOp)
+
+    def test_angle_prefix_minus_binds_tightest(self):
+        """Test that prefix minus binds tightest."""
+
+        a = make_angle_var()
+        b = make_angle_var()
+        # -a + b should parse as ((-a) + b)
+        result = parse_expression("-a + b", {"a": a, "b": b})
+        assert isinstance(result.owner, AddOp)
+        assert isinstance(result.owner.operands[0].owner, ScalarMultOp)
+
+    def test_angle_prefix_minus_type_error(self):
+        """Test that prefix minus with non-angle raises error."""
+
+        p = make_bool_var()
+        with pytest.raises(TypeCheckError, match="Expected angle"):
+            parse_expression("-p", {"p": p})
+
+    def test_angle_infix_minus_type_error(self):
+        """Test that infix minus with non-angle raises error."""
+
+        p = make_bool_var()
+        a = make_angle_var()
+        with pytest.raises(TypeCheckError, match="Expected angle"):
+            parse_expression("p - a", {"p": p, "a": a})
+        with pytest.raises(TypeCheckError, match="Expected angle"):
+            parse_expression("a - p", {"p": p, "a": a})
+
+    def test_angle_minus_minus(self):
+        """Test a - -b which should parse as a + (-1.0 * (-1.0 * b))."""
+
+        a = make_angle_var()
+        b = make_angle_var()
+        result = parse_expression("a - -b", {"a": a, "b": b})
+        # a - -b = a + (-1.0 * (-1.0 * b))
+        assert isinstance(result.owner, AddOp)
+        # Left operand should be a
+        assert result.owner.operands[0] is a
+        # Right operand should be scalar_mult(-1.0, scalar_mult(-1.0, b))
+        right_op = result.owner.operands[1]
+        assert isinstance(right_op.owner, ScalarMultOp)
+        # ScalarMultOp has one operand (the angle), scalar is a property
+        inner_op = right_op.owner.operands[0]
+        assert isinstance(inner_op.owner, ScalarMultOp)
+        assert inner_op.owner.operands[0] is b
+        assert result.type == AngleType()
+
 
 class TestAngleConstants:
     """Test parsing of angle constants."""
