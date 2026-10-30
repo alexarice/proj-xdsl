@@ -15,6 +15,8 @@ from xdsl.utils.exceptions import ParseError
 from xdsl.utils.lexer import Input
 from xdsl.utils.scoped_dict import ScopedDict
 
+from projxdsl.analysis.borrow import BorrowAnalysis, BorrowError
+from projxdsl.analysis.liveness import LivenessAnalysis
 from projxdsl.dialects.angle import AddOp, AngleType, PiOp, ScalarMultOp, ZeroOp
 from projxdsl.dialects.proj import (
     AllocOp,
@@ -971,6 +973,14 @@ class ProjParser(GenericParser[ProjTokenKind]):
         while self._current_token.kind != ProjTokenKind.EOF:
             func_op = self.parse_func()
             func_ops.append(func_op)
+
+            # Run borrow checking on the parsed function
+            try:
+                liveness = LivenessAnalysis.compute(func_op)
+                BorrowAnalysis.compute(func_op, liveness)
+            except BorrowError as e:
+                # Re-raise with better error location
+                self.raise_error(str(e))
 
         # Create the module operation with all functions
         return ModuleOp(func_ops)

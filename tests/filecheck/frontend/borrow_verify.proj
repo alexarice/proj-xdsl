@@ -1,0 +1,30 @@
+// RUN: xdsl-opt %s --parsing-diagnostics --split-input-file 2>&1 | filecheck %s
+
+// -----
+// Test: locally allocated qubit borrowed at return
+// CHECK: Locally allocated qubit is still borrowed at return
+mixed fn test() -> proj {
+    let q = alloc |0>;
+    let p = q == |0>;
+    p
+}
+
+// -----
+// Test: conflicting borrows in same block (Z and X basis)
+// CHECK: Cannot borrow qubit in X basis: qubit already borrowed in Z basis
+pure fn test(q: qubit) -> proj {
+    let p1 = q == |0>;
+    let p2 = q == |+>;
+    p1 && p2
+}
+
+// -----
+// Test: conflicting borrows in if regions (Z and X basis)
+// CHECK: Cannot borrow qubit in X basis: qubit already borrowed in Z basis
+unitary fn test(q: qubit) {
+    let p = q == |0>;
+    if p {
+        let p2 = q == |+>;
+        ph(0)
+    }
+}

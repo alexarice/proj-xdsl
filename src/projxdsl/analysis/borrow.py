@@ -11,7 +11,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
-from xdsl.ir import Block, Operation, SSAValue
+from xdsl.ir import Block, Operation, SSAValue, VerifyException
 
 from projxdsl.analysis.liveness import LivenessAnalysis
 from projxdsl.dialects.proj import (
@@ -24,7 +24,7 @@ from projxdsl.dialects.proj import (
 )
 
 
-class BorrowError(Exception):
+class BorrowError(VerifyException):
     """Exception raised when borrow rules are violated."""
 
     pass
