@@ -33,14 +33,13 @@ class ProjTokenKind(Enum):
     COLON = auto()
     COMMA = auto()
     ARROW = auto()
-
-    # Operators
     AND = auto()
     OR = auto()
     XOR = auto()
     NOT = auto()
     EQ = auto()
     PLUS = auto()
+    MINUS = auto()
 
     # Boolean literals
     TRUE = auto()
@@ -121,6 +120,12 @@ class ProjTokenKind(Enum):
 
 
 KIND_BY_PUNCTUATION_SPELLING = {
+    # Multi-character tokens first (for proper lexing order)
+    "&&": ProjTokenKind.AND,
+    "||": ProjTokenKind.OR,
+    "==": ProjTokenKind.EQ,
+    "->": ProjTokenKind.ARROW,
+    # Single-character tokens
     "<": ProjTokenKind.LESS,
     ">": ProjTokenKind.GREATER,
     "=": ProjTokenKind.EQUALS,
@@ -129,19 +134,13 @@ KIND_BY_PUNCTUATION_SPELLING = {
     ")": ProjTokenKind.RPAREN,
     "*": ProjTokenKind.STAR,
     "+": ProjTokenKind.PLUS,
+    "-": ProjTokenKind.MINUS,
     "{": ProjTokenKind.LBRACE,
     "}": ProjTokenKind.RBRACE,
     ";": ProjTokenKind.SEMICOLON,
     ":": ProjTokenKind.COLON,
     ",": ProjTokenKind.COMMA,
-    "->": ProjTokenKind.ARROW,
-}
-
-OPERATOR_SPELLING = {
-    "&&": ProjTokenKind.AND,
-    "||": ProjTokenKind.OR,
     "^": ProjTokenKind.XOR,
-    "==": ProjTokenKind.EQ,
 }
 
 KEYWORD_MAP = {
@@ -225,11 +224,7 @@ class ProjLexer(Lexer[ProjTokenKind]):
         if state := self._try_state():
             return state
 
-        # Try operators (&&, ||, ^, ==)
-        if operator := self._try_operator():
-            return operator
-
-        # Try punctuation first
+        # Try punctuation and operators (->, ==, &&, ||, -, etc.)
         if punct := self._try_punctuation():
             return punct
 
@@ -254,22 +249,18 @@ class ProjLexer(Lexer[ProjTokenKind]):
         self._consume_chars()
         self.raise_error(f"Unexpected character: {self.input.content[start_pos]}")
 
-    def _try_operator(self) -> ProjToken | None:
-        """Try to lex operators: &&, ||, ^, ==."""
-        for spelling, kind in OPERATOR_SPELLING.items():
-            if self._peek_chars(len(spelling)) == spelling:
-                start_pos = self.pos
-                self._consume_chars(len(spelling))
-                return self._form_token(kind, start_pos)
-        return None
-
     def _try_punctuation(self) -> ProjToken | None:
-        """Try to lex punctuation."""
+        """
+        Try to lex punctuation and operators.
+        Multi-character tokens are matched before single-character tokens.
+        """
+        # Handle multi-character tokens first (e.g., ->, ==, &&, ||)
         for spelling, kind in KIND_BY_PUNCTUATION_SPELLING.items():
             if self._peek_chars(len(spelling)) == spelling:
                 start_pos = self.pos
                 self._consume_chars(len(spelling))
                 return self._form_token(kind, start_pos)
+
         return None
 
     def _try_state(self) -> ProjToken | None:
