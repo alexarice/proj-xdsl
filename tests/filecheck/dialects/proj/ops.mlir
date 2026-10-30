@@ -43,9 +43,9 @@ func.func @test_eq_zero(%arg0: !proj.qubit) -> !proj.projection {
   func.return %0 : !proj.projection
 }
 
-func.func @test_eq_plus(%arg0: !proj.qubit<x>) -> !proj.projection {
-  // CHECK: %0 = proj.eq %arg0 : !proj.qubit<x>, #proj.state<plus>
-  %0 = proj.eq %arg0 : !proj.qubit<x>, #proj.state<plus>
+func.func @test_eq_plus(%arg0: !proj.qubit) -> !proj.projection {
+  // CHECK: %0 = proj.eq %arg0 : !proj.qubit, #proj.state<plus>
+  %0 = proj.eq %arg0 : !proj.qubit, #proj.state<plus>
   func.return %0 : !proj.projection
 }
 
@@ -88,22 +88,22 @@ func.func @test_if_else(%arg0: !proj.projection) {
 // Test proj.alloc with different states
 func.func @test_alloc() {
   // CHECK: %[[Q0:.*]] = proj.alloc<zero> : !proj.qubit
-  // CHECK-GENERIC: %[[Q0:.*]] = "proj.alloc"() <{{.*}}state = #proj.state<zero>{{.*}}> : () -> !proj.qubit
+  // CHECK-GENERIC: %[[Q0:.*]] = "proj.alloc"() <{{.*}}state = #proj.state<zero{{.*}}> : () -> !proj.qubit
   %q0 = proj.alloc <zero> : !proj.qubit
   // CHECK: %[[Q1:.*]] = proj.alloc<one> : !proj.qubit
-  // CHECK-GENERIC: %[[Q1:.*]] = "proj.alloc"() <{{.*}}state = #proj.state<one>{{.*}}> : () -> !proj.qubit
+  // CHECK-GENERIC: %[[Q1:.*]] = "proj.alloc"() <{{.*}}state = #proj.state<one{{.*}}> : () -> !proj.qubit
   %q1 = proj.alloc <one> : !proj.qubit
   // CHECK: %[[QP:.*]] = proj.alloc<plus> : !proj.qubit
-  // CHECK-GENERIC: %[[QP:.*]] = "proj.alloc"() <{{.*}}state = #proj.state<plus>{{.*}}> : () -> !proj.qubit
+  // CHECK-GENERIC: %[[QP:.*]] = "proj.alloc"() <{{.*}}state = #proj.state<plus{{.*}}> : () -> !proj.qubit
   %q_plus = proj.alloc <plus> : !proj.qubit
   // CHECK: %[[QM:.*]] = proj.alloc<minus> : !proj.qubit
-  // CHECK-GENERIC: %[[QM:.*]] = "proj.alloc"() <{{.*}}state = #proj.state<minus>{{.*}}> : () -> !proj.qubit
+  // CHECK-GENERIC: %[[QM:.*]] = "proj.alloc"() <{{.*}}state = #proj.state<minus{{.*}}> : () -> !proj.qubit
   %q_minus = proj.alloc <minus> : !proj.qubit
   // CHECK: %[[QL:.*]] = proj.alloc<left> : !proj.qubit
-  // CHECK-GENERIC: %[[QL:.*]] = "proj.alloc"() <{{.*}}state = #proj.state<left>{{.*}}> : () -> !proj.qubit
+  // CHECK-GENERIC: %[[QL:.*]] = "proj.alloc"() <{{.*}}state = #proj.state<left{{.*}}> : () -> !proj.qubit
   %q_left = proj.alloc <left> : !proj.qubit
   // CHECK: %[[QR:.*]] = proj.alloc<right> : !proj.qubit
-  // CHECK-GENERIC: %[[QR:.*]] = "proj.alloc"() <{{.*}}state = #proj.state<right>{{.*}}> : () -> !proj.qubit
+  // CHECK-GENERIC: %[[QR:.*]] = "proj.alloc"() <{{.*}}state = #proj.state<right{{.*}}> : () -> !proj.qubit
   %q_right = proj.alloc <right> : !proj.qubit
   func.return
 }
@@ -236,35 +236,4 @@ proj.pure @callee_fn(%a: i1) -> i1 {
 proj.pure @caller_fn(%arg0: i1) -> i1 {
   %call = proj.call @callee_fn(%arg0) : (i1) -> i1
   proj.return %call : i1
-}
-
-// Test proj.borrow_basis with different bases
-func.func @test_borrow_basis_x(%arg0: !proj.qubit) -> !proj.qubit<x> {
-  // CHECK: %[[X:.*]] = proj.borrow_basis %arg0, #proj.basis<x>
-  %x = proj.borrow_basis %arg0, #proj.basis<x>
-  func.return %x : !proj.qubit<x>
-}
-
-func.func @test_borrow_basis_y(%arg0: !proj.qubit) -> !proj.qubit<y> {
-  // CHECK: %[[Y:.*]] = proj.borrow_basis %arg0, #proj.basis<y>
-  %y = proj.borrow_basis %arg0, #proj.basis<y>
-  func.return %y : !proj.qubit<y>
-}
-
-func.func @test_borrow_basis_z(%arg0: !proj.qubit) -> !proj.qubit<z> {
-  // CHECK: %[[Z:.*]] = proj.borrow_basis %arg0, #proj.basis<z>
-  %z = proj.borrow_basis %arg0, #proj.basis<z>
-  func.return %z : !proj.qubit<z>
-}
-
-// Test proj.borrow_basis in unitary function with eq
-// CHECK: proj.unitary @borrow_and_project(%arg0: !proj.qubit) {
-// CHECK-NEXT:   %[[XB:.*]] = proj.borrow_basis %arg0, #proj.basis<x>
-// CHECK-NEXT:   %[[P:.*]] = proj.eq %[[XB]] : !proj.qubit<x>, #proj.state<plus>
-// CHECK-NEXT:   proj.return
-// CHECK-NEXT: }
-proj.unitary @borrow_and_project(%arg0: !proj.qubit) {
-  %xb = proj.borrow_basis %arg0, #proj.basis<x>
-  %p = proj.eq %xb : !proj.qubit<x>, #proj.state<plus>
-  proj.return
 }

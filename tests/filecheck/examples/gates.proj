@@ -1,49 +1,49 @@
 // RUN: xdsl-opt %s | filecheck %s
 
 // CHECK-LABEL: proj.unitary @X
-// CHECK:        proj.eq %q : !proj.qubit<x>, #proj.state<minus>
+// CHECK:        proj.eq %q : !proj.qubit, #proj.state<minus>
 // CHECK-NEXT:   proj.if %[[EQ:.*]] {
 // CHECK-NEXT:     %[[PI:.*]] = angle.pi
 // CHECK-NEXT:     proj.phase %[[PI]]
 // CHECK-NEXT:     proj.yield
 // CHECK-NEXT:   }
 // CHECK-NEXT:   proj.return	
-unitary fn X(q: qubit<X>) {
+unitary fn X(q: qubit) {
   if q == |-> {
     ph(pi)
   }
 }
 
 // CHECK-LABEL: proj.unitary @Y
-// CHECK:        proj.eq %q : !proj.qubit<y>, #proj.state<right>
+// CHECK:        proj.eq %q : !proj.qubit, #proj.state<right>
 // CHECK-NEXT:   proj.if %[[EQ:.*]] {
 // CHECK-NEXT:     %[[PI:.*]] = angle.pi
 // CHECK-NEXT:     proj.phase %[[PI]]
 // CHECK-NEXT:     proj.yield
 // CHECK-NEXT:   }
 // CHECK-NEXT:   proj.return
-unitary fn Y(q: qubit<Y>) {
+unitary fn Y(q: qubit) {
   if q == |R> {
     ph(pi)
   }
 }
 
 // CHECK-LABEL: proj.unitary @Z
-// CHECK:        proj.eq %q : !proj.qubit<z>, #proj.state<one>
+// CHECK:        proj.eq %q : !proj.qubit, #proj.state<one>
 // CHECK-NEXT:   proj.if %[[EQ:.*]] {
 // CHECK-NEXT:     %[[PI:.*]] = angle.pi
 // CHECK-NEXT:     proj.phase %[[PI]]
 // CHECK-NEXT:     proj.yield
 // CHECK-NEXT:   }
 // CHECK-NEXT:   proj.return
-unitary fn Z(q: qubit<Z>) {
+unitary fn Z(q: qubit) {
   if q == |1> {
     ph(pi)
   }
 }
 
 // CHECK-LABEL: proj.unitary @S
-// CHECK:        proj.eq %q : !proj.qubit<z>, #proj.state<one>
+// CHECK:        proj.eq %q : !proj.qubit, #proj.state<one>
 // CHECK-NEXT:   proj.if %[[EQ:.*]] {
 // CHECK-NEXT:     %[[PI:.*]] = angle.pi
 // CHECK-NEXT:     %[[ANGLE:.*]] = angle.scalar_mult 5.000000e-01, %[[PI]]
@@ -51,14 +51,14 @@ unitary fn Z(q: qubit<Z>) {
 // CHECK-NEXT:     proj.yield
 // CHECK-NEXT:   }
 // CHECK-NEXT:   proj.return
-unitary fn S(q: qubit<Z>) {
+unitary fn S(q: qubit) {
   if q == |1> {
     ph(0.5*pi)
   }
 }
 
 // CHECK-LABEL: proj.unitary @T
-// CHECK:        proj.eq %q : !proj.qubit<z>, #proj.state<one>
+// CHECK:        proj.eq %q : !proj.qubit, #proj.state<one>
 // CHECK-NEXT:   proj.if %[[EQ:.*]] {
 // CHECK-NEXT:     %[[PI:.*]] = angle.pi
 // CHECK-NEXT:     %[[ANGLE:.*]] = angle.scalar_mult 2.500000e-01, %[[PI]]
@@ -66,15 +66,15 @@ unitary fn S(q: qubit<Z>) {
 // CHECK-NEXT:     proj.yield
 // CHECK-NEXT:   }
 // CHECK-NEXT:   proj.return
-unitary fn T(q: qubit<Z>) {
+unitary fn T(q: qubit) {
   if q == |1> {
     ph(0.25*pi)
   }
 }
 
 // CHECK-LABEL: proj.unitary @CZ
-// CHECK:        proj.eq %c : !proj.qubit<z>, #proj.state<one>
-// CHECK-NEXT:   proj.eq %q : !proj.qubit<z>, #proj.state<one>
+// CHECK:        proj.eq %c : !proj.qubit, #proj.state<one>
+// CHECK-NEXT:   proj.eq %q : !proj.qubit, #proj.state<one>
 // CHECK-NEXT:   proj.and %[[EQC:.*]], %[[EQQ:.*]]
 // CHECK-NEXT:   proj.if %[[AND:.*]] {
 // CHECK-NEXT:     %[[PI:.*]] = angle.pi
@@ -82,15 +82,15 @@ unitary fn T(q: qubit<Z>) {
 // CHECK-NEXT:     proj.yield
 // CHECK-NEXT:   }
 // CHECK-NEXT:   proj.return
-unitary fn CZ(c: qubit<Z>, q: qubit<Z>) {
+unitary fn CZ(c: qubit, q: qubit) {
   if c == |1> && q == |1> {
     ph(pi)
   }
 }
 
 // CHECK-LABEL: proj.unitary @CX
-// CHECK:        proj.eq %c : !proj.qubit<z>, #proj.state<one>
-// CHECK-NEXT:   proj.eq %q : !proj.qubit<x>, #proj.state<minus>
+// CHECK:        proj.eq %c : !proj.qubit, #proj.state<one>
+// CHECK-NEXT:   proj.eq %q : !proj.qubit, #proj.state<minus>
 // CHECK-NEXT:   proj.and %[[EQC:.*]], %[[EQQ:.*]]
 // CHECK-NEXT:   proj.if %[[AND:.*]] {
 // CHECK-NEXT:     %[[PI:.*]] = angle.pi
@@ -98,21 +98,21 @@ unitary fn CZ(c: qubit<Z>, q: qubit<Z>) {
 // CHECK-NEXT:     proj.yield
 // CHECK-NEXT:   }
 // CHECK-NEXT:   proj.return
-unitary fn CX(c: qubit<Z>, q: qubit<X>) {
+unitary fn CX(c: qubit, q: qubit) {
   if c == |1> && q == |-> {
     ph(pi)
   }
 }
 
 // CHECK-LABEL: proj.unitary @CondX
-// CHECK:        %p = proj.eq %q : !proj.qubit<x>, #proj.state<minus>
+// CHECK:        %p = proj.eq %q : !proj.qubit, #proj.state<minus>
 // CHECK-NEXT:   proj.if %p {
 // CHECK-NEXT:     %[[PI:.*]] = angle.pi
 // CHECK-NEXT:     proj.phase %[[PI]]
 // CHECK-NEXT:     proj.yield
 // CHECK-NEXT:   }
 // CHECK-NEXT:   proj.return
-unitary fn CondX(b: bool, q: qubit<X>) {
+unitary fn CondX(b: bool, q: qubit) {
   let p = q == |->;
   if p {
     ph(pi)
@@ -120,26 +120,26 @@ unitary fn CondX(b: bool, q: qubit<X>) {
 }
 
 // CHECK-LABEL: proj.unitary @CX_call
-// CHECK:        proj.eq %c : !proj.qubit<z>, #proj.state<one>
+// CHECK:        proj.eq %c : !proj.qubit, #proj.state<one>
 // CHECK-NEXT:   proj.if %[[EQ:.*]] {
-// CHECK-NEXT:     proj.call @X(%q) : (!proj.qubit<x>) -> ()
+// CHECK-NEXT:     proj.call @X(%q) : (!proj.qubit) -> ()
 // CHECK-NEXT:     proj.yield
 // CHECK-NEXT:   }
 // CHECK-NEXT:   proj.return
-unitary fn CX_call(c: qubit<Z>, q: qubit<X>) {
+unitary fn CX_call(c: qubit, q: qubit) {
   if c == |1> {
     X(q)
   }
 }
 
 // CHECK-LABEL: proj.unitary @CZ_call
-// CHECK:        proj.eq %c : !proj.qubit<z>, #proj.state<one>
+// CHECK:        proj.eq %c : !proj.qubit, #proj.state<one>
 // CHECK-NEXT:   proj.if %[[EQ:.*]] {
-// CHECK-NEXT:     proj.call @Z(%q) : (!proj.qubit<z>) -> ()
+// CHECK-NEXT:     proj.call @Z(%q) : (!proj.qubit) -> ()
 // CHECK-NEXT:     proj.yield
 // CHECK-NEXT:   }
 // CHECK-NEXT:   proj.return
-unitary fn CZ_call(c: qubit<Z>, q: qubit<Z>) {
+unitary fn CZ_call(c: qubit, q: qubit) {
   if c == |1> {
     Z(q)
   }

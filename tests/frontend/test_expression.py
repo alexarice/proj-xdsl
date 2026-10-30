@@ -3,7 +3,7 @@
 import pytest
 from xdsl.builder import Builder
 from xdsl.dialects.arith import AndIOp, ConstantOp, OrIOp, XOrIOp
-from xdsl.dialects.builtin import IntegerAttr, NoneAttr, i1
+from xdsl.dialects.builtin import IntegerAttr, i1
 from xdsl.dialects.test import TestOp as XDSLTestOp
 from xdsl.ir import Block, SSAValue
 from xdsl.rewriter import InsertPoint
@@ -12,7 +12,6 @@ from xdsl.utils.exceptions import ParseError
 from projxdsl.dialects.angle import AddOp, AngleType, PiOp, ScalarMultOp, ZeroOp
 from projxdsl.dialects.proj import (
     AndOp,
-    BasisAttr,
     EqOp,
     FromBoolOp,
     NotOp,
@@ -31,7 +30,7 @@ def make_bool_var(value: int = 1) -> SSAValue:
 
 def make_qubit_var() -> SSAValue:
     """Create a qubit SSA value for testing."""
-    return XDSLTestOp(result_types=[QubitType(NoneAttr())]).results[0]
+    return XDSLTestOp(result_types=[QubitType()]).results[0]
 
 
 def make_angle_var() -> SSAValue:
@@ -316,91 +315,13 @@ class TestEqOperator:
         with pytest.raises(TypeCheckError, match="Expected qubit type"):
             parse_expression("p == |0>", {"p": bool_var})
 
-    def test_eq_basis_compatible(self):
-        """Test that qubit<Z> can use Z basis states."""
-
-        q_z = XDSLTestOp(result_types=[QubitType(BasisAttr.Z())]).results[0]
-        # Should work with |0> (Z basis)
-        result = parse_expression("q == |0>", {"q": q_z})
-        assert isinstance(result.owner, EqOp)
-        # Should work with |1> (Z basis)
-        result = parse_expression("q == |1>", {"q": q_z})
-        assert isinstance(result.owner, EqOp)
-
-    def test_eq_basis_incompatible(self):
-        """Test that qubit<Z> cannot use X or Y basis states."""
-
-        q_z = XDSLTestOp(result_types=[QubitType(BasisAttr.Z())]).results[0]
-        # Should fail with |+> (X basis)
-        with pytest.raises(
-            TypeCheckError, match="Z basis cannot be projected in X basis"
-        ):
-            parse_expression("q == |+>", {"q": q_z})
-        # Should fail with |L> (Y basis)
-        with pytest.raises(
-            TypeCheckError, match="Z basis cannot be projected in Y basis"
-        ):
-            parse_expression("q == |L>", {"q": q_z})
-
-    def test_eq_unborrowed_any_basis(self):
-        """Test that unborrowed qubit can use any basis state."""
-        q = make_qubit_var()  # Unborrowed qubit
+    def test_eq_any_basis(self):
+        """Test that qubit can use any basis state."""
+        q = make_qubit_var()
         # Should work with all states
         for state in ["|0>", "|1>", "|+>", "|->", "|L>", "|R>"]:
             result = parse_expression(f"q == {state}", {"q": q})
             assert isinstance(result.owner, EqOp)
-
-    def test_eq_x_basis_compatible(self):
-        """Test that qubit<X> can use X basis states."""
-
-        q_x = XDSLTestOp(result_types=[QubitType(BasisAttr.X())]).results[0]
-        # Should work with |+> (X basis)
-        result = parse_expression("q == |+>", {"q": q_x})
-        assert isinstance(result.owner, EqOp)
-        # Should work with |-> (X basis)
-        result = parse_expression("q == |->", {"q": q_x})
-        assert isinstance(result.owner, EqOp)
-
-    def test_eq_x_basis_incompatible(self):
-        """Test that qubit<X> cannot use Y or Z basis states."""
-
-        q_x = XDSLTestOp(result_types=[QubitType(BasisAttr.X())]).results[0]
-        # Should fail with |0> (Z basis)
-        with pytest.raises(
-            TypeCheckError, match="X basis cannot be projected in Z basis"
-        ):
-            parse_expression("q == |0>", {"q": q_x})
-        # Should fail with |L> (Y basis)
-        with pytest.raises(
-            TypeCheckError, match="X basis cannot be projected in Y basis"
-        ):
-            parse_expression("q == |L>", {"q": q_x})
-
-    def test_eq_y_basis_compatible(self):
-        """Test that qubit<Y> can use Y basis states."""
-
-        q_y = XDSLTestOp(result_types=[QubitType(BasisAttr.Y())]).results[0]
-        # Should work with |L> (Y basis)
-        result = parse_expression("q == |L>", {"q": q_y})
-        assert isinstance(result.owner, EqOp)
-        # Should work with |R> (Y basis)
-        result = parse_expression("q == |R>", {"q": q_y})
-        assert isinstance(result.owner, EqOp)
-
-    def test_eq_y_basis_incompatible(self):
-        """Test that qubit<Y> cannot use X or Z basis states."""
-
-        q_y = XDSLTestOp(result_types=[QubitType(BasisAttr.Y())]).results[0]
-        # Should fail with |0> (Z basis)
-        with pytest.raises(
-            TypeCheckError, match="Y basis cannot be projected in Z basis"
-        ):
-            parse_expression("q == |0>", {"q": q_y})
-        # Should fail with |+> (X basis)
-        with pytest.raises(
-            TypeCheckError, match="Y basis cannot be projected in X basis"
-        ):
-            parse_expression("q == |+>", {"q": q_y})
 
 
 class TestBindingPower:

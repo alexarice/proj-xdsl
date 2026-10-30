@@ -8,7 +8,7 @@ from typing import NamedTuple, NoReturn
 
 from xdsl.builder import Builder
 from xdsl.dialects.arith import AndIOp, ConstantOp, OrIOp, XOrIOp
-from xdsl.dialects.builtin import FunctionType, IntegerAttr, ModuleOp, NoneAttr, i1
+from xdsl.dialects.builtin import FunctionType, IntegerAttr, ModuleOp, i1
 from xdsl.ir import Attribute, BlockArgument, Region, SSAValue, TypeAttribute
 from xdsl.parser.generic_parser import GenericParser, ParserState
 from xdsl.utils.exceptions import ParseError
@@ -19,9 +19,6 @@ from projxdsl.dialects.angle import AddOp, AngleType, PiOp, ScalarMultOp, ZeroOp
 from projxdsl.dialects.proj import (
     AllocOp,
     AndOp,
-    Basis,
-    BasisAttr,
-    BorrowBasisOp,
     CallOp,
     EqOp,
     FromBoolOp,
@@ -97,19 +94,13 @@ class ProjParser(GenericParser[ProjTokenKind]):
         Parse a type from surface syntax.
 
         type ::= qubit-type | proj-type | bool-type | angle-type
-        qubit-type ::= "qubit" ( "<" basis ">" )?
-        basis ::= "X" | "Y" | "Z" (uppercase only)
+        qubit-type ::= "qubit"
         proj-type ::= "proj"
         bool-type ::= "bool"
         angle-type ::= "angle"
         """
         if self._parse_optional_token(ProjTokenKind.QUBIT) is not None:
-            # Parse qubit type: qubit or qubit<basis>
-            if self.parse_optional_punctuation("<") is not None:
-                basis = self._parse_basis()
-                self.parse_punctuation(">", " to close qubit basis")
-                return QubitType(BasisAttr(basis))
-            return QubitType(NoneAttr())
+            return QubitType()
         elif self._parse_optional_token(ProjTokenKind.PROJECTION) is not None:
             return ProjectionType()
         elif self._parse_optional_token(ProjTokenKind.BOOL) is not None:
@@ -120,29 +111,6 @@ class ProjParser(GenericParser[ProjTokenKind]):
             self.raise_error(
                 "Expected type (qubit, projection, bool, or angle),"
                 f" got {self._current_token.kind.name}",
-            )
-
-    def _parse_basis(self) -> Basis:
-        """
-        Parse basis: X, Y, or Z (uppercase only).
-        Basis is lexed as an identifier, so we validate it here.
-        """
-        token = self._parse_optional_token(ProjTokenKind.IDENTIFIER)
-        if token is None:
-            self.raise_error(
-                "Expected basis identifier (X, Y, or Z),"
-                f" got {self._current_token.kind.name}",
-            )
-
-        if token.text == "X":
-            return Basis.X
-        elif token.text == "Y":
-            return Basis.Y
-        elif token.text == "Z":
-            return Basis.Z
-        else:
-            self.raise_error(
-                f"Invalid basis '{token.text}', expected X, Y, or Z (uppercase only)"
             )
 
     def parse_punctuation(self, punctuation: str, context_msg: str = "") -> ProjToken:
@@ -180,7 +148,6 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
         Supported coercions:
         - bool (i1) → proj (via FromBoolOp)
-        - qubit → qubit<B> (via BorrowBasisOp)
         - T → T (identity, no coercion needed)
 
         Raises TypeCheckError if coercion is not possible.
@@ -192,17 +159,6 @@ class ProjParser(GenericParser[ProjTokenKind]):
         # bool → proj
         if value.type == i1 and expected_type == ProjectionType():
             return builder.insert(FromBoolOp(value)).result
-
-        # qubit → qubit<B>
-        if (
-            isinstance(value.type, QubitType)
-            and isinstance(value.type.borrow_type, NoneAttr)
-            and isinstance(expected_type, QubitType)
-            and isinstance(expected_type.borrow_type, BasisAttr)
-        ):
-            return builder.insert(
-                BorrowBasisOp(value, expected_type.borrow_type)
-            ).result
 
         # Coercion not possible
         self.raise_typing_error(
@@ -475,18 +431,6 @@ class ProjParser(GenericParser[ProjTokenKind]):
                     self.raise_typing_error(
                         f"Expected qubit type for '==' operator, got {error_type}"
                     )
-
-                # Check basis compatibility
-                qubit_type = lhs.type
-                if not isinstance(qubit_type.borrow_type, NoneAttr):
-                    # Qubit has a basis annotation, check state matches
-                    basis = qubit_type.borrow_type.data
-                    state_basis = state.data.get_basis()
-                    if basis != state_basis:
-                        self.raise_typing_error(
-                            f"Qubit borrowed in {basis.name} basis cannot be "
-                            f"projected in {state_basis.name} basis"
-                        )
 
                 lhs = builder.insert(EqOp(lhs, state)).result
 

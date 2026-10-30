@@ -1,14 +1,8 @@
 // RUN: XDSL_ROUNDTRIP
 
-// Test BasisAttr and StateAttr
+// Test StateAttr
 "test.op"() {
-  // CHECK: basis_x = #proj.basis<x>
-  basis_x = #proj.basis<x>,
-  // CHECK-SAME: basis_y = #proj.basis<y>
-  basis_y = #proj.basis<y>,
-  // CHECK-SAME: basis_z = #proj.basis<z>
-  basis_z = #proj.basis<z>,
-  // CHECK-SAME: state_zero = #proj.state<zero>
+  // CHECK: state_zero = #proj.state<zero>
   state_zero = #proj.state<zero>,
   // CHECK-SAME: state_one = #proj.state<one>
   state_one = #proj.state<one>,

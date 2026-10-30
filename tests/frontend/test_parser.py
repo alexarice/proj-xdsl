@@ -3,7 +3,7 @@
 import pytest
 from xdsl.builder import Builder
 from xdsl.dialects.arith import ConstantOp
-from xdsl.dialects.builtin import IntegerAttr, ModuleOp, NoneAttr, i1
+from xdsl.dialects.builtin import IntegerAttr, ModuleOp, i1
 from xdsl.dialects.test import TestOp as XDSLTestOp
 from xdsl.ir import Block, SSAValue
 from xdsl.rewriter import InsertPoint
@@ -16,7 +16,6 @@ from projxdsl.dialects.proj import (
     AllocOp,
     AndOp,
     Basis,
-    BasisAttr,
     EqOp,
     FromBoolOp,
     IfOp,
@@ -55,12 +54,7 @@ def parse_state(code: str):
 
 def make_qubit_var() -> SSAValue:
     """Create a qubit SSA value for testing using test.op."""
-    return XDSLTestOp(result_types=[QubitType(NoneAttr())]).results[0]
-
-
-def make_qubit_with_basis(basis: Basis) -> SSAValue:
-    """Create a qubit SSA value with basis annotation for testing."""
-    return XDSLTestOp(result_types=[QubitType(BasisAttr(basis))]).results[0]
+    return XDSLTestOp(result_types=[QubitType()]).results[0]
 
 
 def make_proj_var(qubit: SSAValue) -> SSAValue:
@@ -79,7 +73,6 @@ class TestTypeParsing:
     def test_qubit_unborrowed(self):
         result = parse_type("qubit")
         assert isinstance(result, QubitType)
-        assert isinstance(result.borrow_type, NoneAttr)
 
     def test_projection(self):
         result = parse_type("proj")
@@ -94,61 +87,12 @@ class TestTypeParsing:
         assert isinstance(result, AngleType)
 
 
-class TestQubitWithBasis:
-    """Test parsing of qubit types with basis annotations (uppercase only)."""
-
-    def test_qubit_x_upper(self):
-        result = parse_type("qubit<X>")
-        assert isinstance(result, QubitType)
-        assert isinstance(result.borrow_type, BasisAttr)
-        assert result.borrow_type.data == Basis.X
-
-    def test_qubit_y_upper(self):
-        result = parse_type("qubit<Y>")
-        assert isinstance(result, QubitType)
-        assert isinstance(result.borrow_type, BasisAttr)
-        assert result.borrow_type.data == Basis.Y
-
-    def test_qubit_z_upper(self):
-        result = parse_type("qubit<Z>")
-        assert isinstance(result, QubitType)
-        assert isinstance(result.borrow_type, BasisAttr)
-        assert result.borrow_type.data == Basis.Z
-
-    def test_qubit_x_lower_invalid(self):
-        with pytest.raises(ParseError, match="uppercase only"):
-            parse_type("qubit<x>")
-
-    def test_qubit_y_lower_invalid(self):
-        with pytest.raises(ParseError, match="uppercase only"):
-            parse_type("qubit<y>")
-
-    def test_qubit_z_lower_invalid(self):
-        with pytest.raises(ParseError, match="uppercase only"):
-            parse_type("qubit<z>")
-
-
 class TestErrorHandling:
     """Test error handling."""
 
     def test_invalid_type(self):
         parser = ProjParser("Invalid")
         with pytest.raises(ParseError, match="Expected type"):
-            parser.parse_type()
-
-    def test_missing_basis(self):
-        parser = ProjParser("qubit<")
-        with pytest.raises(ParseError, match="Expected basis"):
-            parser.parse_type()
-
-    def test_invalid_basis(self):
-        parser = ProjParser("qubit<Invalid>")
-        with pytest.raises(ParseError, match="Invalid basis"):
-            parser.parse_type()
-
-    def test_missing_closing_bracket(self):
-        parser = ProjParser("qubit<X")
-        with pytest.raises(ParseError, match="Expected '>'"):
             parser.parse_type()
 
     def test_unexpected_token_after_type(self):
@@ -161,26 +105,6 @@ class TestErrorHandling:
         # Identifier parsing methods removed - identifiers are parsed directly
         # This test is kept for documentation purposes
         pass
-
-
-class TestMixedCase:
-    """Test that only uppercase basis is accepted."""
-
-    def test_all_bases_uppercase(self):
-        for basis_char, expected_basis in [
-            ("X", Basis.X),
-            ("Y", Basis.Y),
-            ("Z", Basis.Z),
-        ]:
-            result = parse_type(f"qubit<{basis_char}>")
-            assert isinstance(result, QubitType)
-            assert isinstance(result.borrow_type, BasisAttr)
-            assert result.borrow_type.data == expected_basis
-
-    def test_lowercase_basis_rejected(self):
-        for basis_char in ["x", "y", "z"]:
-            with pytest.raises(ParseError, match="uppercase only"):
-                parse_type(f"qubit<{basis_char}>")
 
 
 class TestStateParsing:
@@ -1165,27 +1089,6 @@ class TestFuncParsing:
         assert func_op.function_type.inputs.data[0] == i1
         assert func_op.function_type.inputs.data[1] == i1
         assert len(func_op.function_type.outputs.data) == 1
-
-    def test_parse_function_qubit_with_basis(self):
-        """Test parsing a function with qubit basis annotation."""
-        parser = ProjParser("unitary fn hadamard(q: qubit<Z>) -> qubit<Z> { q }")
-        func_op = parser.parse_func()
-        parser.expect_eof()
-
-        assert isinstance(func_op, UnitaryOp)
-        assert func_op.sym_name.data == "hadamard"
-        assert len(func_op.function_type.inputs.data) == 1
-        input_type = func_op.function_type.inputs.data[0]
-        assert isinstance(input_type, QubitType)
-        assert isinstance(input_type.borrow_type, BasisAttr)
-        assert input_type.borrow_type.data == Basis.Z
-
-        # Check return type also has basis
-        assert len(func_op.function_type.outputs.data) == 1
-        return_type = func_op.function_type.outputs.data[0]
-        assert isinstance(return_type, QubitType)
-        assert isinstance(return_type.borrow_type, BasisAttr)
-        assert return_type.borrow_type.data == Basis.Z
 
     def test_parse_function_missing_kind_error(self):
         """Test that missing function kind raises error."""

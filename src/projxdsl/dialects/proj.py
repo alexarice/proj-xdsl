@@ -8,7 +8,6 @@ from xdsl.dialects.builtin import (
     ArrayAttr,
     FlatSymbolRefAttrConstr,
     FunctionType,
-    NoneAttr,
     StringAttr,
     SymbolNameConstraint,
     SymbolRefAttr,
@@ -32,12 +31,7 @@ from xdsl.ir import (
     VerifyException,
 )
 from xdsl.irdl import (
-    AnyAttr,
-    AttrConstraint,
-    IRDLAttrConstraint,
     IRDLOperation,
-    ParamAttrConstraint,
-    VarConstraint,
     irdl_attr_definition,
     irdl_op_definition,
     irdl_to_attr_constraint,
@@ -74,36 +68,6 @@ class Basis(StrEnum):
     X = auto()
     Y = auto()
     Z = auto()
-
-
-@irdl_attr_definition
-class BasisAttr(EnumAttribute[Basis]):
-    """
-    Basis attribute (basis ∈ {X, Y, Z}).
-    """
-
-    name = "proj.basis"
-
-    @classmethod
-    def X(cls) -> BasisAttr:
-        return BasisAttr(Basis.X)
-
-    @classmethod
-    def Y(cls) -> BasisAttr:
-        return BasisAttr(Basis.Y)
-
-    @classmethod
-    def Z(cls) -> BasisAttr:
-        return BasisAttr(Basis.Z)
-
-    @classmethod
-    def parse_parameter(cls, parser: AttrParser) -> Basis:
-        with parser.in_angle_brackets():
-            return super().parse_parameter(parser)
-
-    def print_parameter(self, printer: Printer) -> None:
-        with printer.in_angle_brackets():
-            super().print_parameter(printer)
 
 
 class State(StrEnum):
@@ -183,39 +147,10 @@ class ProjectionType(ParametrizedAttribute, TypeAttribute):
 @irdl_attr_definition
 class QubitType(ParametrizedAttribute, TypeAttribute):
     """
-    qubit - Qubit type with optional basis borrow annotation.
+    qubit - Qubit type.
     """
 
     name = "proj.qubit"
-
-    borrow_type: BasisAttr | NoneAttr
-
-    def print_parameters(self, printer: Printer) -> None:
-        if isinstance(self.borrow_type, BasisAttr):
-            self.borrow_type.print_parameter(printer)
-
-    @classmethod
-    def parse_parameters(cls, parser: AttrParser) -> tuple[BasisAttr | NoneAttr]:
-        if parser.parse_optional_characters("<") is None:
-            return (NoneAttr(),)
-        basis = parser.parse_str_enum(Basis)
-        parser.parse_characters(">", " to close proj.qubit parameters")
-        return (BasisAttr(basis),)
-
-    def __init__(self, borrow_type: BasisAttr | NoneAttr = NoneAttr()):
-        super().__init__(borrow_type)
-
-    @staticmethod
-    def constr(
-        borrow_type: IRDLAttrConstraint[BasisAttr | NoneAttr] | None = None,
-    ) -> AttrConstraint[QubitType]:
-        """
-        Create a constraint for QubitType with optional borrow_type constraint.
-        """
-        return ParamAttrConstraint.get(
-            QubitType,
-            borrow_type if borrow_type is not None else AnyAttr(),
-        )
 
 
 class FuncOpBase(IRDLOperation):
@@ -433,32 +368,6 @@ class FromBoolOp(IRDLOperation):
 
 
 @irdl_op_definition
-class BorrowBasisOp(IRDLOperation):
-    """
-    Cast operation that restricts a qubit to a specific basis.
-    Takes an unrestricted qubit and returns a basis-restricted qubit.
-    This is a no-op at runtime, but enables static basis checking.
-    """
-
-    name = "proj.borrow_basis"
-
-    _B: ClassVar = VarConstraint[BasisAttr].get("B", BasisAttr)
-
-    qubit = operand_def(QubitType.constr(NoneAttr))
-    basis = prop_def(_B)
-    result = result_def(QubitType.constr(_B))
-
-    assembly_format = "$qubit `,` qualified($basis) attr-dict"
-
-    def __init__(self, qubit: SSAValue, basis: BasisAttr):
-        super().__init__(
-            operands=[qubit],
-            properties={"basis": basis},
-            result_types=[QubitType(basis)],
-        )
-
-
-@irdl_op_definition
 class AllocOp(IRDLOperation):
     """
     Qubit allocation operation.
@@ -478,7 +387,7 @@ class AllocOp(IRDLOperation):
     def __init__(self, state: StateAttr):
         super().__init__(
             properties={"state": state},
-            result_types=[QubitType(NoneAttr())],
+            result_types=[QubitType()],
         )
 
 
@@ -827,7 +736,6 @@ Proj = Dialect(
     "proj",
     [
         AllocOp,
-        BorrowBasisOp,
         NotOp,
         AndOp,
         OrOp,
@@ -845,7 +753,6 @@ Proj = Dialect(
         MixedOp,
     ],
     [
-        BasisAttr,
         StateAttr,
         QubitType,
         ProjectionType,

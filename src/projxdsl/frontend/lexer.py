@@ -71,7 +71,7 @@ class ProjTokenKind(Enum):
     FLOAT = auto()
     INTEGER = auto()
 
-    # Identifier (includes X, Y, Z which can be basis or identifiers)
+    # Identifier
     IDENTIFIER = auto()
 
     def get_integer_value(self, span: Span) -> int:

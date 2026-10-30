@@ -10,7 +10,6 @@ This document specifies the type system for a quantum programming language based
 
 ```
 qubit         - Qubit
-qubit<B>      - Qubit borrowed in basis B, where B ∈ {X, Y, Z}
 proj          - Projection (opaque type)
 bool          - Classical boolean (subtype of proj)
 angle         - Classical angle (for Phase gates)
@@ -18,20 +17,13 @@ angle         - Classical angle (for Phase gates)
 
 ### Type Semantics
 
-- **`qubit` (unborrowed qubit)**: a qubit that is not currently borrowed. Can be used to create projections in any basis, but projections borrowing this qubit cannot escape the scope. **Function parameters of type `qubit` are considered borrowed** - they cannot be returned from the function.
-
-- **`qubit<B>` (borrowed qubit)**: a qubit that is borrowed in a specific basis. Only projections in that basis (or compatible bases) can be created.
+- **`qubit`**: a qubit value. **Function parameters of type `qubit` are considered borrowed** - they cannot be returned from the function.
 
 - **`proj` (projection)**: a projection value that may borrow one or more qubits. Projections are first-class, copyable values (but cannot be passed to higher-order functions).
 
 - **`bool` (boolean)**: Classical boolean value, used for measurement results and classical control flow. **`bool` is a subtype of `proj`** - booleans can be used wherever projections are expected (e.g., in `if` statements, with connectives). Can be freely returned from functions (no borrowing).
 
 - **`angle` (angle)**: Classical angle value, used for Phase gate parameters. Can be freely returned from functions (no borrowing). Supports arithmetic operations and constants.
-
-- **Basis compatibility**:
-  - Same basis: Compatible (multiple Z-borrows allowed)
-  - Different basis: Incompatible (X and Z on same qubit = error)
-  - Total borrow: Control flow disagreement creates a "total borrow" that prevents any new borrows
 
 - **Qubit ownership**: Functions can return qubits, but **only qubits allocated within the function scope**. Function parameters (even `qubit`) cannot be returned.
 
@@ -40,21 +32,20 @@ angle         - Classical angle (for Phase gates)
 ### Type Annotations
 
 ```rust
-fn f(q: qubit<Z>, p: proj) -> proj { ... }      // qubit borrowed in Z basis
-fn g(q: qubit, p: proj) -> proj { ... }         // qubit unborrowed
-fn h(p: proj) -> proj { ... }                   // Projection parameter (always reborrowed)
+fn f(q: qubit, p: proj) -> proj { ... }         // qubit parameter
+fn g(p: proj) -> proj { ... }                   // Projection parameter (always reborrowed)
 ```
 
-**Notation**: `qubit<B>` uses angle bracket syntax for basis annotations. Only one basis annotation is allowed per qubit parameter.
+**Notation**: All qubits use the simple `qubit` type without basis annotations.
 
 ### Expression Syntax
 
 ```rust
 // Projection creation (both ASCII and Unicode notation accepted)
-q == |0>         // Qubit q projected to |0> state (Z basis)
+q == |0>         // Qubit q projected to |0> state
 q == |0⟩         // Same as above (Unicode notation)
-q == |+>         // Qubit q projected to |+> state (X basis)
-q == |L>         // Qubit q projected to |L> state (Y basis)
+q == |+>         // Qubit q projected to |+> state
+q == |L>         // Qubit q projected to |L> state
 
 // Connectives (work on proj or bool, since bool <: proj)
 p1 && p2         // Conjunction (and)
@@ -99,7 +90,7 @@ PI      // π (also accepts unicode: π)
 
 ```rust
 // Basic function
-fn phase_oracle(q1: qubit<Z>, q2: qubit<Z>, p: proj) -> proj {
+fn phase_oracle(q1: qubit, q2: qubit, p: proj) -> proj {
     if q1 == |0> && q2 == |1> && p {
         phase(PI)
     }
@@ -125,70 +116,56 @@ fn identity(p: proj) -> proj {
 
 1. **Projection Reborrowing**: Output projections reborrow from all input projection parameters. If a function takes `p: proj` and returns `proj`, the returned projection inherits all borrows from `p`.
 
-2. **Local Qubit Borrows**: Functions can create projections on local qubits or bare `qubit` parameters, but these projections **cannot be returned**. Only projections that borrow from input `proj` parameters may escape.
+2. **Local Qubit Borrows**: Functions can create projections on local qubits or `qubit` parameters, but these projections **cannot be returned**. Only projections that borrow from input `proj` parameters may escape.
 
-3. **Basis Compatibility**: At any program point, a qubit cannot be borrowed in incompatible bases simultaneously. Same-basis borrows are compatible.
-
-4. **Total Borrow**: When control flow paths disagree on which basis a qubit is borrowed in, the qubit receives a "total borrow" that prevents any new borrows until the projection is released.
-
-5. **Borrow Release**: Borrows are released when the projection value goes out of scope (NLL-style semantics).
+3. **Borrow Release**: Borrows are released when the projection value goes out of scope (NLL-style semantics).
 
 ### Borrow Signature
 
 Every function has an inferred borrow signature:
 
 ```
-fn f(q: qubit<Z>, p: proj) -> proj
+fn f(q: qubit, p: proj) -> proj
 ```
 
 **Semantics**:
-- `q: qubit<Z>` - Caller must provide qubit available in Z basis
+- `q: qubit` - Caller must provide qubit
 - `p: proj` - Projection parameter (always reborrowed)
 - Return `proj` - Reborrow from input `p` plus any new borrows created in function body
 
 **Inference Rules**:
-- Walk function body to determine which qubits are borrowed and in which bases
-- For control flow: union of bases from all paths
-- Multiple bases for same qubit → total borrow
+- Walk function body to determine which qubits are borrowed
 - Returned projections can only borrow from input `proj` parameters
 
 ## Validation Rules
 
 ### Function Body Validation
 
-1. **Qubit parameter usage**: If `q: qubit<B>`, all projections on `q` must be in basis `bool` (or compatible)
+1. **Qubit parameter usage**: If `q: qubit`, projections can be created on `q`, but cannot be returned
 
-2. **Bare qubit usage**: If `q: qubit`, projections can be created in any basis, but cannot be returned
+2. **Projection reborrowing**: Returned projections must only borrow from input `proj` parameters (not from local qubits or `qubit` params)
 
-3. **Projection reborrowing**: Returned projections must only borrow from input `proj` parameters (not from local qubits or bare `qubit` params)
+3. **Qubit return validation**: Functions can return `qubit`, but **only qubits allocated within the function scope**. Function parameters of type `qubit` cannot be returned.
 
-4. **Qubit return validation**: Functions can return `qubit`, but **only qubits allocated within the function scope**. Function parameters of type `qubit` cannot be returned.
-
-5. **Classical return validation**: Functions can freely return `bool` and `angle` (classical types have no borrowing semantics).
-
-6. **Borrow compatibility**: No qubit can have incompatible active borrows at any program point
+4. **Classical return validation**: Functions can freely return `bool` and `angle` (classical types have no borrowing semantics).
 
 ### Call-Site Validation
 
-1. **Qubit availability**: Actual qubit arguments must be available in the required basis
-
-2. **Projection availability**: Actual projection arguments must not be currently borrowed
-
-3. **Borrow conflict detection**: If caller has incompatible borrows active, call is invalid
+1. **Projection availability**: Actual projection arguments must not be currently borrowed
 
 ## Examples
 
 ### Valid Programs
 
 ```rust
-// Example 1: Compatible borrows
-fn phase_oracle(q1: qubit<Z>, q2: qubit<Z>, p: proj) -> proj {
+// Example 1: Basic function
+fn phase_oracle(q1: qubit, q2: qubit, p: proj) -> proj {
     if q1 == |0> && q2 == |1> && p {
         phase(PI)
     }
 }
 
-// Call site (valid - all Z basis)
+// Call site
 let q1 = alloc |0>;
 let q2 = alloc |0>;
 let p = q1 == |0>;
@@ -201,15 +178,15 @@ fn identity(p: proj) -> proj {
     p  // ✅ OK - only reborrow from input proj
 }
 
-fn extend(q: qubit<Z>, p: proj) -> proj {
-    p && (q == |0>  // ✅ OK - reborrow p + new Z borrow on q
+fn extend(q: qubit, p: proj) -> proj {
+    p && (q == |0>  // ✅ OK - reborrow p + new borrow on q
 }
 ```
 
 ```rust
-// Example 3: Bare qubit (not returned)
+// Example 3: Qubit parameter (not returned)
 fn use_local(q: qubit) {
-    let proj = q == |0>;  // ✅ OK - Z basis projection
+    let proj = q == |0>;
     if proj {
         phase(PI)
     }
@@ -218,10 +195,10 @@ fn use_local(q: qubit) {
 ```
 
 ```rust
-// Example 4: Multiple compatible borrows
-fn multi_borrow(q1: qubit<Z>, q2: qubit<Z>) {
-    let p1 = q1 == |0>;  // Z borrow on q1
-    let p2 = q2 == |1>;  // Z borrow on q2
+// Example 4: Multiple borrows
+fn multi_borrow(q1: qubit, q2: qubit) {
+    let p1 = q1 == |0>;
+    let p2 = q2 == |1>;
     if p1 && p2 {
         phase(PI)
     }
@@ -299,60 +276,21 @@ fn boolean_ops(q1: qubit, q2: qubit) {
 ### Invalid Programs
 
 ```rust
-// Example 1: Incompatible bases
-fn bad(q: qubit<Z>, p: proj) -> proj {
-    if q == |+> && p {  // ❌ ERROR - q is qubit<Z> but X basis used
-        phase(PI)
-    }
-}
-```
-
-```rust
-// Example 2: Returning local qubit borrow
+// Example 1: Returning local qubit borrow
 fn make_proj(q: qubit) -> proj {
     q == |0>  // ❌ ERROR - cannot return projection borrowing local q
 }
 ```
 
 ```rust
-// Example 3: Call-site conflict
-fn f(q: qubit<Z>, p: proj) -> proj { ... }
-
-let q = alloc |0>;
-let p1 = q == |0>;      // q borrowed in Z
-let p2 = q == |+>;      // ❌ ERROR - q already borrowed in Z, can't borrow in X
-f(q, p1);
-```
-
-```rust
-// Example 4: Total borrow from control flow
-fn conditional(c: bool, q: qubit) -> proj {
-    if c {
-        q == |0>    // Z basis
-    } else {
-        q == |+>    // X basis
-    }
-    // ❌ ERROR - total borrow on q (Z or X), caller cannot use q
-}
-```
-
-```rust
-// Example 5: Incompatible borrows on same qubit
-fn incompatible(q: qubit<Z>, p: proj) -> proj {
-    let p2 = q == |+>;  // ❌ ERROR - q is qubit<Z>, can't borrow in X
-    p && p2
-}
-```
-
-```rust
-// Example 8: Returning parameter qubit
+// Example 2: Returning parameter qubit
 fn return_param(q: qubit) -> qubit {
-    q  // ❌ ERROR - cannot return qubit parameter (even if bare qubit)
+    q  // ❌ ERROR - cannot return qubit parameter
 }
 ```
 
 ```rust
-// Example 9: Cannot return borrowed qubit
+// Example 3: Cannot return borrowed qubit
 fn return_borrowed(q1: qubit, q2: qubit) -> qubit {
     let q3 = alloc |0>;
     q1  // ❌ ERROR - q1 is a parameter, cannot return
@@ -369,13 +307,11 @@ For each qubit, the analysis maintains a borrow state:
 
 ```
 BorrowState:
-  borrow_type: None | X | Y | Z | Total
   projections: set[SSAValue]  // live projections borrowing this qubit
 ```
 
-- **`None`**: qubit is not borrowed (free to use in any basis)
-- **`X`/`Y`/`Z`**: qubit is borrowed in a specific basis
-- **`Total`**: control flow disagreement; no new borrows allowed
+- **Empty set**: qubit is not borrowed
+- **Non-empty set**: qubit is borrowed by the listed projections
 
 ### Analysis State
 
@@ -390,12 +326,7 @@ AnalysisState = dict[SSAValue, BorrowState]  // qubit SSA → borrow state
 The analysis processes operations in forward order through each block:
 
 1. **Projection creation** (`q == |0>`, `q == |+>`, `q == |L>`):
-   - Determine basis from state notation (Z, X, Y)
-   - Check qubit's current borrow state:
-     - `None`: OK, set borrow_type to basis, add projection to set
-     - Same basis: OK, add projection to set
-     - Different basis: ERROR (incompatible borrows)
-     - `Total`: ERROR (cannot borrow totally-borrowed qubit)
+   - Add the projection to the qubit's borrow set
 
 2. **Compound projections** (`p1 && p2`, `!p`, `p1 ^ p2`, `p1 || p2`):
    - Result projection inherits borrows from all operand projections
@@ -407,14 +338,7 @@ The analysis processes operations in forward order through each block:
 4. **Projection release** (when projection goes dead):
    - Use liveness info to detect when projection is no longer live
    - Remove projection from all qubits it borrows
-   - If no projections remain for a qubit, reset to `None`
-
-5. **Control flow merge** (if/else, loops):
-   - Union borrow types from all predecessor paths:
-     - All `None` → `None`
-     - All same basis → that basis
-     - Different bases → `Total`
-   - Union projection sets from all paths, then filter by liveness at join point
+   - If no projections remain for a qubit, reset to empty set
 
 ### Integration with Liveness
 
@@ -439,38 +363,27 @@ The borrow signature is inferred from the analysis:
 
 **Assumptions**:
 - Returned projections inherit borrows from input projection parameters
-- Returned projections can borrow input qubit parameters (in appropriate bases)
 - Returned projections **cannot** borrow locally allocated qubits
 
 **Qubit Tracking**:
 The analysis tracks which qubits are:
-- **Parameters**: Can be borrowed by returned projections (identified by definition point)
-- **Locally allocated**: Cannot be borrowed by returned projections (identified by definition point)
+- **Parameters**: Cannot be borrowed by returned projections
+- **Locally allocated**: Cannot be borrowed by returned projections
 
 **Inference**:
 1. Run forward borrow analysis on function body
 2. Track which qubits are parameters vs. locally allocated (by definition point)
 3. At function exit, validate:
-   - All locally allocated qubits have no active borrows (borrow_type = None)
+   - All locally allocated qubits have no active borrows
    - This ensures returned projections don't borrow local qubits
 4. Signature includes borrows from:
-   - Input qubit parameters (based on basis annotations)
    - Input projection parameters (inherited by returned projections)
 
 ### Call-Site Validation
 
 At each call site:
 
-1. **Check qubit availability**: actual qubit args must have compatible basis with callee's signature
-2. **Check projection availability**: actual projection args must not be currently borrowed
-3. **Check for conflicts**: borrows introduced by call must not conflict with caller's active borrows
-
-### Error Reporting
-
-When an incompatible borrow is detected, report:
-- The qubit involved
-- The conflicting bases (existing vs. requested)
-- The operation/line where the conflict occurs
+1. **Check projection availability**: actual projection args must not be currently borrowed
 
 
 
@@ -478,7 +391,7 @@ When an incompatible borrow is detected, report:
 
 | Concept | Syntax | Example |
 |---------|--------|---------|
-| Qubit type | `qubit` or `qubit<B>` | `q: qubit<Z>` |
+| Qubit type | `qubit` | `q: qubit` |
 | Projection type | `proj` | `p: proj` |
 | Boolean type | `bool` | `b: bool` |
 | Angle type | `angle` | `theta: angle` |

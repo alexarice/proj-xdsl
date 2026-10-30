@@ -12,48 +12,6 @@ pure fn bool_to_proj() -> proj {
 }
 
 // -----
-// Test: qubit → qubit<X> coercion at function call
-// CHECK-LABEL: proj.unitary @qubit_to_borrowed
-unitary fn expects_borrowed(q: qubit<X>) {
-    if q == |+> {
-        ph(0)
-    }
-}
-unitary fn qubit_to_borrowed(q: qubit) {
-    // CHECK: %[[COERCED:.*]] = proj.borrow_basis %q, #proj.basis<x>
-    // CHECK: proj.call @expects_borrowed(%[[COERCED]])
-    expects_borrowed(q)
-}
-
-// -----
-// Test: qubit → qubit<Y> coercion at function call
-// CHECK-LABEL: proj.unitary @qubit_to_borrowed_y
-unitary fn expects_borrowed_y(q: qubit<Y>) {
-    if q == |L> {
-        ph(0)
-    }
-}
-unitary fn qubit_to_borrowed_y(q: qubit) {
-    // CHECK: %[[COERCED:.*]] = proj.borrow_basis %q, #proj.basis<y>
-    // CHECK: proj.call @expects_borrowed_y(%[[COERCED]])
-    expects_borrowed_y(q)
-}
-
-// -----
-// Test: qubit → qubit<Z> coercion at function call
-// CHECK-LABEL: proj.unitary @qubit_to_borrowed_z
-unitary fn expects_borrowed_z(q: qubit<Z>) {
-    if q == |0> {
-        ph(0)
-    }
-}
-unitary fn qubit_to_borrowed_z(q: qubit) {
-    // CHECK: %[[COERCED:.*]] = proj.borrow_basis %q, #proj.basis<z>
-    // CHECK: proj.call @expects_borrowed_z(%[[COERCED]])
-    expects_borrowed_z(q)
-}
-
-// -----
 // Test: Multiple coercions in single call
 // CHECK-LABEL: proj.pure @multiple_coercions
 pure fn expects_two(p1: proj, p2: proj) -> proj { p1 && p2 }
@@ -125,12 +83,4 @@ pure fn no_coercion_proj(q: qubit) -> proj {
     // CHECK: %[[EQ:.*]] = proj.eq %q
     // CHECK: proj.call @expects_proj(%[[EQ]])
     expects_proj(q == |0>)
-}
-
-// -----
-// Test: No coercion needed (qubit<X> → qubit<X>)
-// CHECK-LABEL: proj.unitary @no_coercion_borrowed
-unitary fn no_coercion_borrowed(q: qubit<X>) {
-    // CHECK: proj.call @expects_borrowed(%q)
-    expects_borrowed(q)
 }

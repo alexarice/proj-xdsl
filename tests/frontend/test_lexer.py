@@ -125,17 +125,6 @@ class TestBasisAsIdentifiers:
         tokens = lex_all("z")
         assert tokens == [(ProjTokenKind.IDENTIFIER, "z"), (ProjTokenKind.EOF, "")]
 
-    def test_basis_in_qubit_type(self):
-        """X, Y, Z in Q<X> are identifiers - parser validates basis."""
-        tokens = lex_all("qubit<X>")
-        assert tokens == [
-            (ProjTokenKind.QUBIT, "qubit"),
-            (ProjTokenKind.LESS, "<"),
-            (ProjTokenKind.IDENTIFIER, "X"),
-            (ProjTokenKind.GREATER, ">"),
-            (ProjTokenKind.EOF, ""),
-        ]
-
     def test_x_as_function_name(self):
         """X can be used as a function name."""
         tokens = lex_all("X")
@@ -176,40 +165,6 @@ class TestPunctuation:
         tokens = lex_all(",")
         assert tokens == [(ProjTokenKind.COMMA, ","), (ProjTokenKind.EOF, "")]
         assert ProjTokenKind.COMMA.is_punctuation()
-
-
-class TestQubitWithBasis:
-    """Test lexing of qubit types with basis annotations."""
-
-    def test_qubit_x_upper(self):
-        tokens = lex_all("qubit<X>")
-        assert tokens == [
-            (ProjTokenKind.QUBIT, "qubit"),
-            (ProjTokenKind.LESS, "<"),
-            (ProjTokenKind.IDENTIFIER, "X"),
-            (ProjTokenKind.GREATER, ">"),
-            (ProjTokenKind.EOF, ""),
-        ]
-
-    def test_qubit_y(self):
-        tokens = lex_all("qubit<Y>")
-        assert tokens == [
-            (ProjTokenKind.QUBIT, "qubit"),
-            (ProjTokenKind.LESS, "<"),
-            (ProjTokenKind.IDENTIFIER, "Y"),
-            (ProjTokenKind.GREATER, ">"),
-            (ProjTokenKind.EOF, ""),
-        ]
-
-    def test_qubit_z(self):
-        tokens = lex_all("qubit<Z>")
-        assert tokens == [
-            (ProjTokenKind.QUBIT, "qubit"),
-            (ProjTokenKind.LESS, "<"),
-            (ProjTokenKind.IDENTIFIER, "Z"),
-            (ProjTokenKind.GREATER, ">"),
-            (ProjTokenKind.EOF, ""),
-        ]
 
 
 class TestWhitespace:
