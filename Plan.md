@@ -385,7 +385,17 @@ At each call site:
 
 1. **Check projection availability**: actual projection args must not be currently borrowed
 
+## Design Decisions
 
+### No Recursion
+
+The language does not support recursive function calls (direct or mutual). Functions can only call functions that are defined before them in the source file.
+
+**Rationale**:
+- Simpler type system and verification
+- Clear call graph structure (DAG, not general graph)
+- Consistent with the "no higher-order functions" constraint
+- Easier to reason about program behavior
 
 ## Syntax Summary
 
