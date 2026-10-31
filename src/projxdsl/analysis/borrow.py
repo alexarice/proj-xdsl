@@ -105,21 +105,13 @@ class BorrowState:
         Creates a new Borrows object if the qubit is not yet borrowed,
         or delegates to Borrows.add() if it is.
 
-        If no projections are provided, just marks the qubit as borrowed
-        (useful for Total borrow where we want to prevent further use).
+        Invariant: projs must be non-empty.
         """
+        assert projs, "add() must be called with at least one projection"
         if qubit not in self._borrows:
             self._borrows[qubit] = Borrows(borrow_type=basis, projections=set(projs))
         else:
-            if projs:
-                self._borrows[qubit].add(basis, *projs)
-            else:
-                # Just update the borrow type (e.g., to Total)
-                existing = self._borrows[qubit]
-                if existing.borrow_type != basis:
-                    self._borrows[qubit] = Borrows(
-                        borrow_type=basis, projections=existing.projections
-                    )
+            self._borrows[qubit].add(basis, *projs)
 
     def items(self) -> Iterable[tuple[SSAValue, Borrows]]:
         """Iterate over (qubit, borrows) pairs."""
