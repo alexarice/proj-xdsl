@@ -9,7 +9,7 @@ from typing import NamedTuple, NoReturn
 from xdsl.builder import Builder
 from xdsl.dialects.arith import AndIOp, ConstantOp, OrIOp, XOrIOp
 from xdsl.dialects.builtin import FunctionType, IntegerAttr, ModuleOp, i1
-from xdsl.ir import Attribute, BlockArgument, Region, SSAValue, TypeAttribute
+from xdsl.ir import Attribute, BlockArgument, SSAValue, TypeAttribute
 from xdsl.parser.generic_parser import GenericParser, ParserState
 from xdsl.utils.exceptions import ParseError
 from xdsl.utils.lexer import Input
@@ -330,9 +330,11 @@ class ProjParser(GenericParser[ProjTokenKind]):
         true_region = Builder.region(parse_statements)
 
         # Parse the optional else block
-        false_region = Region()
-        if self._parse_optional_token(ProjTokenKind.ELSE) is not None:
-            false_region = Builder.region(parse_statements)
+        false_region = (
+            Builder.region(parse_statements)
+            if self._parse_optional_token(ProjTokenKind.ELSE) is not None
+            else None
+        )
 
         return builder.insert(IfOp(condition, true_region, false_region))
 

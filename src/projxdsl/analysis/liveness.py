@@ -111,7 +111,10 @@ class LivenessAnalysis:
                     region_live_out = live_after[op] | {op.condition}
                     if (true_block := op.true_region.first_block) is not None:
                         live_before[op] |= analyse_block(true_block, region_live_out)
-                    if (false_block := op.false_region.first_block) is not None:
+                    if (
+                        op.false_region is not None
+                        and (false_block := op.false_region.first_block) is not None
+                    ):
                         live_before[op] |= analyse_block(false_block, region_live_out)
 
                 next_live_before = live_before[op]

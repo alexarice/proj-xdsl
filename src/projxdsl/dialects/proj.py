@@ -36,6 +36,7 @@ from xdsl.irdl import (
     irdl_op_definition,
     irdl_to_attr_constraint,
     operand_def,
+    opt_region_def,
     prop_def,
     region_def,
     result_def,
@@ -161,7 +162,7 @@ class FuncOpBase(IRDLOperation):
 
     FUNC_KIND: ClassVar[FuncKind]
 
-    body = region_def()
+    body = region_def("single_block")
     sym_name = prop_def(SymbolNameConstraint())
     function_type = prop_def(FunctionType)
 
@@ -468,7 +469,7 @@ class IfOp(IRDLOperation):
 
     condition = operand_def(ProjectionType)
     true_region = region_def("single_block")
-    false_region = region_def()
+    false_region = opt_region_def("single_block")
 
     traits = traits_def(
         NoTerminator(),
@@ -481,8 +482,6 @@ class IfOp(IRDLOperation):
         true_region: Region | Sequence[Block] | Sequence[Operation],
         false_region: Region | Sequence[Block] | Sequence[Operation] | None = None,
     ):
-        if false_region is None:
-            false_region = Region()
         super().__init__(
             operands=[condition],
             regions=[true_region, false_region],
@@ -496,9 +495,14 @@ class IfOp(IRDLOperation):
         # (required by single_block constraint)
         if not true_region.blocks:
             true_region.add_block(Block())
-        false_region = (
-            parser.parse_region() if parser.parse_optional_keyword("else") else Region()
-        )
+        if parser.parse_optional_keyword("else"):
+            false_region = parser.parse_region()
+            # Ensure false_region has at least one block
+            # (required by single_block constraint)
+            if not false_region.blocks:
+                false_region.add_block(Block())
+        else:
+            false_region = None
         parser.parse_optional_attr_dict()
         return cls(condition, true_region, false_region)
 
@@ -511,7 +515,7 @@ class IfOp(IRDLOperation):
             print_entry_block_args=False,
             print_block_terminators=True,
         )
-        if bool(self.false_region.blocks):
+        if self.false_region is not None and bool(self.false_region.blocks):
             printer.print_string(" else ")
             printer.print_region(
                 self.false_region,

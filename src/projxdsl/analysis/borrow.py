@@ -222,7 +222,10 @@ class BorrowAnalysis:
                 if isinstance(op, IfOp):
                     if (true_block := op.true_region.first_block) is not None:
                         analyse_block(true_block, before_state)
-                    if (false_block := op.false_region.first_block) is not None:
+                    if (
+                        op.false_region is not None
+                        and (false_block := op.false_region.first_block) is not None
+                    ):
                         analyse_block(false_block, before_state)
 
                 before[op] = before_state

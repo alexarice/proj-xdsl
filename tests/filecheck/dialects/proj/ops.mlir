@@ -60,7 +60,6 @@ func.func @test_if(%arg0: !proj.projection) {
   // CHECK-NEXT:   }
   // CHECK-GENERIC: "proj.if"(%[[ARG0:.*]]) ({
   // CHECK-GENERIC-NEXT:   ^bb0:
-  // CHECK-GENERIC-NEXT:   }, {
   // CHECK-GENERIC-NEXT:   }) : (!proj.projection) -> ()
   proj.if %arg0 {
   }
@@ -71,10 +70,13 @@ func.func @test_if(%arg0: !proj.projection) {
 func.func @test_if_else(%arg0: !proj.projection) {
   // CHECK: proj.if %arg0 {
   // CHECK-NEXT:   ^bb0:
+  // CHECK-NEXT:   } else {
+  // CHECK-NEXT:   ^bb0:
   // CHECK-NEXT:   }
   // CHECK-GENERIC: "proj.if"(%[[ARG0:.*]]) ({
   // CHECK-GENERIC-NEXT:   ^bb0:
   // CHECK-GENERIC-NEXT:   }, {
+  // CHECK-GENERIC-NEXT:   ^bb0:
   // CHECK-GENERIC-NEXT:   }) : (!proj.projection) -> ()
   proj.if %arg0 {
   } else {
