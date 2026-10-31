@@ -838,8 +838,11 @@ class ProjParser(GenericParser[ProjTokenKind]):
         elif len(result_types) == 1:
             return call_op.res[0]
         else:
-            # Multiple results - for now return first (should handle tuples)
-            return call_op.res[0]
+            # Multi-result functions not yet supported
+            raise NotImplementedError(
+                f"Function '{func_name}' returns {len(result_types)} values, "
+                "but multi-result calls are not yet supported"
+            )
 
     def parse_func(self) -> PureOp | UnitaryOp | MixedOp:
         """
