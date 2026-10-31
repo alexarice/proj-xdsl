@@ -814,7 +814,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         # Coerce arguments to expected types
         input_types = func_sig.function_type.inputs.data
         coerced_args: list[SSAValue] = []
-        for i, (arg, expected_type) in enumerate(zip(args, input_types, strict=False)):
+        for i, (arg, expected_type) in enumerate(zip(args, input_types, strict=True)):
             coerced_arg = self.coerce_to(
                 arg,
                 expected_type,
