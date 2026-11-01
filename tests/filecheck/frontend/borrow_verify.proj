@@ -39,3 +39,37 @@ pure fn takes_two_qubits(q1: qubit, q2: qubit) {
 pure fn test_duplicate(q: qubit) {
     takes_two_qubits(q, q)
 }
+
+// -----
+// Test: nested if with clashing projection conditions
+// CHECK: If condition borrows qubit already borrowed by outer if
+unitary fn test_nested_if_clash(q: qubit) {
+    if q == |0> {
+        if q == |+> {
+        }
+    }
+}
+
+// -----
+// Test: triple nested if with clashing projection conditions
+// CHECK: If condition borrows qubit already borrowed by outer if
+unitary fn test_triple_nested_if_clash(q1: qubit, q2: qubit) {
+    if q1 == |0> {
+        if q2 == |0> {
+            if q1 == |+> {
+            }
+        }
+    }
+}
+
+// -----
+// Test: function call in if using condition's borrowed qubit
+// CHECK: Function call argument has conflicting borrow with outer if
+pure fn takes_proj(p: proj) {
+}
+
+unitary fn test_if_call_clash(q: qubit) {
+    if q == |0> {
+        takes_proj(q == |+>)
+    }
+}
