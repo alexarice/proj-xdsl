@@ -41,9 +41,9 @@ unitary fn Z(q: qubit) {
 mixed fn bell_pair() {
     let q1 = alloc |+>;
     let q2 = alloc |0>;
-	if q1 == |0> && q2 == |-> {
-	  ph(pi)
-	}
+    if q1 == |0> && q2 == |-> {
+      ph(pi)
+    }
 }
 ```
 
