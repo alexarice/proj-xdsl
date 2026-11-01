@@ -5,7 +5,7 @@
 // CHECK: Measure operation not allowed in unitary context
 mixed fn test_measure_in_if(q: qubit) {
     qif q == |0> {
-        measure(q == |1>)
+        measure(q == |1>);
     }
 }
 
@@ -15,7 +15,7 @@ mixed fn test_measure_in_if(q: qubit) {
 mixed fn test_nested_if(q: qubit) {
     qif q == |0> {
         qif q == |1> {
-            measure(q == |+>)
+            measure(q == |+>);
         }
     }
 }
@@ -25,7 +25,7 @@ mixed fn test_nested_if(q: qubit) {
 // CHECK: Measure operation not allowed in unitary context
 mixed fn test_let_measure_in_if(q: qubit) {
     qif q == |0> {
-        let m = measure(q == |1>)
+        let m = measure(q == |1>);
     }
 }
 
@@ -35,7 +35,7 @@ mixed fn test_let_measure_in_if(q: qubit) {
 mixed fn test_expr_measure_in_if(q: qubit) {
     qif q == |0> {
         measure(q == |0>);
-        q == |1>
+        q == |1>;
     }
 }
 
@@ -43,11 +43,11 @@ mixed fn test_expr_measure_in_if(q: qubit) {
 // Test: Calling mixed function from qif block should be rejected
 // CHECK: Cannot call mixed function from unitary function
 mixed fn mixed_fn(q: qubit) {
-    measure(q == |0>)
+    measure(q == |0>);
 }
 
 mixed fn test_call_mixed_in_if(q: qubit) {
     qif q == |0> {
-        mixed_fn(q)
+        mixed_fn(q);
     }
 }

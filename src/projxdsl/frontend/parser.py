@@ -341,15 +341,16 @@ class ProjParser(GenericParser[ProjTokenKind]):
         May mutate `ctx.variables` by adding new variable bindings
         (e.g., let statements).
 
-        statement ::= "ph" "(" angle-expr ")"
-                    | "if" expr block
-                    | "let" ident (":" type)? "=" expr
-                    | expr
-        block ::= "{" statement* "}"
+        statement ::= "ph" "(" angle-expr ")" ";"
+                    | "qif" expr block ";"
+                    | "let" ident (":" type)? "=" expr ";"
+                    | expr (";" | "}")
+        block ::= "{" statement* (expr)? "}"
         angle-expr ::= expression that evaluates to an angle type
 
         Returns:
-            SSAValue if the statement is an expression, None otherwise.
+            SSAValue if the statement is an expression without semicolon (block result),
+            None otherwise.
         """
         if self._parse_optional_token(ProjTokenKind.PHASE) is not None:
             if ctx.func_kind < FuncKind.UNITARY:
@@ -370,6 +371,8 @@ class ProjParser(GenericParser[ProjTokenKind]):
                     )
 
             builder.insert(PhaseOp(angle))
+            if self._parse_optional_token(ProjTokenKind.SEMICOLON) is None:
+                self.raise_error("Expected ';' after phase statement")
             return None
         elif self._parse_optional_token(ProjTokenKind.QIF) is not None:
             if ctx.func_kind < FuncKind.UNITARY:
@@ -377,20 +380,31 @@ class ProjParser(GenericParser[ProjTokenKind]):
                     f"Qif operation not allowed in {ctx.func_kind.display_name} context"
                 )
             self._parse_qif_statement(ctx, builder)
+            if self._parse_optional_token(ProjTokenKind.SEMICOLON) is None:
+                self.raise_error("Expected ';' after qif statement")
             return None
         elif self._parse_optional_token(ProjTokenKind.LET) is not None:
             self._parse_let_statement(ctx, builder)
+            if self._parse_optional_token(ProjTokenKind.SEMICOLON) is None:
+                self.raise_error("Expected ';' after let statement")
             return None
         else:
-            # Parse as an expression statement (result is returned)
-            return self.parse_expression(
+            # Parse as an expression
+            result = self.parse_expression(
                 ctx,
                 builder,
                 initial_error=(
-                    f"Expected 'ph', 'if', 'let', or an expression for statement, "
+                    f"Expected 'ph', 'qif', 'let', or an expression for statement, "
                     f"got '{self._current_token.text}'"
                 ),
             )
+            # If semicolon follows, discard the value (statement)
+            # Otherwise, return it (block result)
+            if self._parse_optional_token(ProjTokenKind.SEMICOLON):
+                return None
+            if result is None:
+                self.raise_typing_error("Expected ';' after non-returning expression")
+            return result
 
     def _parse_qif_statement(
         self,
@@ -433,16 +447,11 @@ class ProjParser(GenericParser[ProjTokenKind]):
         )
 
         def parse_true_statements(inner_builder: Builder):
-            self.parse_list(
-                delimiter=self.Delimiter.BRACES,
-                parse=lambda: self.parse_statement(
-                    true_ctx,
-                    inner_builder,
-                ),
-                separator=";",
-                context_msg=" in qif block",
-            )
-            return None
+            self.parse_punctuation("{", " at start of qif true block")
+            while self.parse_optional_punctuation("}") is None:
+                if self.parse_statement(true_ctx, inner_builder) is not None:
+                    # Qif blocks are void-only - all statements need semicolons
+                    self.raise_error("Expected ';' after expression in qif block")
 
         true_region = Builder.region(parse_true_statements)
 
@@ -456,16 +465,11 @@ class ProjParser(GenericParser[ProjTokenKind]):
             )
 
             def parse_false_statements(inner_builder: Builder):
-                self.parse_list(
-                    delimiter=self.Delimiter.BRACES,
-                    parse=lambda: self.parse_statement(
-                        false_ctx,
-                        inner_builder,
-                    ),
-                    separator=";",
-                    context_msg=" in qif else block",
-                )
-                return None
+                self.parse_punctuation("{", " at start of qif false block")
+                while self.parse_optional_punctuation("}") is None:
+                    if self.parse_statement(false_ctx, inner_builder) is not None:
+                        # Qif blocks are void-only - all statements need semicolons
+                        self.raise_error("Expected ';' after expression in qif block")
 
             false_region = Builder.region(parse_false_statements)
 
@@ -1122,14 +1126,6 @@ class ProjParser(GenericParser[ProjTokenKind]):
             return_type = self.parse_type()
             return_types.append(return_type)
 
-        # Create FunctionType and register in symbol table
-        func_type = FunctionType.from_lists(input_types, return_types)
-        signature = FuncSignature(
-            kind=func_kind,
-            function_type=func_type,
-        )
-        self.functions[func_name] = signature
-
         # Parse function body
         @Builder.region(input_types)
         def parse_body(inner_builder: Builder, args: tuple[BlockArgument, ...]):
@@ -1143,31 +1139,32 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 block_arg.name_hint = param_name
                 ctx.variables[param_name] = block_arg
 
-            # Parse statements using parse_list
-            statements = self.parse_list(
-                delimiter=self.Delimiter.BRACES,
-                parse=lambda: self.parse_statement(ctx, inner_builder),
-                separator=";",
-                context_msg=" in function body",
-            )
+            # Parse opening brace
+            self.parse_punctuation("{", " at start of function body")
+
+            # Parse statements - semicolons handled by parse_statement
+            final_result: SSAValue | None = None
+            while self.parse_optional_punctuation("}") is None:
+                if final_result is not None:
+                    self.raise_error("Expected ';' after expression")
+                final_result = self.parse_statement(ctx, inner_builder)
 
             # Handle return value
             if return_types:
                 # Function has a return type, expect final expression
-                if not statements or statements[-1] is None:
+                if final_result is None:
                     self.raise_error(
                         f"Expected expression of type {return_types[0]}"
                         " at end of function body"
                     )
-                final_expr = statements[-1]
                 # Coerce to return type
-                final_expr = self.coerce_to(
-                    final_expr, return_types[0], inner_builder, " for return value"
+                final_result = self.coerce_to(
+                    final_result, return_types[0], inner_builder, " for return value"
                 )
 
                 # Check that returned projection doesn't borrow locally allocated qubits
-                if final_expr.type == ProjectionType():
-                    final_borrows = ctx.borrows.get(final_expr, ProjectionBorrows())
+                if final_result.type == ProjectionType():
+                    final_borrows = ctx.borrows.get(final_result, ProjectionBorrows())
                     for qubit, borrow_val in final_borrows.borrows.items():
                         # Check if qubit is locally allocated (AllocOp) vs parameter
                         if isinstance(qubit.owner, AllocOp):
@@ -1176,12 +1173,22 @@ class ProjParser(GenericParser[ProjTokenKind]):
                                 f"borrowed in {borrow_val.name}"
                             )
 
-                inner_builder.insert(ReturnOp(final_expr))
+                inner_builder.insert(ReturnOp(final_result))
             else:
                 # Void function, insert ReturnOp with no arguments
+                if final_result is not None:
+                    self.raise_error("Expected ';' after expression")
                 inner_builder.insert(ReturnOp())
 
         body_region = parse_body
+
+        # Create FunctionType and register in symbol table
+        func_type = FunctionType.from_lists(input_types, return_types)
+        signature = FuncSignature(
+            kind=func_kind,
+            function_type=func_type,
+        )
+        self.functions[func_name] = signature
 
         # Create the function operation
         return func_op_class(

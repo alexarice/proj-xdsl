@@ -348,7 +348,7 @@ class TestPhaseStatement:
         """Test parsing ph(theta) statement."""
 
         angle_var = make_angle_var()
-        parser = ProjParser("ph(theta)")
+        parser = ProjParser("ph(theta);")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
@@ -366,7 +366,7 @@ class TestPhaseStatement:
     def test_phase_statement_with_pi(self):
         """Test parsing ph(pi) statement."""
 
-        parser = ProjParser("ph(pi)")
+        parser = ProjParser("ph(pi);")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
@@ -384,7 +384,7 @@ class TestPhaseStatement:
     def test_phase_statement_with_zero(self):
         """Test parsing ph(0) statement."""
 
-        parser = ProjParser("ph(0)")
+        parser = ProjParser("ph(0);")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
@@ -425,7 +425,7 @@ class TestQifStatement:
 
         qubit_var = make_qubit_var()
         proj_var = make_proj_var(qubit_var)
-        parser = ProjParser("qif p { ph(pi) }")
+        parser = ProjParser("qif p { ph(pi); };")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
@@ -453,7 +453,7 @@ class TestQifStatement:
 
         qubit_var = make_qubit_var()
         proj_var = make_proj_var(qubit_var)
-        parser = ProjParser("qif p { ph(pi); ph(0) }")
+        parser = ProjParser("qif p { ph(pi); ph(0); };")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
@@ -481,7 +481,7 @@ class TestQifStatement:
 
         qubit_var = make_qubit_var()
         proj_var = make_proj_var(qubit_var)
-        parser = ProjParser("qif p { ph(pi); ph(0) }")
+        parser = ProjParser("qif p { ph(pi); ph(0); };")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
@@ -507,7 +507,7 @@ class TestQifStatement:
         parser = ProjParser("qif p { ph(pi) ph(0) }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        with pytest.raises(ParseError, match="'\\}' expected"):
+        with pytest.raises(ParseError, match="Expected ';'"):
             parser.parse_statement(
                 TypingContext(
                     func_kind=FuncKind.MIXED,
@@ -521,7 +521,7 @@ class TestQifStatement:
 
         qubit_var = make_qubit_var()
         proj_var = make_proj_var(qubit_var)
-        parser = ProjParser("qif p { }")
+        parser = ProjParser("qif p { };")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
@@ -531,20 +531,76 @@ class TestQifStatement:
             ),
             builder,
         )
+
+    def test_qif_statement_void_construct_without_semicolon(self):
+        """Test that void constructs require semicolons at block end."""
+
+        qubit_var = make_qubit_var()
+        proj_var = make_proj_var(qubit_var)
+        parser = ProjParser("qif p { ph(pi) }")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        with pytest.raises(ParseError, match="Expected ';' after phase statement"):
+            parser.parse_statement(
+                TypingContext(
+                    func_kind=FuncKind.MIXED,
+                    variables=ScopedDict[str, SSAValue](local_scope={"p": proj_var}),
+                ),
+                builder,
+            )
+
+    def test_statement_with_semicolon_returns_none(self):
+        """Test that statements with semicolons return None."""
+
+        qubit_var = make_qubit_var()
+        proj_var = make_proj_var(qubit_var)
+        parser = ProjParser("qif p { ph(pi); ph(0); };")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        result = parser.parse_statement(
+            TypingContext(
+                func_kind=FuncKind.MIXED,
+                variables=ScopedDict[str, SSAValue](local_scope={"p": proj_var}),
+            ),
+            builder,
+        )
+        # qif statement with semicolon should return None
+        assert result is None
+        # But the qif should still be inserted in the parent block
         ops = list(block.ops)
         assert len(ops) == 1
-        if_op = ops[0]
-        assert isinstance(if_op, IfOp)
-        inner_block = if_op.true_region.blocks[0]
-        inner_ops = list(inner_block.ops)
-        assert len(inner_ops) == 0  # Empty block (no YieldOp)
+        assert isinstance(ops[0], IfOp)
+
+    def test_intermediate_expression_without_semicolon_error(self):
+        """Test that intermediate expressions without semicolons raise error."""
+
+        qubit_var = make_qubit_var()
+        proj_var = make_proj_var(qubit_var)
+
+        # Test: expression without semicolon in qif block
+        # Qif blocks are void-only, so all expressions need semicolons
+        parser = ProjParser("qif p { p && p ph(pi); };")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        with pytest.raises(
+            ParseError, match="Expected ';' after expression in qif block"
+        ):
+            parser.parse_statement(
+                TypingContext(
+                    func_kind=FuncKind.MIXED,
+                    variables=ScopedDict[str, SSAValue](
+                        local_scope={"p": proj_var, "q": qubit_var}
+                    ),
+                ),
+                builder,
+            )
 
     def test_qif_statement_type_error(self):
         """Test that qif with non-projection condition raises error."""
 
         # Create a boolean variable
         p = ConstantOp(IntegerAttr(1, 1)).result
-        parser = ProjParser("qif p { ph(pi) }")
+        parser = ProjParser("qif p { ph(pi); };")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         with pytest.raises(TypeCheckError, match="Expected projection"):
@@ -561,10 +617,10 @@ class TestQifStatement:
 
         qubit_var = make_qubit_var()
         proj_var = make_proj_var(qubit_var)
-        parser = ProjParser("qif p ph(pi) }")
+        parser = ProjParser("qif p ph(pi); }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        with pytest.raises(ParseError, match="'\\{' expected"):
+        with pytest.raises(ParseError, match="Expected '{' at start of qif true block"):
             parser.parse_statement(
                 TypingContext(
                     func_kind=FuncKind.MIXED,
@@ -581,7 +637,7 @@ class TestQifStatement:
         parser = ProjParser("qif p { ph(pi)")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        with pytest.raises(ParseError, match="'\\}' expected"):
+        with pytest.raises(ParseError, match="Expected ';' after phase statement"):
             parser.parse_statement(
                 TypingContext(
                     func_kind=FuncKind.MIXED,
@@ -595,7 +651,7 @@ class TestQifStatement:
 
         qubit_var = make_qubit_var()
         proj_var = make_proj_var(qubit_var)
-        parser = ProjParser("qif p { qif q { ph(pi) } }")
+        parser = ProjParser("qif p { qif q { ph(pi); }; };")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
@@ -628,7 +684,7 @@ class TestQifStatement:
 
         qubit_var = make_qubit_var()
         proj_var = make_proj_var(qubit_var)
-        parser = ProjParser("qif p { ph(pi) } else { ph(0) }")
+        parser = ProjParser("qif p { ph(pi); } else { ph(0); };")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
@@ -666,7 +722,7 @@ class TestQifStatement:
 
         qubit_var = make_qubit_var()
         proj_var = make_proj_var(qubit_var)
-        parser = ProjParser("qif p { } else { }")
+        parser = ProjParser("qif p { } else { };")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
@@ -697,7 +753,7 @@ class TestLetStatement:
         """Test parsing a simple let statement."""
 
         qubit_var = make_qubit_var()
-        parser = ProjParser("let p = q == |0>")
+        parser = ProjParser("let p = q == |0>;")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         variables = ScopedDict[str, SSAValue](local_scope={"q": qubit_var})
@@ -717,7 +773,7 @@ class TestLetStatement:
         """Test parsing a let statement with type annotation."""
 
         qubit_var = make_qubit_var()
-        parser = ProjParser("let p: proj = q == |0>")
+        parser = ProjParser("let p: proj = q == |0>;")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         variables = ScopedDict[str, SSAValue](local_scope={"q": qubit_var})
@@ -738,7 +794,7 @@ class TestLetStatement:
 
         qubit_var = make_qubit_var()
         proj_var = make_proj_var(qubit_var)
-        parser = ProjParser("qif p { let x = q == |0> }")
+        parser = ProjParser("qif p { let x = q == |0>; };")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         variables = ScopedDict[str, SSAValue](
@@ -847,7 +903,7 @@ class TestAllocExpression:
     def test_alloc_in_let_statement(self):
         """Test parsing alloc in let statement."""
 
-        parser = ProjParser("let q = alloc |0>")
+        parser = ProjParser("let q = alloc |0>;")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         variables = ScopedDict[str, SSAValue](local_scope={})
@@ -1044,11 +1100,31 @@ class TestExpressionStatement:
             ),
             builder,
         )
-        parser.expect_eof()
 
+    def test_expression_statement_with_semicolon_returns_none(self):
+        """Test that expression statements with semicolons return None."""
+
+        from projxdsl.dialects.proj import ProjectionType
+
+        parser = ProjParser("measure p;")
+        block = Block()
+        builder = Builder(InsertPoint.at_end(block))
+        variables = ScopedDict[str, SSAValue](
+            local_scope={"p": XDSLTestOp(result_types=[ProjectionType()]).results[0]}
+        )
+        result = parser.parse_statement(
+            TypingContext(
+                func_kind=FuncKind.MIXED,
+                variables=variables,
+            ),
+            builder,
+        )
+        # Expression with semicolon should return None (value discarded)
+        assert result is None
+        # But the measure operation should still be inserted
         ops = list(block.ops)
         assert len(ops) == 1
-        assert isinstance(ops[0], ConstantOp)
+        assert isinstance(ops[0], MeasureOp)
 
     def test_invalid_statement_error(self):
         """Test error message for invalid statement tokens."""
@@ -1058,7 +1134,8 @@ class TestExpressionStatement:
         builder = Builder(InsertPoint.at_end(block))
         with pytest.raises(
             ParseError,
-            match="Expected 'ph', 'if', 'let', or an expression for statement, got '}'",
+            match="Expected 'ph', 'qif', 'let', or an expression"
+            " for statement, got '}'",
         ):
             parser.parse_statement(
                 TypingContext(
@@ -1074,7 +1151,7 @@ class TestFuncKindValidation:
 
     def test_phase_in_pure_raises_error(self):
         """Test that phase in pure function raises error."""
-        parser = ProjParser("ph(pi)")
+        parser = ProjParser("ph(pi);")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         with pytest.raises(ParseError, match="Phase operation not allowed in pure"):
@@ -1088,7 +1165,7 @@ class TestFuncKindValidation:
 
     def test_phase_in_unitary_allowed(self):
         """Test that phase in unitary function is allowed."""
-        parser = ProjParser("ph(pi)")
+        parser = ProjParser("ph(pi);")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
@@ -1103,7 +1180,7 @@ class TestFuncKindValidation:
 
     def test_phase_in_mixed_allowed(self):
         """Test that phase in mixed function is allowed."""
-        parser = ProjParser("ph(pi)")
+        parser = ProjParser("ph(pi);")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
@@ -1215,7 +1292,7 @@ class TestFuncKindValidation:
         """Test that qif in pure function raises error."""
         qubit_var = make_qubit_var()
         proj_var = make_proj_var(qubit_var)
-        parser = ProjParser("qif p { ph(pi) }")
+        parser = ProjParser("qif p { ph(pi); };")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         with pytest.raises(ParseError, match="Qif operation not allowed in pure"):
@@ -1231,7 +1308,7 @@ class TestFuncKindValidation:
         """Test that qif in unitary function is allowed."""
         qubit_var = make_qubit_var()
         proj_var = make_proj_var(qubit_var)
-        parser = ProjParser("qif p { ph(pi) }")
+        parser = ProjParser("qif p { ph(pi); };")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
@@ -1334,7 +1411,7 @@ class TestFuncParsing:
 
     def test_parse_mixed_function_with_body(self):
         """Test parsing a mixed function with statements."""
-        parser = ProjParser("mixed fn baz(q: qubit) { ph(pi); q == |0> }")
+        parser = ProjParser("mixed fn baz(q: qubit) { ph(pi); q == |0>; }")
         func_op = parser.parse_func()
         parser.expect_eof()
 
@@ -1416,14 +1493,20 @@ class TestFuncParsing:
 
     def test_parse_function_missing_final_expr(self):
         """Test that missing final expression raises error."""
-        parser = ProjParser("pure fn foo() -> bool { let x = true }")
+        parser = ProjParser("pure fn foo() -> bool { let x = true; }")
         with pytest.raises(ParseError, match="Expected expression"):
+            parser.parse_func()
+
+    def test_parse_function_void_construct_without_semicolon(self):
+        """Test that void constructs require semicolons at function end."""
+        parser = ProjParser("pure fn foo() { let x = true }")
+        with pytest.raises(ParseError, match="Expected ';' after let statement"):
             parser.parse_func()
 
     def test_parse_function_error_in_body(self):
         """Test that syntax error in function body is caught."""
         parser = ProjParser("mixed fn foo() { ph(pi)")
-        with pytest.raises(ParseError, match="in function body"):
+        with pytest.raises(ParseError, match="Expected ';' after phase statement"):
             parser.parse_func()
 
     def test_parse_function_empty_body_void(self):

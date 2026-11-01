@@ -163,8 +163,8 @@ class TestLivenessQifStatement:
 unitary fn test(q: qubit) {
     let p = q == |0>;
     qif p {
-        ph(0)
-    }
+        ph(0);
+    };
 }
 """)
         liveness = LivenessAnalysis.compute(func)
@@ -203,7 +203,7 @@ mixed fn test(q1: qubit, q2: qubit) -> proj {
     let p1 = q1 == |0>;
     let p2 = q2 == |1>;
     qif p2 {
-        ph(0)
+        ph(0);
     };
     p1
 }

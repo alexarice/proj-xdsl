@@ -6,9 +6,9 @@
 unitary fn test_if_variable_not_shared(q: qubit) {
     qif q == |0> {
         let x = q == |0>;
-        ph(0)
+        ph(0);
     } else {
         // x was declared in true branch, should not be visible here
-        let y = x
+        let y = x;
     }
 }
