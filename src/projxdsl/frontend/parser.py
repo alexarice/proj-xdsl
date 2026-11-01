@@ -426,32 +426,48 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
         # Parse the true block (with scoped variables)
         # If blocks are restricted to unitary operations (no measure/alloc)
-        # Create child context with new scopes
-        body_ctx = ctx.new_scope(
+        # Create child context with new scopes for true branch
+        true_ctx = ctx.new_scope(
             func_kind=FuncKind.UNITARY,
             active_borrows=merged_borrows,
         )
 
-        def parse_statements(inner_builder: Builder):
+        def parse_true_statements(inner_builder: Builder):
             self.parse_list(
                 delimiter=self.Delimiter.BRACES,
                 parse=lambda: self.parse_statement(
-                    body_ctx,
+                    true_ctx,
                     inner_builder,
                 ),
                 separator=";",
-                context_msg=" in statement block",
+                context_msg=" in if block",
             )
             return None
 
-        true_region = Builder.region(parse_statements)
+        true_region = Builder.region(parse_true_statements)
 
-        # Parse the optional else block
-        false_region = (
-            Builder.region(parse_statements)
-            if self._parse_optional_token(ProjTokenKind.ELSE) is not None
-            else None
-        )
+        # Parse the optional else block with its own independent scope
+        false_region = None
+        if self._parse_optional_token(ProjTokenKind.ELSE) is not None:
+            # Create separate context for false branch - scopes should not be shared
+            false_ctx = ctx.new_scope(
+                func_kind=FuncKind.UNITARY,
+                active_borrows=merged_borrows,
+            )
+
+            def parse_false_statements(inner_builder: Builder):
+                self.parse_list(
+                    delimiter=self.Delimiter.BRACES,
+                    parse=lambda: self.parse_statement(
+                        false_ctx,
+                        inner_builder,
+                    ),
+                    separator=";",
+                    context_msg=" in else block",
+                )
+                return None
+
+            false_region = Builder.region(parse_false_statements)
 
         return builder.insert(IfOp(condition, true_region, false_region))
 

@@ -1,0 +1,14 @@
+// RUN: xdsl-opt %s --parsing-diagnostics --split-input-file 2>&1 | filecheck %s
+
+
+// Test: variable from true branch not accessible in false branch
+// CHECK: Undefined variable: x
+unitary fn test_if_variable_not_shared(q: qubit) {
+    if q == |0> {
+        let x = q == |0>;
+        ph(0)
+    } else {
+        // x was declared in true branch, should not be visible here
+        let y = x
+    }
+}
