@@ -1,82 +1,81 @@
-# xdsl-template
+# proj-xdsl
 
-A template for projects using xDSL.
+A quantum programming language based on projective predicates, built on the xDSL framework.
 
-## Usage
+## Installation
 
-### Create a new project
+### Prerequisites
+- Python 3.11+
+- `uv` package manager (recommended) or `pip`
 
-Use [sync-template](https://github.com/XXCC-Unicorn-Press/sync-template) to create a project from this template:
-
+### Set up virtual environment
 ```bash
-uvx sync-template init gh:xdslproject/xdsl-template my-new-project
-cd my-new-project
+git clone https://github.com/xdslproject/proj-xdsl.git
+cd proj-xdsl
+make venv
 ```
 
-To add the template remote to an existing repository instead:
-
+### Activate the environment
 ```bash
-cd my-existing-repo
-uvx sync-template init gh:xdslproject/xdsl-template --existing
+source .venv/bin/activate
 ```
 
-### Customize the project
+## Quick Start
 
-1. Pick a name for your project
-2. Fill in the blanks:
-   - Rename `src/xdsltemplate` to `src/projectname`
-   - Find all instances of "TODO: " in the project and complete them
+### Example Program
 
-     | File | Item to replace | Content |
-     | ---- | --------------- | ------- |
-     | `mkdocs.yml` | `site_name` | Documentation website title |
-     | `mkdocs.yml` | `site_author` | Documentation website authors |
-     | `mkdocs.yml` | `copyright` | Documentation website copyright |
-     | `mkdocs.yml` | `repo_name` | Project name |
-     | `mkdocs.yml` | `repo_url` | Project repository URL |
-     | `mkdocs.yml` | `extra.social.link` | Project repository/organisation URL |
-     | `pyproject.toml` | `project.name` | Project name |
-     | `pyproject.toml` | `project.description` | Project description |
-     | `pyproject.toml` | `project.authors` | Project authors |
-     | `pyproject.toml` | `project.urls.Homepage` | Project homepage URL |
-     | `pyproject.toml` | `project.urls.Source Code` | Project repository URL |
-     | `pyproject.toml` | `project.urls.Issue Tracker` | Project issue tracker URL |
-     | `docs.yml` | `on` | Uncomment to automatically deploy documentation site |
-     | `src/xdsltemplate/__init__.py` | `name` | Replace with name of the project |
-     | `src/xdsltemplate/` | Directory name | Replace with name of the project |
+```proj
+// Define a pure function (no side effects)
+pure fn angle_avg(a1: angle, a2: angle) -> angle {
+    0.5 * (a1 + a2)
+}
 
-3. Run `make install` to set up your environment
+// Unitary function (reversible operations)
+unitary fn Z(q: qubit) {
+    if q == |0> {
+        ph(pi)
+    }
+}
 
-### Sync template updates
+// Mixed function (can allocate and measure)
+mixed fn bell_pair() {
+    let q1 = alloc |+>;
+    let q2 = alloc |0>;
+	if q1 == |0> && q2 == |-> {
+	  ph(pi)
+	}
+}
+```
 
-When the template has updates, sync them into your project:
+### Running Programs
 
+First activate the virtual environment:
 ```bash
-make sync
+source .venv/bin/activate
 ```
 
-This runs `uvx sync-template sync`.
-
-## Example project structure
-
-```text
-.
-├── docs/
-│   ├── index.md              # Hand-written documentation splash page
-│   └── reference.md          # Auto-generated source code documentation
-├── src/
-│   └── xdsltemplate/         # Project source code:
-│       ├── dialects/         # - xDSL dialect implementations
-│       ├── frontend/         # - Parsing and lexing implementations
-│       ├── interpreters/     # - Interpreter implementations
-│       └── transforms/       # - Rewriting transformation implementations
-└── tests/                    # All tests, both pytest and filecheck
-    └── filecheck/            # filecheck .mlir files
+Then run commands:
+```bash
+# Parse and check a program
+xdsl-opt program.proj
 ```
 
-## Developer features for free
+## Development
 
-- Developer tools including auto-formatting, linting, and type-checking as both
-  pre-commit hooks and GitHub Actions.
-- Testing through both pytest and LLVM filecheck
-- Documentation website, optionally deployed to GitHub pages
+Test can be run with:
+```bash
+make tests
+```
+
+All commits should be formatted with the precommit hook. This can be run with:
+```bash
+make precommit
+```
+or the hook can be installed with:
+```bash
+make precommit-install
+```
+
+## License
+
+This project is open source. See LICENSE for details.
