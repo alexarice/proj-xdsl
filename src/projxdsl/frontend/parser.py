@@ -507,7 +507,6 @@ class ProjParser(GenericParser[ProjTokenKind]):
                         f"Expected qubit type for '==' operator, got {error_type}"
                     )
 
-                # Check if qubit borrow is unknown (from a function return)
                 qubit_ssa = lhs
                 lhs = builder.insert(EqOp(lhs, state)).result
                 basis = state.data.get_basis()
