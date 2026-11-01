@@ -20,7 +20,11 @@ from projxdsl.dialects.proj import (
     QubitType,
     XorOp,
 )
-from projxdsl.frontend.parser import ProjParser, TypeCheckError
+from projxdsl.frontend.parser import (
+    ProjectionBorrows,
+    ProjParser,
+    TypeCheckError,
+)
 
 
 def make_bool_var(value: int = 1) -> SSAValue:
@@ -47,7 +51,8 @@ def parse_expression(
     parser = ProjParser(code)
     block = Block()
     builder = Builder(InsertPoint.at_end(block))
-    result = parser.parse_expression(variables, builder)
+    borrows: dict[SSAValue, ProjectionBorrows] = {}
+    result = parser.parse_expression(variables, builder, borrows)
     parser.expect_eof()
     assert result is not None, "parse_expression returned None in test"
     return result
@@ -118,7 +123,8 @@ class TestNotOperator:
         parser = ProjParser("q == |0>")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        proj = parser.parse_expression({"q": var}, builder)
+        borrows: dict[SSAValue, ProjectionBorrows] = {}
+        proj = parser.parse_expression({"q": var}, builder, borrows)
         assert proj is not None
         assert proj.type == ProjectionType()
         assert len(list(block.ops)) == 1  # EqOp inserted
@@ -172,7 +178,8 @@ class TestAndOperator:
         parser = ProjParser("q1 == |0> && q2 == |1>")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        result = parser.parse_expression({"q1": q1, "q2": q2}, builder)
+        borrows: dict[SSAValue, ProjectionBorrows] = {}
+        result = parser.parse_expression({"q1": q1, "q2": q2}, builder, borrows)
         assert result is not None
         assert isinstance(result.owner, AndOp)
         assert result.type == ProjectionType()
@@ -219,7 +226,8 @@ class TestOrOperator:
         parser = ProjParser("q1 == |0> || q2 == |1>")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        result = parser.parse_expression({"q1": q1, "q2": q2}, builder)
+        borrows: dict[SSAValue, ProjectionBorrows] = {}
+        result = parser.parse_expression({"q1": q1, "q2": q2}, builder, borrows)
         assert result is not None
         assert isinstance(result.owner, OrOp)
         assert result.type == ProjectionType()
@@ -266,7 +274,8 @@ class TestXorOperator:
         parser = ProjParser("q1 == |0> ^ q2 == |1>")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        result = parser.parse_expression({"q1": q1, "q2": q2}, builder)
+        borrows: dict[SSAValue, ProjectionBorrows] = {}
+        result = parser.parse_expression({"q1": q1, "q2": q2}, builder, borrows)
         assert result is not None
         assert isinstance(result.owner, XorOp)
         assert result.type == ProjectionType()

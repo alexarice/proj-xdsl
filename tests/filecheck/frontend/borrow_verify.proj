@@ -11,7 +11,7 @@ mixed fn test() -> proj {
 
 // -----
 // Test: conflicting borrows in same block (Z and X basis)
-// CHECK: Cannot borrow qubit in X basis: qubit already borrowed in Z basis
+// CHECK: Cannot combine projections with conflicting borrows: qubit borrowed in Z and X
 pure fn test(q: qubit) -> proj {
     let p1 = q == |0>;
     let p2 = q == |+>;
@@ -20,11 +20,22 @@ pure fn test(q: qubit) -> proj {
 
 // -----
 // Test: conflicting borrows in if regions (Z and X basis)
-// CHECK: Cannot borrow qubit in X basis: qubit already borrowed in Z basis
+// CHECK: Cannot combine projections with conflicting borrows: qubit borrowed in Z and X
 unitary fn test(q: qubit) {
     let p = q == |0>;
     if p {
         let p2 = q == |+>;
+        let p3 = p && p2;
         ph(0)
     }
+}
+
+// -----
+// Test: duplicate qubit argument in function call
+// CHECK: is passed into function twice
+pure fn takes_two_qubits(q1: qubit, q2: qubit) {
+}
+
+pure fn test_duplicate(q: qubit) {
+    takes_two_qubits(q, q)
 }

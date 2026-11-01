@@ -309,7 +309,7 @@ class TestIntegerParsing:
         parser = ProjParser("0")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        result = parser.parse_expression({}, builder)
+        result = parser.parse_expression({}, builder, {})
         assert result is not None
         assert isinstance(result.owner, ZeroOp)
         assert result.type == AngleType()
@@ -322,7 +322,7 @@ class TestIntegerParsing:
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         with pytest.raises(ParseError, match="Only 0 is a valid angle constant"):
-            parser.parse_expression({}, builder)
+            parser.parse_expression({}, builder, {})
 
 
 class TestPhaseStatement:
@@ -336,7 +336,7 @@ class TestPhaseStatement:
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
-            ScopedDict[str, SSAValue](local_scope={"theta": angle_var}), builder
+            ScopedDict[str, SSAValue](local_scope={"theta": angle_var}), builder, {}
         )
         ops = list(block.ops)
         assert len(ops) == 1  # PhaseOp inserted
@@ -349,7 +349,7 @@ class TestPhaseStatement:
         parser = ProjParser("ph(pi)")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        parser.parse_statement(ScopedDict[str, SSAValue](local_scope={}), builder)
+        parser.parse_statement(ScopedDict[str, SSAValue](local_scope={}), builder, {})
         ops = list(block.ops)
         assert len(ops) == 2  # PiOp + PhaseOp inserted
         assert isinstance(ops[0], PiOp)
@@ -361,7 +361,7 @@ class TestPhaseStatement:
         parser = ProjParser("ph(0)")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        parser.parse_statement(ScopedDict[str, SSAValue](local_scope={}), builder)
+        parser.parse_statement(ScopedDict[str, SSAValue](local_scope={}), builder, {})
         ops = list(block.ops)
         assert len(ops) == 2  # ZeroOp + PhaseOp inserted
         assert isinstance(ops[0], ZeroOp)
@@ -377,7 +377,7 @@ class TestPhaseStatement:
         builder = Builder(InsertPoint.at_end(block))
         with pytest.raises(TypeCheckError, match="Expected angle"):
             parser.parse_statement(
-                ScopedDict[str, SSAValue](local_scope={"p": p}), builder
+                ScopedDict[str, SSAValue](local_scope={"p": p}), builder, {}
             )
 
 
@@ -393,7 +393,7 @@ class TestIfStatement:
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
-            ScopedDict[str, SSAValue](local_scope={"p": proj_var}), builder
+            ScopedDict[str, SSAValue](local_scope={"p": proj_var}), builder, {}
         )
         # IfOp is inserted into the block
         ops = list(block.ops)
@@ -417,7 +417,7 @@ class TestIfStatement:
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
-            ScopedDict[str, SSAValue](local_scope={"p": proj_var}), builder
+            ScopedDict[str, SSAValue](local_scope={"p": proj_var}), builder, {}
         )
         # IfOp is inserted into the block
         ops = list(block.ops)
@@ -441,7 +441,7 @@ class TestIfStatement:
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
-            ScopedDict[str, SSAValue](local_scope={"p": proj_var}), builder
+            ScopedDict[str, SSAValue](local_scope={"p": proj_var}), builder, {}
         )
         ops = list(block.ops)
         assert len(ops) == 1
@@ -461,7 +461,7 @@ class TestIfStatement:
         builder = Builder(InsertPoint.at_end(block))
         with pytest.raises(ParseError, match="'\\}' expected"):
             parser.parse_statement(
-                ScopedDict[str, SSAValue](local_scope={"p": proj_var}), builder
+                ScopedDict[str, SSAValue](local_scope={"p": proj_var}), builder, {}
             )
 
     def test_if_statement_empty_block(self):
@@ -473,7 +473,7 @@ class TestIfStatement:
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
-            ScopedDict[str, SSAValue](local_scope={"p": proj_var}), builder
+            ScopedDict[str, SSAValue](local_scope={"p": proj_var}), builder, {}
         )
         ops = list(block.ops)
         assert len(ops) == 1
@@ -493,7 +493,7 @@ class TestIfStatement:
         builder = Builder(InsertPoint.at_end(block))
         with pytest.raises(TypeCheckError, match="Expected projection"):
             parser.parse_statement(
-                ScopedDict[str, SSAValue](local_scope={"p": p}), builder
+                ScopedDict[str, SSAValue](local_scope={"p": p}), builder, {}
             )
 
     def test_if_statement_missing_brace(self):
@@ -506,7 +506,7 @@ class TestIfStatement:
         builder = Builder(InsertPoint.at_end(block))
         with pytest.raises(ParseError, match="'\\{' expected"):
             parser.parse_statement(
-                ScopedDict[str, SSAValue](local_scope={"p": proj_var}), builder
+                ScopedDict[str, SSAValue](local_scope={"p": proj_var}), builder, {}
             )
 
     def test_if_statement_missing_closing_brace(self):
@@ -519,7 +519,7 @@ class TestIfStatement:
         builder = Builder(InsertPoint.at_end(block))
         with pytest.raises(ParseError, match="'\\}' expected"):
             parser.parse_statement(
-                ScopedDict[str, SSAValue](local_scope={"p": proj_var}), builder
+                ScopedDict[str, SSAValue](local_scope={"p": proj_var}), builder, {}
             )
 
     def test_nested_if_statement(self):
@@ -533,6 +533,7 @@ class TestIfStatement:
         parser.parse_statement(
             ScopedDict[str, SSAValue](local_scope={"p": proj_var, "q": proj_var}),
             builder,
+            {},
         )
         ops = list(block.ops)
         assert len(ops) == 1
@@ -559,7 +560,7 @@ class TestIfStatement:
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
-            ScopedDict[str, SSAValue](local_scope={"p": proj_var}), builder
+            ScopedDict[str, SSAValue](local_scope={"p": proj_var}), builder, {}
         )
         ops = list(block.ops)
         assert len(ops) == 1
@@ -593,7 +594,7 @@ class TestIfStatement:
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
-            ScopedDict[str, SSAValue](local_scope={"p": proj_var}), builder
+            ScopedDict[str, SSAValue](local_scope={"p": proj_var}), builder, {}
         )
         ops = list(block.ops)
         assert len(ops) == 1
@@ -620,7 +621,7 @@ class TestLetStatement:
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         variables = ScopedDict[str, SSAValue](local_scope={"q": qubit_var})
-        parser.parse_statement(variables, builder)
+        parser.parse_statement(variables, builder, {})
         parser.expect_eof()
 
         assert "p" in variables
@@ -634,7 +635,7 @@ class TestLetStatement:
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         variables = ScopedDict[str, SSAValue](local_scope={"q": qubit_var})
-        parser.parse_statement(variables, builder)
+        parser.parse_statement(variables, builder, {})
         parser.expect_eof()
 
         assert "p" in variables
@@ -651,7 +652,7 @@ class TestLetStatement:
         variables = ScopedDict[str, SSAValue](
             local_scope={"q": qubit_var, "p": proj_var}
         )
-        parser.parse_statement(variables, builder)
+        parser.parse_statement(variables, builder, {})
         parser.expect_eof()
 
         # x should NOT be in outer scope
@@ -673,7 +674,7 @@ class TestLetStatement:
         builder = Builder(InsertPoint.at_end(block))
         variables = ScopedDict[str, SSAValue](local_scope={"q": qubit_var})
         with pytest.raises(ParseError, match="already defined"):
-            parser.parse_statement(variables, builder)
+            parser.parse_statement(variables, builder, {})
 
     def test_let_statement_type_mismatch(self):
         """Test that a type mismatch raises an error."""
@@ -684,7 +685,7 @@ class TestLetStatement:
         builder = Builder(InsertPoint.at_end(block))
         variables = ScopedDict[str, SSAValue](local_scope={"q": qubit_var})
         with pytest.raises(TypeCheckError, match="Type mismatch"):
-            parser.parse_statement(variables, builder)
+            parser.parse_statement(variables, builder, {})
 
 
 class TestAllocExpression:
@@ -696,7 +697,7 @@ class TestAllocExpression:
         parser = ProjParser("alloc |0>")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        result = parser.parse_expression({}, builder)
+        result = parser.parse_expression({}, builder, {})
         assert result is not None
         parser.expect_eof()
 
@@ -712,7 +713,7 @@ class TestAllocExpression:
             parser = ProjParser(f"alloc {state_str}")
             block = Block()
             builder = Builder(InsertPoint.at_end(block))
-            result = parser.parse_expression({}, builder)
+            result = parser.parse_expression({}, builder, {})
             assert result is not None
             parser.expect_eof()
 
@@ -728,7 +729,7 @@ class TestAllocExpression:
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         variables = ScopedDict[str, SSAValue](local_scope={})
-        parser.parse_statement(variables, builder)
+        parser.parse_statement(variables, builder, {})
         parser.expect_eof()
 
         ops = list(block.ops)
@@ -750,7 +751,7 @@ class TestMeasureExpression:
         variables = ScopedDict[str, SSAValue](
             local_scope={"p": XDSLTestOp(result_types=[ProjectionType()]).results[0]}
         )
-        result = parser.parse_expression(variables, builder)
+        result = parser.parse_expression(variables, builder, {})
         assert result is not None
         parser.expect_eof()
 
@@ -771,7 +772,7 @@ class TestMeasureExpression:
                 "q": XDSLTestOp(result_types=[ProjectionType()]).results[0],
             }
         )
-        result = parser.parse_expression(variables, builder)
+        result = parser.parse_expression(variables, builder, {})
         assert result is not None
         parser.expect_eof()
 
@@ -795,7 +796,7 @@ class TestMeasureExpression:
                 "p": XDSLTestOp(result_types=[QubitType()]).results[0],
             }
         )
-        result = parser.parse_expression(variables, builder)
+        result = parser.parse_expression(variables, builder, {})
         assert result is not None
         parser.expect_eof()
 
@@ -811,7 +812,7 @@ class TestMeasureExpression:
         parser = ProjParser("measure true")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        result = parser.parse_expression({}, builder)
+        result = parser.parse_expression({}, builder, {})
         assert result is not None
         parser.expect_eof()
 
@@ -833,7 +834,7 @@ class TestMeasureExpression:
         variables = ScopedDict[str, SSAValue](
             local_scope={"p": XDSLTestOp(result_types=[ProjectionType()]).results[0]}
         )
-        result = parser.parse_expression(variables, builder)
+        result = parser.parse_expression(variables, builder, {})
         assert result is not None
         parser.expect_eof()
 
@@ -859,7 +860,7 @@ class TestExpressionStatement:
         variables = ScopedDict[str, SSAValue](
             local_scope={"p": XDSLTestOp(result_types=[ProjectionType()]).results[0]}
         )
-        parser.parse_statement(variables, builder)
+        parser.parse_statement(variables, builder, {})
         parser.expect_eof()
 
         ops = list(block.ops)
@@ -872,7 +873,7 @@ class TestExpressionStatement:
         parser = ProjParser("true")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        parser.parse_statement(ScopedDict[str, SSAValue](local_scope={}), builder)
+        parser.parse_statement(ScopedDict[str, SSAValue](local_scope={}), builder, {})
         parser.expect_eof()
 
         ops = list(block.ops)
@@ -889,7 +890,9 @@ class TestExpressionStatement:
             ParseError,
             match="Expected 'ph', 'if', 'let', or an expression for statement, got '}'",
         ):
-            parser.parse_statement(ScopedDict[str, SSAValue](local_scope={}), builder)
+            parser.parse_statement(
+                ScopedDict[str, SSAValue](local_scope={}), builder, {}
+            )
 
 
 class TestFuncKindValidation:
@@ -904,6 +907,7 @@ class TestFuncKindValidation:
             parser.parse_statement(
                 ScopedDict[str, SSAValue](local_scope={}),
                 builder,
+                {},
                 func_kind=FuncKind.PURE,
             )
 
@@ -915,6 +919,7 @@ class TestFuncKindValidation:
         parser.parse_statement(
             ScopedDict[str, SSAValue](local_scope={}),
             builder,
+            {},
             func_kind=FuncKind.UNITARY,
         )
         ops = list(block.ops)
@@ -926,7 +931,10 @@ class TestFuncKindValidation:
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
-            ScopedDict[str, SSAValue](local_scope={}), builder, func_kind=FuncKind.MIXED
+            ScopedDict[str, SSAValue](local_scope={}),
+            builder,
+            {},
+            func_kind=FuncKind.MIXED,
         )
         ops = list(block.ops)
         assert len(ops) == 2  # PiOp + PhaseOp
@@ -940,6 +948,7 @@ class TestFuncKindValidation:
             parser.parse_statement(
                 ScopedDict[str, SSAValue](local_scope={}),
                 builder,
+                {},
                 func_kind=FuncKind.PURE,
             )
 
@@ -952,6 +961,7 @@ class TestFuncKindValidation:
             parser.parse_statement(
                 ScopedDict[str, SSAValue](local_scope={}),
                 builder,
+                {},
                 func_kind=FuncKind.UNITARY,
             )
 
@@ -961,7 +971,10 @@ class TestFuncKindValidation:
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
-            ScopedDict[str, SSAValue](local_scope={}), builder, func_kind=FuncKind.MIXED
+            ScopedDict[str, SSAValue](local_scope={}),
+            builder,
+            {},
+            func_kind=FuncKind.MIXED,
         )
         ops = list(block.ops)
         assert len(ops) == 1  # AllocOp
@@ -974,7 +987,9 @@ class TestFuncKindValidation:
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         with pytest.raises(ParseError, match="Measure operation not allowed in pure"):
-            parser.parse_expression({"p": proj_var}, builder, func_kind=FuncKind.PURE)
+            parser.parse_expression(
+                {"p": proj_var}, builder, {}, func_kind=FuncKind.PURE
+            )
 
     def test_measure_in_unitary_raises_error(self):
         """Test that measure in unitary function raises error."""
@@ -987,7 +1002,7 @@ class TestFuncKindValidation:
             ParseError, match="Measure operation not allowed in unitary"
         ):
             parser.parse_expression(
-                {"p": proj_var}, builder, func_kind=FuncKind.UNITARY
+                {"p": proj_var}, builder, {}, func_kind=FuncKind.UNITARY
             )
 
     def test_measure_in_mixed_allowed(self):
@@ -998,7 +1013,7 @@ class TestFuncKindValidation:
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         result = parser.parse_expression(
-            {"p": proj_var}, builder, func_kind=FuncKind.MIXED
+            {"p": proj_var}, builder, {}, func_kind=FuncKind.MIXED
         )
         assert result is not None
         ops = list(block.ops)
@@ -1015,6 +1030,7 @@ class TestFuncKindValidation:
             parser.parse_statement(
                 ScopedDict[str, SSAValue](local_scope={"p": proj_var}),
                 builder,
+                {},
                 func_kind=FuncKind.PURE,
             )
 
@@ -1028,6 +1044,7 @@ class TestFuncKindValidation:
         parser.parse_statement(
             ScopedDict[str, SSAValue](local_scope={"p": proj_var}),
             builder,
+            {},
             func_kind=FuncKind.UNITARY,
         )
         ops = list(block.ops)
@@ -1045,6 +1062,7 @@ class TestFuncKindValidation:
             parser.parse_statement(
                 ScopedDict[str, SSAValue](local_scope={"q": qubit_var}),
                 builder,
+                {},
                 func_kind=FuncKind.UNITARY,
             )
 
@@ -1059,7 +1077,7 @@ class TestFuncKindValidation:
             ParseError, match="Measure operation not allowed in unitary"
         ):
             parser.parse_expression(
-                {"p": proj_var}, builder, func_kind=FuncKind.UNITARY
+                {"p": proj_var}, builder, {}, func_kind=FuncKind.UNITARY
             )
 
     def test_or_with_measure_in_pure_raises_error(self):
@@ -1070,7 +1088,9 @@ class TestFuncKindValidation:
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         with pytest.raises(ParseError, match="Measure operation not allowed in pure"):
-            parser.parse_expression({"p": proj_var}, builder, func_kind=FuncKind.PURE)
+            parser.parse_expression(
+                {"p": proj_var}, builder, {}, func_kind=FuncKind.PURE
+            )
 
 
 class TestFuncParsing:
