@@ -417,15 +417,15 @@ class TestPhaseStatement:
             )
 
 
-class TestIfStatement:
-    """Test parsing of if statements."""
+class TestQifStatement:
+    """Test parsing of qif statements."""
 
-    def test_simple_if_statement(self):
-        """Test parsing a simple if statement with one phase."""
+    def test_simple_qif_statement(self):
+        """Test parsing a simple qif statement with one phase."""
 
         qubit_var = make_qubit_var()
         proj_var = make_proj_var(qubit_var)
-        parser = ProjParser("if p { ph(pi) }")
+        parser = ProjParser("qif p { ph(pi) }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
@@ -448,12 +448,12 @@ class TestIfStatement:
         assert isinstance(inner_ops[0], PiOp)
         assert isinstance(inner_ops[1], PhaseOp)
 
-    def test_if_statement_multiple_statements(self):
-        """Test parsing if statement with multiple phase statements."""
+    def test_qif_statement_multiple_statements(self):
+        """Test parsing qif statement with multiple phase statements."""
 
         qubit_var = make_qubit_var()
         proj_var = make_proj_var(qubit_var)
-        parser = ProjParser("if p { ph(pi); ph(0) }")
+        parser = ProjParser("qif p { ph(pi); ph(0) }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
@@ -476,12 +476,12 @@ class TestIfStatement:
         assert isinstance(inner_ops[2], ZeroOp)
         assert isinstance(inner_ops[3], PhaseOp)
 
-    def test_if_statement_with_semicolons(self):
-        """Test parsing if statement with semicolons between statements."""
+    def test_qif_statement_with_semicolons(self):
+        """Test parsing qif statement with semicolons between statements."""
 
         qubit_var = make_qubit_var()
         proj_var = make_proj_var(qubit_var)
-        parser = ProjParser("if p { ph(pi); ph(0) }")
+        parser = ProjParser("qif p { ph(pi); ph(0) }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
@@ -499,12 +499,12 @@ class TestIfStatement:
         inner_ops = list(inner_block.ops)
         assert len(inner_ops) == 4  # PiOp + PhaseOp + ZeroOp + PhaseOp (no YieldOp)
 
-    def test_if_statement_without_semicolons(self):
+    def test_qif_statement_without_semicolons(self):
         """Test that missing semicolon between statements raises error."""
 
         qubit_var = make_qubit_var()
         proj_var = make_proj_var(qubit_var)
-        parser = ProjParser("if p { ph(pi) ph(0) }")
+        parser = ProjParser("qif p { ph(pi) ph(0) }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         with pytest.raises(ParseError, match="'\\}' expected"):
@@ -516,12 +516,12 @@ class TestIfStatement:
                 builder,
             )
 
-    def test_if_statement_empty_block(self):
-        """Test parsing if statement with empty block."""
+    def test_qif_statement_empty_block(self):
+        """Test parsing qif statement with empty block."""
 
         qubit_var = make_qubit_var()
         proj_var = make_proj_var(qubit_var)
-        parser = ProjParser("if p { }")
+        parser = ProjParser("qif p { }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
@@ -539,12 +539,12 @@ class TestIfStatement:
         inner_ops = list(inner_block.ops)
         assert len(inner_ops) == 0  # Empty block (no YieldOp)
 
-    def test_if_statement_type_error(self):
-        """Test that if with non-projection condition raises error."""
+    def test_qif_statement_type_error(self):
+        """Test that qif with non-projection condition raises error."""
 
         # Create a boolean variable
         p = ConstantOp(IntegerAttr(1, 1)).result
-        parser = ProjParser("if p { ph(pi) }")
+        parser = ProjParser("qif p { ph(pi) }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         with pytest.raises(TypeCheckError, match="Expected projection"):
@@ -556,12 +556,12 @@ class TestIfStatement:
                 builder,
             )
 
-    def test_if_statement_missing_brace(self):
+    def test_qif_statement_missing_brace(self):
         """Test that missing opening brace raises error."""
 
         qubit_var = make_qubit_var()
         proj_var = make_proj_var(qubit_var)
-        parser = ProjParser("if p ph(pi) }")
+        parser = ProjParser("qif p ph(pi) }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         with pytest.raises(ParseError, match="'\\{' expected"):
@@ -573,12 +573,12 @@ class TestIfStatement:
                 builder,
             )
 
-    def test_if_statement_missing_closing_brace(self):
+    def test_qif_statement_missing_closing_brace(self):
         """Test that missing closing brace raises error."""
 
         qubit_var = make_qubit_var()
         proj_var = make_proj_var(qubit_var)
-        parser = ProjParser("if p { ph(pi)")
+        parser = ProjParser("qif p { ph(pi)")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         with pytest.raises(ParseError, match="'\\}' expected"):
@@ -590,12 +590,12 @@ class TestIfStatement:
                 builder,
             )
 
-    def test_nested_if_statement(self):
-        """Test parsing nested if statements."""
+    def test_nested_qif_statement(self):
+        """Test parsing nested qif statements."""
 
         qubit_var = make_qubit_var()
         proj_var = make_proj_var(qubit_var)
-        parser = ProjParser("if p { if q { ph(pi) } }")
+        parser = ProjParser("qif p { qif q { ph(pi) } }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
@@ -623,12 +623,12 @@ class TestIfStatement:
         assert isinstance(inner_inner_ops[0], PiOp)
         assert isinstance(inner_inner_ops[1], PhaseOp)
 
-    def test_if_else_statement(self):
-        """Test parsing if statement with else clause."""
+    def test_qif_else_statement(self):
+        """Test parsing qif statement with else clause."""
 
         qubit_var = make_qubit_var()
         proj_var = make_proj_var(qubit_var)
-        parser = ProjParser("if p { ph(pi) } else { ph(0) }")
+        parser = ProjParser("qif p { ph(pi) } else { ph(0) }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
@@ -661,12 +661,12 @@ class TestIfStatement:
         assert isinstance(false_ops[0], ZeroOp)
         assert isinstance(false_ops[1], PhaseOp)
 
-    def test_if_else_empty_blocks(self):
-        """Test parsing if statement with empty else clause."""
+    def test_qif_else_empty_blocks(self):
+        """Test parsing qif statement with empty else clause."""
 
         qubit_var = make_qubit_var()
         proj_var = make_proj_var(qubit_var)
-        parser = ProjParser("if p { } else { }")
+        parser = ProjParser("qif p { } else { }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(
@@ -738,7 +738,7 @@ class TestLetStatement:
 
         qubit_var = make_qubit_var()
         proj_var = make_proj_var(qubit_var)
-        parser = ProjParser("if p { let x = q == |0> }")
+        parser = ProjParser("qif p { let x = q == |0> }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         variables = ScopedDict[str, SSAValue](
@@ -756,10 +756,10 @@ class TestLetStatement:
         # x should NOT be in outer scope
         assert "x" not in variables
 
-        # x should be in the if block
-        if_op = list(block.ops)[0]
-        assert isinstance(if_op, IfOp)
-        inner_block = if_op.true_region.blocks[0]
+        # x should be in the qif block
+        qif_op = list(block.ops)[0]
+        assert isinstance(qif_op, IfOp)
+        inner_block = qif_op.true_region.blocks[0]
         inner_ops = list(inner_block.ops)
         assert len(inner_ops) == 1  # EqOp (no YieldOp)
 
@@ -1211,14 +1211,14 @@ class TestFuncKindValidation:
         ops = list(block.ops)
         assert len(ops) == 1  # MeasureOp
 
-    def test_if_in_pure_raises_error(self):
-        """Test that if in pure function raises error."""
+    def test_qif_in_pure_raises_error(self):
+        """Test that qif in pure function raises error."""
         qubit_var = make_qubit_var()
         proj_var = make_proj_var(qubit_var)
-        parser = ProjParser("if p { ph(pi) }")
+        parser = ProjParser("qif p { ph(pi) }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        with pytest.raises(ParseError, match="If operation not allowed in pure"):
+        with pytest.raises(ParseError, match="Qif operation not allowed in pure"):
             parser.parse_statement(
                 TypingContext(
                     func_kind=FuncKind.PURE,
@@ -1227,11 +1227,11 @@ class TestFuncKindValidation:
                 builder,
             )
 
-    def test_if_in_unitary_allowed(self):
-        """Test that if in unitary function is allowed."""
+    def test_qif_in_unitary_allowed(self):
+        """Test that qif in unitary function is allowed."""
         qubit_var = make_qubit_var()
         proj_var = make_proj_var(qubit_var)
-        parser = ProjParser("if p { ph(pi) }")
+        parser = ProjParser("qif p { ph(pi) }")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
         parser.parse_statement(

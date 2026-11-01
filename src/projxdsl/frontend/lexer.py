@@ -51,6 +51,7 @@ class ProjTokenKind(Enum):
     # Statement keywords
     PHASE = auto()
     IF = auto()
+    QIF = auto()
     ELSE = auto()
     LET = auto()
 
@@ -145,6 +146,7 @@ KEYWORD_MAP = {
     # Statement keywords
     "ph": ProjTokenKind.PHASE,
     "if": ProjTokenKind.IF,
+    "qif": ProjTokenKind.QIF,
     "else": ProjTokenKind.ELSE,
     "let": ProjTokenKind.LET,
     "alloc": ProjTokenKind.ALLOC,

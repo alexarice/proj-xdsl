@@ -8,7 +8,7 @@
 // CHECK-NEXT:   }
 // CHECK-NEXT:   proj.return	
 unitary fn X(q: qubit) {
-  if q == |-> {
+  qif q == |-> {
     ph(pi)
   }
 }
@@ -21,7 +21,7 @@ unitary fn X(q: qubit) {
 // CHECK-NEXT:   }
 // CHECK-NEXT:   proj.return
 unitary fn Y(q: qubit) {
-  if q == |R> {
+  qif q == |R> {
     ph(pi)
   }
 }
@@ -34,7 +34,7 @@ unitary fn Y(q: qubit) {
 // CHECK-NEXT:   }
 // CHECK-NEXT:   proj.return
 unitary fn Z(q: qubit) {
-  if q == |1> {
+  qif q == |1> {
     ph(pi)
   }
 }
@@ -48,7 +48,7 @@ unitary fn Z(q: qubit) {
 // CHECK-NEXT:   }
 // CHECK-NEXT:   proj.return
 unitary fn S(q: qubit) {
-  if q == |1> {
+  qif q == |1> {
     ph(0.5*pi)
   }
 }
@@ -62,7 +62,7 @@ unitary fn S(q: qubit) {
 // CHECK-NEXT:   }
 // CHECK-NEXT:   proj.return
 unitary fn T(q: qubit) {
-  if q == |1> {
+  qif q == |1> {
     ph(0.25*pi)
   }
 }
@@ -77,7 +77,7 @@ unitary fn T(q: qubit) {
 // CHECK-NEXT:   }
 // CHECK-NEXT:   proj.return
 unitary fn CZ(c: qubit, q: qubit) {
-  if c == |1> && q == |1> {
+  qif c == |1> && q == |1> {
     ph(pi)
   }
 }
@@ -92,7 +92,7 @@ unitary fn CZ(c: qubit, q: qubit) {
 // CHECK-NEXT:   }
 // CHECK-NEXT:   proj.return
 unitary fn CX(c: qubit, q: qubit) {
-  if c == |1> && q == |-> {
+  qif c == |1> && q == |-> {
     ph(pi)
   }
 }
@@ -106,7 +106,7 @@ unitary fn CX(c: qubit, q: qubit) {
 // CHECK-NEXT:   proj.return
 unitary fn CondX(b: bool, q: qubit) {
   let p = q == |->;
-  if p {
+  qif p {
     ph(pi)
   }
 }
@@ -118,7 +118,7 @@ unitary fn CondX(b: bool, q: qubit) {
 // CHECK-NEXT:   }
 // CHECK-NEXT:   proj.return
 unitary fn CX_call(c: qubit, q: qubit) {
-  if c == |1> {
+  qif c == |1> {
     X(q)
   }
 }
@@ -130,7 +130,7 @@ unitary fn CX_call(c: qubit, q: qubit) {
 // CHECK-NEXT:   }
 // CHECK-NEXT:   proj.return
 unitary fn CZ_call(c: qubit, q: qubit) {
-  if c == |1> {
+  qif c == |1> {
     Z(q)
   }
 }
@@ -147,7 +147,7 @@ unitary fn CZ_call(c: qubit, q: qubit) {
 // CHECK-NEXT:   proj.return
 unitary fn RZ(theta: angle, q: qubit) {
   let half = 0.5 * theta;
-  if q == |1> {
+  qif q == |1> {
     ph(half)
   } else {
     ph(-half)

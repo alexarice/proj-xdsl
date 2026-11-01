@@ -131,8 +131,8 @@ class TypingContext:
         Create a new typing context with fresh scopes.
 
         Args:
-            func_kind: Function kind for the new scope (e.g., UNITARY for if bodies)
-            active_borrows: Borrows from outer if conditions to enforce
+            func_kind: Function kind for the new scope (e.g., UNITARY for qif bodies)
+            active_borrows: Borrows from outer qif conditions to enforce
 
         Returns:
             New TypingContext with child scopes for variables and borrows
@@ -371,12 +371,12 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
             builder.insert(PhaseOp(angle))
             return None
-        elif self._parse_optional_token(ProjTokenKind.IF) is not None:
+        elif self._parse_optional_token(ProjTokenKind.QIF) is not None:
             if ctx.func_kind < FuncKind.UNITARY:
                 self.raise_typing_error(
-                    f"If operation not allowed in {ctx.func_kind.display_name} context"
+                    f"Qif operation not allowed in {ctx.func_kind.display_name} context"
                 )
-            self._parse_if_statement(ctx, builder)
+            self._parse_qif_statement(ctx, builder)
             return None
         elif self._parse_optional_token(ProjTokenKind.LET) is not None:
             self._parse_let_statement(ctx, builder)
@@ -392,15 +392,15 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 ),
             )
 
-    def _parse_if_statement(
+    def _parse_qif_statement(
         self,
         ctx: TypingContext,
         builder: Builder,
     ) -> IfOp:
         """
-        Parse an if statement.
+        Parse a qif (quantum if) statement.
 
-        if-stmt ::= "if" expr block ("else" block)?
+        qif-stmt ::= "qif" expr block ("else" block)?
         block ::= "{" statement* "}"
         """
         # Parse the condition expression (inserted in parent block)
@@ -410,22 +410,22 @@ class ProjParser(GenericParser[ProjTokenKind]):
         if condition is None or condition.type != ProjectionType():
             error_type = condition.type if condition else "()"
             self.raise_typing_error(
-                f"Expected projection type for 'if' condition, got {error_type}"
+                f"Expected projection type for 'qif' condition, got {error_type}"
             )
 
-        # Get condition's borrows and check against outer if borrows
+        # Get condition's borrows and check against outer qif borrows
         condition_borrows = ctx.borrows.get(condition, ProjectionBorrows())
         conflict_qubit = ctx.active_borrows.has_conflicting_borrow(condition_borrows)
         if conflict_qubit is not None:
             self.raise_typing_error(
-                "If condition borrows qubit already borrowed by outer if"
+                "Qif condition borrows qubit already borrowed by outer qif"
             )
 
-        # Merge condition borrows with active if borrows for body
+        # Merge condition borrows with active qif borrows for body
         merged_borrows = ctx.active_borrows.merge(condition_borrows)
 
         # Parse the true block (with scoped variables)
-        # If blocks are restricted to unitary operations (no measure/alloc)
+        # Qif blocks are restricted to unitary operations (no measure/alloc)
         # Create child context with new scopes for true branch
         true_ctx = ctx.new_scope(
             func_kind=FuncKind.UNITARY,
@@ -440,7 +440,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
                     inner_builder,
                 ),
                 separator=";",
-                context_msg=" in if block",
+                context_msg=" in qif block",
             )
             return None
 
@@ -463,7 +463,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
                         inner_builder,
                     ),
                     separator=";",
-                    context_msg=" in else block",
+                    context_msg=" in qif else block",
                 )
                 return None
 
@@ -1013,17 +1013,17 @@ class ProjParser(GenericParser[ProjTokenKind]):
                         "Function call arguments have conflicting borrows"
                     )
 
-        # 4. Check arguments against active if borrows
+        # 4. Check arguments against active qif borrows
         for qubit in direct_qubits:
             if qubit in ctx.active_borrows.borrows:
                 self.raise_typing_error(
-                    "Qubit argument conflicts with outer if condition borrow"
+                    "Qubit argument conflicts with outer qif condition borrow"
                 )
         for arg_borrows in projection_borrows:
             conflict = ctx.active_borrows.has_conflicting_borrow(arg_borrows)
             if conflict is not None:
                 self.raise_typing_error(
-                    "Function call argument has conflicting borrow with outer if"
+                    "Function call argument has conflicting borrow with outer qif"
                 )
 
         # Get result types

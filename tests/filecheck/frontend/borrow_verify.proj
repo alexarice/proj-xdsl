@@ -19,11 +19,11 @@ pure fn test(q: qubit) -> proj {
 }
 
 // -----
-// Test: conflicting borrows in if regions (Z and X basis)
+// Test: conflicting borrows in qif regions (Z and X basis)
 // CHECK: Cannot combine projections with conflicting borrows: qubit borrowed in Z and X
 unitary fn test(q: qubit) {
     let p = q == |0>;
-    if p {
+    qif p {
         let p2 = q == |+>;
         let p3 = p && p2;
         ph(0)
@@ -41,47 +41,47 @@ pure fn test_duplicate(q: qubit) {
 }
 
 // -----
-// Test: nested if with clashing projection conditions
-// CHECK: If condition borrows qubit already borrowed by outer if
+// Test: nested qif with clashing projection conditions
+// CHECK: Qif condition borrows qubit already borrowed by outer qif
 unitary fn test_nested_if_clash(q: qubit) {
-    if q == |0> {
-        if q == |+> {
+    qif q == |0> {
+        qif q == |+> {
         }
     }
 }
 
 // -----
-// Test: triple nested if with clashing projection conditions
-// CHECK: If condition borrows qubit already borrowed by outer if
+// Test: triple nested qif with clashing projection conditions
+// CHECK: Qif condition borrows qubit already borrowed by outer qif
 unitary fn test_triple_nested_if_clash(q1: qubit, q2: qubit) {
-    if q1 == |0> {
-        if q2 == |0> {
-            if q1 == |+> {
+    qif q1 == |0> {
+        qif q2 == |0> {
+            qif q1 == |+> {
             }
         }
     }
 }
 
 // -----
-// Test: function call in if using condition's borrowed qubit (projection argument)
-// CHECK: Function call argument has conflicting borrow with outer if
+// Test: function call in qif using condition's borrowed qubit (projection argument)
+// CHECK: Function call argument has conflicting borrow with outer qif
 pure fn takes_proj(p: proj) {
 }
 
 unitary fn test_if_call_clash(q: qubit) {
-    if q == |0> {
+    qif q == |0> {
         takes_proj(q == |+>)
     }
 }
 
 // -----
-// Test: function call in if using condition's borrowed qubit (direct qubit argument)
-// CHECK: Qubit argument conflicts with outer if condition borrow
+// Test: function call in qif using condition's borrowed qubit (direct qubit argument)
+// CHECK: Qubit argument conflicts with outer qif condition borrow
 pure fn takes_qubit(q: qubit) {
 }
 
 unitary fn test_if_call_qubit_clash(q: qubit) {
-    if q == |0> {
+    qif q == |0> {
         takes_qubit(q)
     }
 }

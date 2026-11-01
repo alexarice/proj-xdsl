@@ -154,40 +154,40 @@ pure fn test(q: qubit) -> proj {
         assert len(liveness.get_live_after(not_ops[0])) == 1
 
 
-class TestLivenessIfStatement:
-    """Tests for liveness with if statements."""
+class TestLivenessQifStatement:
+    """Tests for liveness with qif statements."""
 
-    def test_if_statement(self):
-        """Test liveness through if statement."""
+    def test_qif_statement(self):
+        """Test liveness through qif statement."""
         func = parse_function("""
 unitary fn test(q: qubit) {
     let p = q == |0>;
-    if p {
+    qif p {
         ph(0)
     }
 }
 """)
         liveness = LivenessAnalysis.compute(func)
 
-        if_ops = get_ops_by_name(func, "proj.if")
+        qif_ops = get_ops_by_name(func, "proj.if")
         eq_ops = get_ops_by_name(func, "proj.eq")
-        assert len(if_ops) == 1
+        assert len(qif_ops) == 1
         assert len(eq_ops) == 1
 
-        # Get operations inside if region
-        if_op = cast(IfOp, if_ops[0])
-        true_block = if_op.true_region.blocks[0]
+        # Get operations inside qif region
+        qif_op = cast(IfOp, qif_ops[0])
+        true_block = qif_op.true_region.blocks[0]
         phase_ops = get_ops_in_block(true_block, "proj.phase")
         assert len(phase_ops) == 1
 
-        # Before if: p is live (used by the if condition)
-        assert len(liveness.get_live_before(if_op)) == 1
+        # Before qif: p is live (used by the qif condition)
+        assert len(liveness.get_live_before(qif_op)) == 1
 
-        # After if: p is dead (consumed by the if)
-        # Note: condition is live WITHIN the if region, but not after
-        assert len(liveness.get_live_after(if_op)) == 0
+        # After qif: p is dead (consumed by the qif)
+        # Note: condition is live WITHIN the qif region, but not after
+        assert len(liveness.get_live_after(qif_op)) == 0
 
-        # Within if region: p is live (condition persists through region)
+        # Within qif region: p is live (condition persists through region)
         assert len(liveness.get_live_before(phase_ops[0])) == 1
         assert len(liveness.get_live_after(phase_ops[0])) == 1
 
@@ -196,13 +196,13 @@ unitary fn test(q: qubit) {
         assert len(live_after_eq) == 1
         assert isinstance(list(live_after_eq)[0].type, ProjectionType)
 
-    def test_if_statement_live_through(self):
-        """Test that values live after if are live in both regions."""
+    def test_qif_statement_live_through(self):
+        """Test that values live after qif are live in both regions."""
         func = parse_function("""
 mixed fn test(q1: qubit, q2: qubit) -> proj {
     let p1 = q1 == |0>;
     let p2 = q2 == |1>;
-    if p2 {
+    qif p2 {
         ph(0)
     };
     p1
@@ -210,26 +210,26 @@ mixed fn test(q1: qubit, q2: qubit) -> proj {
 """)
         liveness = LivenessAnalysis.compute(func)
 
-        if_ops = get_ops_by_name(func, "proj.if")
+        qif_ops = get_ops_by_name(func, "proj.if")
         eq_ops = get_ops_by_name(func, "proj.eq")
         return_ops = get_ops_by_name(func, "proj.return")
-        assert len(if_ops) == 1
+        assert len(qif_ops) == 1
         assert len(eq_ops) == 2
         assert len(return_ops) == 1
 
         # p1 is defined by eq_ops[0], p2 by eq_ops[1]
         p2_eq = eq_ops[1]
-        if_op = if_ops[0]
+        qif_op = qif_ops[0]
         return_op = return_ops[0]
 
         # After p2 eq: both p1 and p2 are live
         assert len(liveness.get_live_after(p2_eq)) == 2
 
-        # After if: only p1 is live (p2 consumed by if)
-        assert len(liveness.get_live_after(if_op)) == 1
+        # After qif: only p1 is live (p2 consumed by qif)
+        assert len(liveness.get_live_after(qif_op)) == 1
 
-        # Before if: p1 is live (flows through), p2 is live (used by condition)
-        assert len(liveness.get_live_before(if_op)) == 2
+        # Before qif: p1 is live (flows through), p2 is live (used by condition)
+        assert len(liveness.get_live_before(qif_op)) == 2
 
         # Before return: p1 is live
         assert len(liveness.get_live_before(return_op)) == 1

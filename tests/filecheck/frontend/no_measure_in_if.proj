@@ -1,53 +1,53 @@
 // RUN: xdsl-opt %s --parsing-diagnostics --split-input-file | filecheck %s
 
 // -----
-// Test: Measure in if block should be rejected
+// Test: Measure in qif block should be rejected
 // CHECK: Measure operation not allowed in unitary context
 mixed fn test_measure_in_if(q: qubit) {
-    if q == |0> {
+    qif q == |0> {
         measure(q == |1>)
     }
 }
 
 // -----
-// Test: Measure in nested if block should be rejected
+// Test: Measure in nested qif block should be rejected
 // CHECK: Measure operation not allowed in unitary context
 mixed fn test_nested_if(q: qubit) {
-    if q == |0> {
-        if q == |1> {
+    qif q == |0> {
+        qif q == |1> {
             measure(q == |+>)
         }
     }
 }
 
 // -----
-// Test: Let with measure in if block should be rejected
+// Test: Let with measure in qif block should be rejected
 // CHECK: Measure operation not allowed in unitary context
 mixed fn test_let_measure_in_if(q: qubit) {
-    if q == |0> {
+    qif q == |0> {
         let m = measure(q == |1>)
     }
 }
 
 // -----
-// Test: Measure in expression statement in if block should be rejected
+// Test: Measure in expression statement in qif block should be rejected
 // CHECK: Measure operation not allowed in unitary context
 mixed fn test_expr_measure_in_if(q: qubit) {
-    if q == |0> {
+    qif q == |0> {
         measure(q == |0>);
         q == |1>
     }
 }
 
 // -----
-// Test: Calling mixed function from if block should be rejected
+// Test: Calling mixed function from qif block should be rejected
 // CHECK: Cannot call mixed function from unitary function
 mixed fn mixed_fn(q: qubit) {
     measure(q == |0>)
 }
 
 mixed fn test_call_mixed_in_if(q: qubit) {
-    if q == |0> {
+    qif q == |0> {
         mixed_fn(q)
     }
 }
