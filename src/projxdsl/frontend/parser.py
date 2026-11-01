@@ -104,6 +104,47 @@ class ProjectionBorrows:
                 return qubit
 
 
+@dataclass
+class TypingContext:
+    """
+    Type-checking state threaded through parsing.
+
+    Uses ScopedDict for variables and borrows to automatically
+    handle lexical scoping.
+    """
+
+    func_kind: FuncKind
+    variables: ScopedDict[str, SSAValue] = field(
+        default_factory=ScopedDict[str, SSAValue]
+    )
+    borrows: ScopedDict[SSAValue, ProjectionBorrows] = field(
+        default_factory=ScopedDict[SSAValue, ProjectionBorrows]
+    )
+    active_borrows: ProjectionBorrows = field(default_factory=ProjectionBorrows)
+
+    def new_scope(
+        self,
+        func_kind: FuncKind,
+        active_borrows: ProjectionBorrows,
+    ) -> TypingContext:
+        """
+        Create a new typing context with fresh scopes.
+
+        Args:
+            func_kind: Function kind for the new scope (e.g., UNITARY for if bodies)
+            active_borrows: Borrows from outer if conditions to enforce
+
+        Returns:
+            New TypingContext with child scopes for variables and borrows
+        """
+        return TypingContext(
+            func_kind=func_kind,
+            variables=ScopedDict(parent=self.variables),
+            borrows=ScopedDict(parent=self.borrows),
+            active_borrows=active_borrows,
+        )
+
+
 class TypeCheckError(ParseError):
     """Exception raised when type checking fails during parsing."""
 
@@ -291,16 +332,14 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
     def parse_statement(
         self,
-        variables: ScopedDict[str, SSAValue],
+        ctx: TypingContext,
         builder: Builder,
-        borrows: dict[SSAValue, ProjectionBorrows],
-        func_kind: FuncKind = FuncKind.MIXED,
-        active_if_borrows: ProjectionBorrows = ProjectionBorrows(),
     ) -> SSAValue | None:
         """
         Parse a statement and insert it into the block via builder.
 
-        May mutate `variables` by adding new variable bindings (e.g., let statements).
+        May mutate `ctx.variables` by adding new variable bindings
+        (e.g., let statements).
 
         statement ::= "ph" "(" angle-expr ")"
                     | "if" expr block
@@ -313,15 +352,14 @@ class ProjParser(GenericParser[ProjTokenKind]):
             SSAValue if the statement is an expression, None otherwise.
         """
         if self._parse_optional_token(ProjTokenKind.PHASE) is not None:
-            if func_kind < FuncKind.UNITARY:
+            if ctx.func_kind < FuncKind.UNITARY:
                 self.raise_typing_error(
-                    f"Phase operation not allowed in {func_kind.display_name} context"
+                    f"Phase operation not allowed in "
+                    f"{ctx.func_kind.display_name} context"
                 )
             with self.in_parens():
                 # Parse the angle expression
-                angle = self.parse_expression(
-                    variables, builder, borrows, func_kind, active_if_borrows
-                )
+                angle = self.parse_expression(ctx, builder)
 
                 # Check that the expression has angle type
                 if angle is None or angle.type != AngleType():
@@ -334,27 +372,20 @@ class ProjParser(GenericParser[ProjTokenKind]):
             builder.insert(PhaseOp(angle))
             return None
         elif self._parse_optional_token(ProjTokenKind.IF) is not None:
-            if func_kind < FuncKind.UNITARY:
+            if ctx.func_kind < FuncKind.UNITARY:
                 self.raise_typing_error(
-                    f"If operation not allowed in {func_kind.display_name} context"
+                    f"If operation not allowed in {ctx.func_kind.display_name} context"
                 )
-            self._parse_if_statement(
-                variables, builder, borrows, func_kind, active_if_borrows
-            )
+            self._parse_if_statement(ctx, builder)
             return None
         elif self._parse_optional_token(ProjTokenKind.LET) is not None:
-            self._parse_let_statement(
-                variables, builder, borrows, func_kind, active_if_borrows
-            )
+            self._parse_let_statement(ctx, builder)
             return None
         else:
             # Parse as an expression statement (result is returned)
             return self.parse_expression(
-                variables,
+                ctx,
                 builder,
-                borrows,
-                func_kind,
-                active_if_borrows,
                 initial_error=(
                     f"Expected 'ph', 'if', 'let', or an expression for statement, "
                     f"got '{self._current_token.text}'"
@@ -363,11 +394,8 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
     def _parse_if_statement(
         self,
-        variables: ScopedDict[str, SSAValue],
+        ctx: TypingContext,
         builder: Builder,
-        borrows: dict[SSAValue, ProjectionBorrows],
-        func_kind: FuncKind,
-        active_if_borrows: ProjectionBorrows = ProjectionBorrows(),
     ) -> IfOp:
         """
         Parse an if statement.
@@ -376,9 +404,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         block ::= "{" statement* "}"
         """
         # Parse the condition expression (inserted in parent block)
-        condition = self.parse_expression(
-            variables, builder, borrows, func_kind, active_if_borrows
-        )
+        condition = self.parse_expression(ctx, builder)
 
         # Check that the condition is a projection
         if condition is None or condition.type != ProjectionType():
@@ -388,29 +414,30 @@ class ProjParser(GenericParser[ProjTokenKind]):
             )
 
         # Get condition's borrows and check against outer if borrows
-        condition_borrows = borrows.get(condition, ProjectionBorrows())
-        conflict_qubit = active_if_borrows.has_conflicting_borrow(condition_borrows)
+        condition_borrows = ctx.borrows.get(condition, ProjectionBorrows())
+        conflict_qubit = ctx.active_borrows.has_conflicting_borrow(condition_borrows)
         if conflict_qubit is not None:
             self.raise_typing_error(
                 "If condition borrows qubit already borrowed by outer if"
             )
 
         # Merge condition borrows with active if borrows for body
-        merged_if_borrows = active_if_borrows.merge(condition_borrows)
+        merged_borrows = ctx.active_borrows.merge(condition_borrows)
 
         # Parse the true block (with scoped variables)
         # If blocks are restricted to unitary operations (no measure/alloc)
+        # Create child context with new scopes
+        body_ctx = ctx.new_scope(
+            func_kind=FuncKind.UNITARY,
+            active_borrows=merged_borrows,
+        )
+
         def parse_statements(inner_builder: Builder):
-            # Create a child scope - modifications won't affect parent
-            scoped_vars = ScopedDict[str, SSAValue](parent=variables)
             self.parse_list(
                 delimiter=self.Delimiter.BRACES,
                 parse=lambda: self.parse_statement(
-                    scoped_vars,
+                    body_ctx,
                     inner_builder,
-                    borrows,
-                    FuncKind.UNITARY,
-                    merged_if_borrows,
                 ),
                 separator=";",
                 context_msg=" in statement block",
@@ -430,11 +457,8 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
     def _parse_let_statement(
         self,
-        variables: ScopedDict[str, SSAValue],
+        ctx: TypingContext,
         builder: Builder,
-        borrows: dict[SSAValue, ProjectionBorrows],
-        func_kind: FuncKind,
-        active_if_borrows: ProjectionBorrows = ProjectionBorrows(),
     ) -> None:
         """
         Parse a let statement and add the binding to variables.
@@ -458,9 +482,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         self.parse_punctuation("=", "Expected '=' in let statement")
 
         # Parse the expression
-        expr_value = self.parse_expression(
-            variables, builder, borrows, func_kind, active_if_borrows
-        )
+        expr_value = self.parse_expression(ctx, builder)
 
         # Let statements require a value
         if expr_value is None:
@@ -476,18 +498,15 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
         # Add the binding to variables (mutates the current scope)
         # Check if already defined in current scope only
-        if var_name in variables.local_scope:
+        if var_name in ctx.variables.local_scope:
             self.raise_error(f"Variable '{var_name}' is already defined")
         expr_value.name_hint = var_name
-        variables[var_name] = expr_value
+        ctx.variables[var_name] = expr_value
 
     def parse_expression(
         self,
-        variables: Mapping[str, SSAValue],
+        ctx: TypingContext,
         builder: Builder,
-        borrows: dict[SSAValue, ProjectionBorrows],
-        func_kind: FuncKind = FuncKind.MIXED,
-        active_if_borrows: ProjectionBorrows = ProjectionBorrows(),
         min_bp: int = 0,
         initial_error: str | None = None,
     ) -> SSAValue | None:
@@ -495,13 +514,11 @@ class ProjParser(GenericParser[ProjTokenKind]):
         Parse a projection expression using Pratt parsing.
 
         Args:
-            variables: Mapping from variable names to SSA values
+            ctx: Typing context with variables, borrows, and function kind
             builder: Builder for inserting operations
-            borrows: Dictionary tracking borrows per projection SSA value
             min_bp: Minimum binding power for Pratt parsing (default 0)
             initial_error: Error message if first token cannot start
                 an expression (should mention the unexpected token)
-            func_kind: Function kind for operation validation
 
         Returns:
             SSA value of the parsed expression, or None for void expressions
@@ -514,9 +531,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
             postfix ::= "==" state
             infix ::= "&&" expr | "||" expr | "^" expr
         """
-        lhs = self._parse_prefix_and_primary(
-            variables, builder, borrows, func_kind, active_if_borrows, initial_error
-        )
+        lhs = self._parse_prefix_and_primary(ctx, builder, initial_error)
 
         while True:
             if self._current_token.kind == ProjTokenKind.EQ:
@@ -534,7 +549,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 qubit_ssa = lhs
                 lhs = builder.insert(EqOp(lhs, state)).result
                 basis = state.data.get_basis()
-                borrows[lhs] = ProjectionBorrows({qubit_ssa: basis})
+                ctx.borrows[lhs] = ProjectionBorrows({qubit_ssa: basis})
 
             elif self._current_token.kind == ProjTokenKind.AND:
                 left_bp, right_bp = self._INFIX_AND_BP
@@ -542,15 +557,12 @@ class ProjParser(GenericParser[ProjTokenKind]):
                     break
                 self._consume_token()
                 rhs = self.parse_expression(
-                    variables,
+                    ctx,
                     builder,
-                    borrows,
-                    func_kind,
-                    active_if_borrows,
                     right_bp,
                 )
                 lhs = self._build_binary_predicate_op(
-                    lhs, rhs, AndIOp, AndOp, "&&", builder, borrows
+                    lhs, rhs, AndIOp, AndOp, "&&", builder, ctx.borrows
                 )
 
             elif self._current_token.kind == ProjTokenKind.OR:
@@ -558,11 +570,9 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 if min_bp > left_bp:
                     break
                 self._consume_token()
-                rhs = self.parse_expression(
-                    variables, builder, borrows, func_kind, active_if_borrows, right_bp
-                )
+                rhs = self.parse_expression(ctx, builder, right_bp)
                 lhs = self._build_binary_predicate_op(
-                    lhs, rhs, OrIOp, OrOp, "||", builder, borrows
+                    lhs, rhs, OrIOp, OrOp, "||", builder, ctx.borrows
                 )
 
             elif self._current_token.kind == ProjTokenKind.PLUS:
@@ -570,9 +580,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 if min_bp > left_bp:
                     break
                 self._consume_token()
-                rhs = self.parse_expression(
-                    variables, builder, borrows, func_kind, active_if_borrows, right_bp
-                )
+                rhs = self.parse_expression(ctx, builder, right_bp)
 
                 # Check that both operands are angles
                 if lhs is None or lhs.type != AngleType():
@@ -593,9 +601,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 if min_bp > left_bp:
                     break
                 self._consume_token()
-                rhs = self.parse_expression(
-                    variables, builder, borrows, func_kind, active_if_borrows, right_bp
-                )
+                rhs = self.parse_expression(ctx, builder, right_bp)
 
                 # Check that both operands are angles
                 if lhs is None or lhs.type != AngleType():
@@ -618,11 +624,9 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 if min_bp > left_bp:
                     break
                 self._consume_token()
-                rhs = self.parse_expression(
-                    variables, builder, borrows, func_kind, active_if_borrows, right_bp
-                )
+                rhs = self.parse_expression(ctx, builder, right_bp)
                 lhs = self._build_binary_predicate_op(
-                    lhs, rhs, XOrIOp, XorOp, "^", builder, borrows
+                    lhs, rhs, XOrIOp, XorOp, "^", builder, ctx.borrows
                 )
 
             else:
@@ -638,7 +642,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         projection_op: type[AndOp | OrOp | XorOp],
         op_name: str,
         builder: Builder,
-        borrows: dict[SSAValue, ProjectionBorrows],
+        borrows: ScopedDict[SSAValue, ProjectionBorrows],
     ) -> SSAValue | None:
         """
         Build a binary operation with proper type checking.
@@ -711,11 +715,8 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
     def _parse_prefix_and_primary(
         self,
-        variables: Mapping[str, SSAValue],
+        ctx: TypingContext,
         builder: Builder,
-        borrows: dict[SSAValue, ProjectionBorrows],
-        func_kind: FuncKind = FuncKind.MIXED,
-        active_if_borrows: ProjectionBorrows = ProjectionBorrows(),
         initial_error: str | None = None,
     ) -> SSAValue | None:
         """
@@ -725,12 +726,10 @@ class ProjParser(GenericParser[ProjTokenKind]):
         Primary expressions: identifier, true, false, alloc, parenthesized expression
 
         Args:
-            variables: Mapping from variable names to SSA values
+            ctx: Typing context with variables, borrows, and function kind
             builder: Builder for inserting operations
-            borrows: Dictionary tracking borrows per projection SSA value
             initial_error: Error message if first token cannot start
                 an expression (should mention the unexpected token)
-            func_kind: Function kind for operation validation
 
         Returns:
             SSA value of the parsed primary expression, or None for void expressions
@@ -741,15 +740,13 @@ class ProjParser(GenericParser[ProjTokenKind]):
             # Check if this is a function call by peeking at the next token
             if self._current_token.kind == ProjTokenKind.LPAREN:
                 # Function call
-                return self._parse_function_call(
-                    var_name, variables, builder, borrows, func_kind, active_if_borrows
-                )
+                return self._parse_function_call(var_name, ctx, builder)
             else:
                 # Variable reference
-                if var_name not in variables:
+                if var_name not in ctx.variables:
                     self.raise_error(f"Undefined variable: {var_name}")
 
-                return variables[var_name]
+                return ctx.variables[var_name]
 
         if self._parse_optional_token(ProjTokenKind.TRUE) is not None:
             return builder.insert(ConstantOp(IntegerAttr(1, 1))).result
@@ -776,11 +773,8 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
             # Parse the angle expression with tight binding
             angle = self.parse_expression(
-                variables,
+                ctx,
                 builder,
-                borrows,
-                func_kind,
-                active_if_borrows,
                 self._PREFIX_SCALAR_MULT_BP,
             )
 
@@ -795,11 +789,8 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
         if self._parse_optional_token(ProjTokenKind.BANG) is not None:
             operand = self.parse_expression(
-                variables,
+                ctx,
                 builder,
-                borrows,
-                func_kind,
-                active_if_borrows,
                 self._PREFIX_NOT_BP,
             )
 
@@ -811,7 +802,9 @@ class ProjParser(GenericParser[ProjTokenKind]):
             if operand.type == ProjectionType():
                 not_op = builder.insert(NotOp(operand))
                 # Propagate borrows from operand to result
-                borrows[not_op.result] = borrows.get(operand, ProjectionBorrows())
+                ctx.borrows[not_op.result] = ctx.borrows.get(
+                    operand, ProjectionBorrows()
+                )
                 return not_op.result
             elif operand.type == i1:
                 const_one = builder.insert(ConstantOp(IntegerAttr(1, 1))).result
@@ -825,11 +818,8 @@ class ProjParser(GenericParser[ProjTokenKind]):
         # Prefix minus: `-angle` -> scalar_mult(-1.0, angle)
         if self._parse_optional_token(ProjTokenKind.MINUS) is not None:
             operand = self.parse_expression(
-                variables,
+                ctx,
                 builder,
-                borrows,
-                func_kind,
-                active_if_borrows,
                 self._PREFIX_MINUS_BP,
             )
 
@@ -842,25 +832,24 @@ class ProjParser(GenericParser[ProjTokenKind]):
             return builder.insert(ScalarMultOp(-1.0, operand)).result
 
         if self._parse_optional_token(ProjTokenKind.ALLOC) is not None:
-            if func_kind < FuncKind.MIXED:
+            if ctx.func_kind < FuncKind.MIXED:
                 self.raise_typing_error(
-                    f"Alloc operation not allowed in {func_kind.display_name} context"
+                    f"Alloc operation not allowed in "
+                    f"{ctx.func_kind.display_name} context"
                 )
             state = self.parse_state()
             alloc_op = builder.insert(AllocOp(state))
             return alloc_op.result
 
         if self._parse_optional_token(ProjTokenKind.MEASURE) is not None:
-            if func_kind < FuncKind.MIXED:
+            if ctx.func_kind < FuncKind.MIXED:
                 self.raise_typing_error(
-                    f"Measure operation not allowed in {func_kind.display_name} context"
+                    f"Measure operation not allowed in "
+                    f"{ctx.func_kind.display_name} context"
                 )
             operand = self.parse_expression(
-                variables,
+                ctx,
                 builder,
-                borrows,
-                func_kind,
-                active_if_borrows,
                 self._PREFIX_MEASURE_BP,
             )
             if operand is None:
@@ -874,9 +863,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
             return builder.insert(MeasureOp(operand)).result
 
         if self._parse_optional_token(ProjTokenKind.LPAREN) is not None:
-            expr = self.parse_expression(
-                variables, builder, borrows, func_kind, active_if_borrows, 0
-            )
+            expr = self.parse_expression(ctx, builder, 0)
             self.parse_punctuation(")", " to close parenthesized expression")
             return expr
 
@@ -887,20 +874,15 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
     def _parse_function_call_argument(
         self,
-        variables: Mapping[str, SSAValue],
+        ctx: TypingContext,
         builder: Builder,
-        borrows: dict[SSAValue, ProjectionBorrows],
-        func_kind: FuncKind,
-        active_if_borrows: ProjectionBorrows = ProjectionBorrows(),
     ) -> SSAValue:
         """
         Parse a single function call argument.
 
         Args:
-            variables: Mapping from variable names to SSA values
+            ctx: Typing context with variables, borrows, and function kind
             builder: Builder for inserting operations
-            borrows: Dictionary tracking borrows per projection SSA value
-            func_kind: Function kind of the caller (for validation)
 
         Returns:
             SSA value of the parsed argument
@@ -908,9 +890,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         Raises:
             TypeCheckError: If the argument is a void expression
         """
-        arg = self.parse_expression(
-            variables, builder, borrows, func_kind, active_if_borrows
-        )
+        arg = self.parse_expression(ctx, builder)
         if arg is None:
             self.raise_typing_error(
                 "Invalid argument for function call: expected value, got '()'"
@@ -920,21 +900,16 @@ class ProjParser(GenericParser[ProjTokenKind]):
     def _parse_function_call(
         self,
         func_name: str,
-        variables: Mapping[str, SSAValue],
+        ctx: TypingContext,
         builder: Builder,
-        borrows: dict[SSAValue, ProjectionBorrows],
-        func_kind: FuncKind,
-        active_if_borrows: ProjectionBorrows = ProjectionBorrows(),
     ) -> SSAValue | None:
         """
         Parse a function call expression.
 
         Args:
             func_name: Name of the function being called
-            variables: Mapping from variable names to SSA values
+            ctx: Typing context with variables, borrows, and function kind
             builder: Builder for inserting operations
-            borrows: Dictionary tracking borrows per projection SSA value
-            func_kind: Function kind of the caller (for validation)
 
         Returns:
             SSA value of the call result, or None if the function returns void
@@ -942,9 +917,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
         # Parse opening parenthesis and argument list
         args = self.parse_list(
             delimiter=self.Delimiter.PAREN,
-            parse=lambda: self._parse_function_call_argument(
-                variables, builder, borrows, func_kind, active_if_borrows
-            ),
+            parse=lambda: self._parse_function_call_argument(ctx, builder),
             separator=",",
             context_msg=" in function call arguments",
         )
@@ -962,10 +935,10 @@ class ProjParser(GenericParser[ProjTokenKind]):
         # pure can only call pure
         # unitary can call pure, unitary
         # mixed can call pure, unitary, mixed
-        if callee_kind > func_kind:
+        if callee_kind > ctx.func_kind:
             self.raise_typing_error(
                 f"Cannot call {callee_kind.display_name} function from "
-                f"{func_kind.display_name} function"
+                f"{ctx.func_kind.display_name} function"
             )
 
         # Validate argument count
@@ -1004,7 +977,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 direct_qubits.add(arg)
             elif isinstance(arg.type, ProjectionType):
                 # Projection argument - collect its borrows
-                arg_borrows = borrows.get(arg, ProjectionBorrows())
+                arg_borrows = ctx.borrows.get(arg, ProjectionBorrows())
                 projection_borrows.append(arg_borrows)
 
         # 2. Check that projection borrows don't overlap with direct qubits
@@ -1026,12 +999,12 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
         # 4. Check arguments against active if borrows
         for qubit in direct_qubits:
-            if qubit in active_if_borrows.borrows:
+            if qubit in ctx.active_borrows.borrows:
                 self.raise_typing_error(
                     "Qubit argument conflicts with outer if condition borrow"
                 )
         for arg_borrows in projection_borrows:
-            conflict = active_if_borrows.has_conflicting_borrow(arg_borrows)
+            conflict = ctx.active_borrows.has_conflicting_borrow(arg_borrows)
             if conflict is not None:
                 self.raise_typing_error(
                     "Function call argument has conflicting borrow with outer if"
@@ -1054,7 +1027,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 result_borrows_dict.update(proj_borrows.borrows)
             for qubit in direct_qubits:
                 result_borrows_dict[qubit] = UNKNOWN
-            borrows[call_op.res[0]] = ProjectionBorrows(result_borrows_dict)
+            ctx.borrows[call_op.res[0]] = ProjectionBorrows(result_borrows_dict)
 
         # Return result or None for void functions
         if len(result_types) == 0:
@@ -1144,24 +1117,20 @@ class ProjParser(GenericParser[ProjTokenKind]):
         # Parse function body
         @Builder.region(input_types)
         def parse_body(inner_builder: Builder, args: tuple[BlockArgument, ...]):
-            # Create variables scoped dict with parameters
-            variables = ScopedDict[str, SSAValue](name=func_name)
+            # Create typing context with parameters
+            ctx = TypingContext(
+                func_kind=func_kind,
+                variables=ScopedDict[str, SSAValue](name=func_name),
+                borrows=ScopedDict[SSAValue, ProjectionBorrows](name=func_name),
+            )
             for param_name, block_arg in zip(param_names, args, strict=True):
                 block_arg.name_hint = param_name
-                variables[param_name] = block_arg
-
-            # Create borrows tracking dict
-            borrows: dict[SSAValue, ProjectionBorrows] = {}
-
-            # Create active if borrows (empty at function start)
-            active_if_borrows = ProjectionBorrows()
+                ctx.variables[param_name] = block_arg
 
             # Parse statements using parse_list
             statements = self.parse_list(
                 delimiter=self.Delimiter.BRACES,
-                parse=lambda: self.parse_statement(
-                    variables, inner_builder, borrows, func_kind, active_if_borrows
-                ),
+                parse=lambda: self.parse_statement(ctx, inner_builder),
                 separator=";",
                 context_msg=" in function body",
             )
@@ -1182,7 +1151,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
 
                 # Check that returned projection doesn't borrow locally allocated qubits
                 if final_expr.type == ProjectionType():
-                    final_borrows = borrows.get(final_expr, ProjectionBorrows())
+                    final_borrows = ctx.borrows.get(final_expr, ProjectionBorrows())
                     for qubit, borrow_val in final_borrows.borrows.items():
                         # Check if qubit is locally allocated (AllocOp) vs parameter
                         if isinstance(qubit.owner, AllocOp):

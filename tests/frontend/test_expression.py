@@ -8,6 +8,7 @@ from xdsl.dialects.test import TestOp as XDSLTestOp
 from xdsl.ir import Block, SSAValue
 from xdsl.rewriter import InsertPoint
 from xdsl.utils.exceptions import ParseError
+from xdsl.utils.scoped_dict import ScopedDict
 
 from projxdsl.dialects.angle import AddOp, AngleType, PiOp, ScalarMultOp, ZeroOp
 from projxdsl.dialects.proj import (
@@ -21,10 +22,11 @@ from projxdsl.dialects.proj import (
     XorOp,
 )
 from projxdsl.frontend.parser import (
-    ProjectionBorrows,
     ProjParser,
     TypeCheckError,
+    TypingContext,
 )
+from projxdsl.func_kind import FuncKind
 
 
 def make_bool_var(value: int = 1) -> SSAValue:
@@ -51,8 +53,11 @@ def parse_expression(
     parser = ProjParser(code)
     block = Block()
     builder = Builder(InsertPoint.at_end(block))
-    borrows: dict[SSAValue, ProjectionBorrows] = {}
-    result = parser.parse_expression(variables, builder, borrows)
+    ctx = TypingContext(
+        func_kind=FuncKind.MIXED,
+        variables=ScopedDict[str, SSAValue](local_scope=variables),
+    )
+    result = parser.parse_expression(ctx, builder)
     parser.expect_eof()
     assert result is not None, "parse_expression returned None in test"
     return result
@@ -123,8 +128,11 @@ class TestNotOperator:
         parser = ProjParser("q == |0>")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        borrows: dict[SSAValue, ProjectionBorrows] = {}
-        proj = parser.parse_expression({"q": var}, builder, borrows)
+        ctx = TypingContext(
+            func_kind=FuncKind.MIXED,
+            variables=ScopedDict[str, SSAValue](local_scope={"q": var}),
+        )
+        proj = parser.parse_expression(ctx, builder)
         assert proj is not None
         assert proj.type == ProjectionType()
         assert len(list(block.ops)) == 1  # EqOp inserted
@@ -178,8 +186,11 @@ class TestAndOperator:
         parser = ProjParser("q1 == |0> && q2 == |1>")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        borrows: dict[SSAValue, ProjectionBorrows] = {}
-        result = parser.parse_expression({"q1": q1, "q2": q2}, builder, borrows)
+        result = ctx = TypingContext(
+            func_kind=FuncKind.MIXED,
+            variables=ScopedDict[str, SSAValue](local_scope={"q1": q1, "q2": q2}),
+        )
+        result = parser.parse_expression(ctx, builder)
         assert result is not None
         assert isinstance(result.owner, AndOp)
         assert result.type == ProjectionType()
@@ -226,8 +237,11 @@ class TestOrOperator:
         parser = ProjParser("q1 == |0> || q2 == |1>")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        borrows: dict[SSAValue, ProjectionBorrows] = {}
-        result = parser.parse_expression({"q1": q1, "q2": q2}, builder, borrows)
+        result = ctx = TypingContext(
+            func_kind=FuncKind.MIXED,
+            variables=ScopedDict[str, SSAValue](local_scope={"q1": q1, "q2": q2}),
+        )
+        result = parser.parse_expression(ctx, builder)
         assert result is not None
         assert isinstance(result.owner, OrOp)
         assert result.type == ProjectionType()
@@ -274,8 +288,11 @@ class TestXorOperator:
         parser = ProjParser("q1 == |0> ^ q2 == |1>")
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
-        borrows: dict[SSAValue, ProjectionBorrows] = {}
-        result = parser.parse_expression({"q1": q1, "q2": q2}, builder, borrows)
+        result = ctx = TypingContext(
+            func_kind=FuncKind.MIXED,
+            variables=ScopedDict[str, SSAValue](local_scope={"q1": q1, "q2": q2}),
+        )
+        result = parser.parse_expression(ctx, builder)
         assert result is not None
         assert isinstance(result.owner, XorOp)
         assert result.type == ProjectionType()
