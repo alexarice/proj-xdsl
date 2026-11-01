@@ -576,6 +576,7 @@ class TestIfStatement:
         assert isinstance(true_ops[1], PhaseOp)
 
         # Check false region
+        assert if_op.false_region is not None
         assert len(if_op.false_region.blocks) == 1
         false_block = if_op.false_region.blocks[0]
         false_ops = list(false_block.ops)
@@ -603,6 +604,7 @@ class TestIfStatement:
         true_block = if_op.true_region.blocks[0]
         assert len(list(true_block.ops)) == 0
 
+        assert if_op.false_region is not None
         false_block = if_op.false_region.blocks[0]
         assert len(list(false_block.ops)) == 0
 

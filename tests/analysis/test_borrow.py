@@ -130,6 +130,7 @@ unitary fn test(q1: qubit, q2: qubit) {
         assert state_before_true_phase.is_borrowed(eq_op.qubit)
 
         # Check false region
+        assert if_op.false_region is not None
         false_block = if_op.false_region.blocks[0]
         false_phase_ops = get_ops_in_block(false_block, "proj.phase")
         assert len(false_phase_ops) == 1
