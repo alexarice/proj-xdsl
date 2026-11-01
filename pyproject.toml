@@ -6,7 +6,7 @@ requires = [ "hatch-vcs", "hatchling" ]
 name = "projxdsl"
 description = "Quantum programming with projective predicates"
 readme = "README.md"
-license = { text = "Apache License v2.0 with LLVM Exceptions" }
+license = { text = "MIT License" }
 authors = [
   { name = "Alex Rice", email = "alexrice999@hotmail.co.uk" },
 ]
