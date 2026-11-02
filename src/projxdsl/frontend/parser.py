@@ -178,6 +178,7 @@ class ProjParser(GenericParser[ProjTokenKind]):
     def __init__(self, code: str, filename: str = "<input>"):
         input = Input(code, filename)
         lexer = ProjLexer(input)
+        lexer.emit_newlines = False  # Parser ignores newlines
         self.functions = {}
         super().__init__(ParserState(lexer))
 

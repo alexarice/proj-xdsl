@@ -12,6 +12,7 @@ class ProjTokenKind(Enum):
 
     # Markers
     EOF = auto()
+    NEWLINE = auto()
 
     # Type keywords (reserved, cannot be used as identifiers)
     QUBIT = auto()
@@ -169,6 +170,12 @@ class ProjLexer(Lexer[ProjTokenKind]):
     _float_regex = re.compile(r"[0-9]+\.[0-9]*([eE][+-]?[0-9]+)?", re.ASCII)
     _integer_regex = re.compile(r"[0-9]+", re.ASCII)
 
+    emit_newlines: bool = True
+    """If True, emit NEWLINE tokens. If False, skip them silently."""
+
+    paren_depth: int = 0
+    """Track nesting depth of parentheses. NEWLINEs are never emitted inside parens."""
+
     def _is_in_bounds(self, size: Position = 1) -> bool:
         """Check if the current position is within the bounds of the input."""
         return self.pos + size - 1 < self.input.len
@@ -187,9 +194,15 @@ class ProjLexer(Lexer[ProjTokenKind]):
         """Advance the lexer position in the input by the given amount."""
         self.pos += size
 
-    def _consume_whitespace(self) -> None:
-        """Skip whitespace and comments."""
-        self._consume_regex(self._whitespace_regex)
+    def _consume_whitespace(self) -> bool:
+        """
+        Skip whitespace and comments.
+        Returns True if any newlines were consumed.
+        """
+        match = self._consume_regex(self._whitespace_regex)
+        if match:
+            return "\n" in match.group(0)
+        return False
 
     def _consume_regex(self, regex: re.Pattern[str]) -> re.Match[str] | None:
         """Advance lexer position to end of next match of given regex."""
@@ -205,7 +218,11 @@ class ProjLexer(Lexer[ProjTokenKind]):
 
     def lex(self) -> ProjToken:
         """Lex a token from the input and return it."""
-        self._consume_whitespace()
+        has_newline = self._consume_whitespace()
+
+        # Emit NEWLINE token only if enabled and not inside parentheses
+        if has_newline and self.emit_newlines and self.paren_depth == 0:
+            return self._form_token(ProjTokenKind.NEWLINE, self.pos)
 
         if not self._is_in_bounds():
             return self._form_token(ProjTokenKind.EOF, self.pos)
@@ -235,16 +252,26 @@ class ProjLexer(Lexer[ProjTokenKind]):
             return ident
 
         # Unknown character
-        start_pos = self.pos
-        self._consume_chars()
-        self.raise_error(f"Unexpected character: {self.input.content[start_pos]}")
+        self.raise_error(f"Unexpected character: {self._get_chars()}")
 
     def _try_punctuation(self) -> ProjToken | None:
         """
         Try to lex punctuation and operators.
         Multi-character tokens are matched before single-character tokens.
         """
-        # Handle multi-character tokens first (e.g., ->, ==, &&, ||)
+        # Handle parentheses specially to track depth
+        char = self._peek_chars()
+        if char == "(":
+            start_pos = self.pos
+            self._consume_chars()
+            self.paren_depth += 1
+            return self._form_token(ProjTokenKind.LPAREN, start_pos)
+        if char == ")":
+            start_pos = self.pos
+            self._consume_chars()
+            self.paren_depth -= 1
+            return self._form_token(ProjTokenKind.RPAREN, start_pos)
+
         for spelling, kind in KIND_BY_PUNCTUATION_SPELLING.items():
             if self._peek_chars(len(spelling)) == spelling:
                 start_pos = self.pos

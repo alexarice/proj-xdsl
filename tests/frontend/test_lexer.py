@@ -263,6 +263,7 @@ class TestWhitespace:
         tokens = lex_all("qubit\nproj")
         assert tokens == [
             (ProjTokenKind.QUBIT, "qubit"),
+            (ProjTokenKind.NEWLINE, ""),
             (ProjTokenKind.PROJECTION, "proj"),
             (ProjTokenKind.EOF, ""),
         ]
@@ -271,6 +272,7 @@ class TestWhitespace:
         tokens = lex_all("qubit \t\n proj")
         assert tokens == [
             (ProjTokenKind.QUBIT, "qubit"),
+            (ProjTokenKind.NEWLINE, ""),
             (ProjTokenKind.PROJECTION, "proj"),
             (ProjTokenKind.EOF, ""),
         ]
@@ -283,6 +285,7 @@ class TestComments:
         tokens = lex_all("qubit // this is a comment\nproj")
         assert tokens == [
             (ProjTokenKind.QUBIT, "qubit"),
+            (ProjTokenKind.NEWLINE, ""),
             (ProjTokenKind.PROJECTION, "proj"),
             (ProjTokenKind.EOF, ""),
         ]
@@ -298,7 +301,9 @@ class TestComments:
         tokens = lex_all("qubit // comment1\nproj // comment2\nbool")
         assert tokens == [
             (ProjTokenKind.QUBIT, "qubit"),
+            (ProjTokenKind.NEWLINE, ""),
             (ProjTokenKind.PROJECTION, "proj"),
+            (ProjTokenKind.NEWLINE, ""),
             (ProjTokenKind.BOOL, "bool"),
             (ProjTokenKind.EOF, ""),
         ]

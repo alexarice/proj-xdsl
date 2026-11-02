@@ -232,10 +232,9 @@ class ExprStmt(StmtNode):
 
 @dataclass(frozen=True)
 class BlockNode(CSTNode):
-    """Block of statements: { stmt* expr? }."""
+    """Block of statements: { stmt* }."""
 
     statements: tuple[StmtNode, ...]
-    final_expr: ExprNode | None
 
 
 # =============================================================================
