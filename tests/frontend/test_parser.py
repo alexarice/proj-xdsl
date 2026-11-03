@@ -5,8 +5,6 @@ from xdsl.utils.exceptions import ParseError
 
 from projxdsl.frontend.cst import (
     AllocExpr,
-    AngleConstantExpr,
-    AngleConstantKind,
     AngleOpKind,
     AngleTypeNode,
     BinaryAngleExpr,
@@ -19,12 +17,14 @@ from projxdsl.frontend.cst import (
     ExprStmt,
     FuncDef,
     IdentExpr,
+    IntLiteralExpr,
     LetStmt,
     MeasureExpr,
     Module,
     NegAngleExpr,
     NotExpr,
     PhaseStmt,
+    PiExpr,
     ProjTypeNode,
     QifStmt,
     QubitTypeNode,
@@ -485,46 +485,47 @@ class TestAngleConstants:
     def test_pi_constant(self):
         """Test parsing pi constant."""
         result = parse_expression("pi")
-        assert isinstance(result, AngleConstantExpr)
-        assert result.kind == AngleConstantKind.PI
+        assert isinstance(result, PiExpr)
 
     def test_pi_unicode_constant(self):
         """Test parsing Unicode π constant."""
         result = parse_expression("π")
-        assert isinstance(result, AngleConstantExpr)
-        assert result.kind == AngleConstantKind.PI
+        assert isinstance(result, PiExpr)
 
     def test_pi_unicode_in_expression(self):
         """Test using Unicode π in expressions."""
         result = parse_expression("π + 0")
         assert isinstance(result, BinaryAngleExpr)
-        assert isinstance(result.left, AngleConstantExpr)
-        assert isinstance(result.right, AngleConstantExpr)
+        assert isinstance(result.left, PiExpr)
+        assert isinstance(result.right, IntLiteralExpr)
+        assert result.right.value == 0
 
     def test_pi_mixed_ascii_unicode(self):
         """Test mixing ASCII pi and Unicode π."""
         result = parse_expression("pi + π")
         assert isinstance(result, BinaryAngleExpr)
-        assert isinstance(result.left, AngleConstantExpr)
-        assert isinstance(result.right, AngleConstantExpr)
+        assert isinstance(result.left, PiExpr)
+        assert isinstance(result.right, PiExpr)
 
     def test_zero_constant(self):
         """Test parsing 0 constant."""
         result = parse_expression("0")
-        assert isinstance(result, AngleConstantExpr)
-        assert result.kind == AngleConstantKind.ZERO
+        assert isinstance(result, IntLiteralExpr)
+        assert result.value == 0
 
     def test_angle_constant_in_expression(self):
         """Test using angle constants in expressions."""
         result = parse_expression("pi + 0")
         assert isinstance(result, BinaryAngleExpr)
-        assert isinstance(result.left, AngleConstantExpr)
-        assert isinstance(result.right, AngleConstantExpr)
+        assert isinstance(result.left, PiExpr)
+        assert isinstance(result.right, IntLiteralExpr)
+        assert result.right.value == 0
 
-    def test_invalid_integer_angle(self):
-        """Test that non-zero integers are rejected for angle context."""
-        with pytest.raises(ParseError, match="Only 0 is a valid angle constant"):
-            parse_expression("5")
+    def test_integer_literal(self):
+        """Test that integers are now parsed as integer literals."""
+        result = parse_expression("5")
+        assert isinstance(result, IntLiteralExpr)
+        assert result.value == 5
 
 
 class TestPhaseStatement:
@@ -539,14 +540,13 @@ class TestPhaseStatement:
     def test_phase_statement_with_pi(self):
         result = parse_statement("ph(pi)")
         assert isinstance(result, PhaseStmt)
-        assert isinstance(result.angle, AngleConstantExpr)
-        assert result.angle.kind == AngleConstantKind.PI
+        assert isinstance(result.angle, PiExpr)
 
     def test_phase_statement_with_zero(self):
         result = parse_statement("ph(0)")
         assert isinstance(result, PhaseStmt)
-        assert isinstance(result.angle, AngleConstantExpr)
-        assert result.angle.kind == AngleConstantKind.ZERO
+        assert isinstance(result.angle, IntLiteralExpr)
+        assert result.angle.value == 0
 
     def test_phase_statement_with_expression(self):
         result = parse_statement("ph(a + b)")

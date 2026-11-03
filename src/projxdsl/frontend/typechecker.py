@@ -43,8 +43,6 @@ from projxdsl.dialects.proj import (
 )
 from projxdsl.frontend.cst import (
     AllocExpr,
-    AngleConstantExpr,
-    AngleConstantKind,
     AngleOpKind,
     AngleTypeNode,
     BinaryAngleExpr,
@@ -59,12 +57,14 @@ from projxdsl.frontend.cst import (
     ExprStmt,
     FuncDef,
     IdentExpr,
+    IntLiteralExpr,
     LetStmt,
     MeasureExpr,
     Module,
     NegAngleExpr,
     NotExpr,
     PhaseStmt,
+    PiExpr,
     ProjTypeNode,
     QifStmt,
     QubitTypeNode,
@@ -289,12 +289,18 @@ class TypeChecker:
                 value = IntegerAttr(1 if node.value else 0, 1)
                 return builder.insert(ConstantOp(value)).result
 
-            case AngleConstantExpr():
-                match node.kind:
-                    case AngleConstantKind.ZERO:
-                        return builder.insert(ZeroOp()).result
-                    case AngleConstantKind.PI:
-                        return builder.insert(PiOp()).result
+            case IntLiteralExpr():
+                # Only 0 is valid as an angle; typechecker validates this
+                if node.value != 0:
+                    raise TypeCheckError(
+                        node.span,
+                        f"Integer literal {node.value} is not a valid angle; "
+                        "only 0 is allowed",
+                    )
+                return builder.insert(ZeroOp()).result
+
+            case PiExpr():
+                return builder.insert(PiOp()).result
 
             case IdentExpr():
                 if node.name not in ctx.variables:

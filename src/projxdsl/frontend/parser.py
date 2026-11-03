@@ -15,8 +15,6 @@ from xdsl.utils.lexer import Input, Span
 from projxdsl.dialects.proj import State
 from projxdsl.frontend.cst import (
     AllocExpr,
-    AngleConstantExpr,
-    AngleConstantKind,
     AngleOpKind,
     AngleTypeNode,
     BinaryAngleExpr,
@@ -31,6 +29,7 @@ from projxdsl.frontend.cst import (
     ExprStmt,
     FuncDef,
     IdentExpr,
+    IntLiteralExpr,
     LetStmt,
     MeasureExpr,
     Module,
@@ -38,6 +37,7 @@ from projxdsl.frontend.cst import (
     NotExpr,
     Param,
     PhaseStmt,
+    PiExpr,
     ProjTypeNode,
     QifStmt,
     QubitTypeNode,
@@ -450,14 +450,12 @@ class ProjParser(GenericParser[ProjTokenKind]):
             return BoolLiteralExpr(span=token.span, value=False)
 
         if (token := self._parse_optional_token(ProjTokenKind.PI)) is not None:
-            return AngleConstantExpr(span=token.span, kind=AngleConstantKind.PI)
+            return PiExpr(span=token.span)
 
         if (integer := self._parse_optional_token(ProjTokenKind.INTEGER)) is not None:
-            # Only 0 is valid as an angle constant
+            # Parse as integer literal; typechecker validates it's 0 for angles
             value = integer.kind.get_integer_value(integer.span)
-            if value != 0:
-                self.raise_error(f"Only 0 is a valid angle constant, got {value}")
-            return AngleConstantExpr(span=integer.span, kind=AngleConstantKind.ZERO)
+            return IntLiteralExpr(span=integer.span, value=value)
 
         if (float_token := self._parse_optional_token(ProjTokenKind.FLOAT)) is not None:
             # Scalar literal (used in scalar multiplication: `2.0 * angle`)

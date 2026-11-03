@@ -71,13 +71,6 @@ class AngleOpKind(Enum):
     SUB = "-"
 
 
-class AngleConstantKind(Enum):
-    """Angle constant kinds."""
-
-    ZERO = "0"
-    PI = "pi"
-
-
 # =============================================================================
 # Expression Nodes
 # =============================================================================
@@ -102,6 +95,15 @@ class BoolLiteralExpr(ExprNode):
 
 
 @dataclass(frozen=True)
+class IntLiteralExpr(ExprNode):
+    """Integer literal: 0, 1, 2, etc."""
+
+    value: int
+
+    node_name = "integer literal"
+
+
+@dataclass(frozen=True)
 class StateExpr(ExprNode):
     """State literal: |0>, |1>, |+>, |->, |L>, |R>."""
 
@@ -120,12 +122,10 @@ class ScalarExpr(ExprNode):
 
 
 @dataclass(frozen=True)
-class AngleConstantExpr(ExprNode):
-    """Angle constant: 0 or pi."""
+class PiExpr(ExprNode):
+    """Pi constant for angles."""
 
-    kind: AngleConstantKind
-
-    node_name = "angle constant"
+    node_name = "pi constant"
 
 
 @dataclass(frozen=True)
