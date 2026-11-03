@@ -13,8 +13,8 @@ from typing import NamedTuple
 
 from xdsl.builder import Builder
 from xdsl.dialects.arith import AndIOp, ConstantOp, OrIOp, XOrIOp
-from xdsl.dialects.builtin import FunctionType, IntegerAttr, i1
-from xdsl.ir import Attribute, SSAValue, TypeAttribute
+from xdsl.dialects.builtin import FunctionType, IntegerAttr, ModuleOp, i1
+from xdsl.ir import Attribute, BlockArgument, SSAValue, TypeAttribute
 from xdsl.utils.exceptions import VerifyException
 from xdsl.utils.lexer import Span
 from xdsl.utils.scoped_dict import ScopedDict
@@ -29,12 +29,16 @@ from projxdsl.dialects.proj import (
     FromBoolOp,
     IfOp,
     MeasureOp,
+    MixedOp,
     NotOp,
     OrOp,
     PhaseOp,
     ProjectionType,
+    PureOp,
     QubitType,
+    ReturnOp,
     StateAttr,
+    UnitaryOp,
     XorOp,
 )
 from projxdsl.frontend.cst import (
@@ -53,9 +57,11 @@ from projxdsl.frontend.cst import (
     EqExpr,
     ExprNode,
     ExprStmt,
+    FuncDef,
     IdentExpr,
     LetStmt,
     MeasureExpr,
+    Module,
     NegAngleExpr,
     NotExpr,
     PhaseStmt,
@@ -764,6 +770,126 @@ class TypeChecker:
 
         # Check last statement against expected type
         return self.check_statement(node.statements[-1], ctx, builder, expected)
+
+    def check_func_def(self, node: FuncDef) -> PureOp | UnitaryOp | MixedOp:
+        """
+        Check a function definition and return the corresponding function operation.
+
+        Functions cannot be recursive, so the signature is registered after checking.
+
+        Args:
+            node: CST function definition node
+
+        Returns:
+            The checked function operation (PureOp, UnitaryOp, or MixedOp)
+
+        Raises:
+            TypeCheckError: If type checking fails
+        """
+        # Determine function kind and operation class
+        match node.kind:
+            case FuncKind.PURE:
+                func_op_class = PureOp
+            case FuncKind.UNITARY:
+                func_op_class = UnitaryOp
+            case FuncKind.MIXED:
+                func_op_class = MixedOp
+
+        # Parse parameter types
+        input_types: list[TypeAttribute] = []
+        param_names: list[str] = []
+        for param in node.params:
+            param_type = self.check_type(param.type_ann)
+            input_types.append(param_type)
+            param_names.append(param.name)
+
+        # Parse optional return type
+        return_types: list[TypeAttribute] = []
+        if node.return_type is not None:
+            return_types.append(self.check_type(node.return_type))
+
+        # Create FunctionType
+        func_type = FunctionType.from_lists(input_types, return_types)
+
+        # Create typing context with parameters
+        ctx = TypingContext(
+            func_kind=node.kind,
+            variables=ScopedDict[str, SSAValue](name=node.name),
+            borrows=ScopedDict[SSAValue, ProjectionBorrows](name=node.name),
+        )
+
+        # Create function body region
+        @Builder.region(input_types)
+        def build_body(inner_builder: Builder, args: tuple[BlockArgument, ...]):
+            for param_name, block_arg in zip(param_names, args, strict=True):
+                block_arg.name_hint = param_name
+                ctx.variables[param_name] = block_arg
+
+            # Check function body using infer_block or check_block
+            if return_types:
+                # Function has return type - check block against expected type
+                final_result = self.check_block(
+                    node.body, ctx, inner_builder, return_types[0]
+                )
+
+                # Check that returned projection doesn't borrow locally allocated qubits
+                if final_result.type == ProjectionType():
+                    final_borrows = ctx.borrows.get(final_result, ProjectionBorrows())
+                    for qubit, borrow_val in final_borrows.borrows.items():
+                        if isinstance(qubit.owner, AllocOp):
+                            raise TypeCheckError(
+                                node.body.span,
+                                "Locally allocated qubit is still borrowed at return: "
+                                f"borrowed in {borrow_val.name}",
+                            )
+
+                inner_builder.insert(ReturnOp(final_result))
+            else:
+                # Void function - infer block (result discarded)
+                self.infer_block(node.body, ctx, inner_builder)
+                inner_builder.insert(ReturnOp())
+
+        # Create the function operation
+        func_op = func_op_class(
+            sym_name=node.name,
+            function_type=func_type,
+            body=build_body,
+        )
+
+        # Register signature after checking (functions cannot be recursive)
+        signature = FuncSignature(kind=node.kind, function_type=func_type)
+        self.functions[node.name] = signature
+
+        return func_op
+
+    def check_module(self, node: Module) -> ModuleOp:
+        """
+        Check a module containing function definitions.
+
+        Functions are checked in order. A function can only call functions
+        that were defined earlier in the module (no recursion allowed).
+
+        Args:
+            node: CST module node
+
+        Returns:
+            The checked module operation containing all function definitions
+
+        Raises:
+            TypeCheckError: If type checking fails
+        """
+        # Clear function symbol table for fresh checking
+        self.functions = {}
+
+        # Check functions in order - each function is fully checked before
+        # its signature is registered, so functions can only call earlier ones
+        func_ops: list[PureOp | UnitaryOp | MixedOp] = []
+        for func_def in node.functions:
+            func_op = self.check_func_def(func_def)
+            func_ops.append(func_op)
+
+        # Create the module operation with all functions
+        return ModuleOp(func_ops)
 
     def check_subtype(
         self, sub: Attribute, sup: Attribute, span: Span, context: str
