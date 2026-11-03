@@ -71,6 +71,16 @@ from projxdsl.frontend.cst import (
 from projxdsl.func_kind import FuncKind
 
 
+class _UnknownBorrowSentinel:
+    name = "unknown basis"
+
+
+UNKNOWN = _UnknownBorrowSentinel()
+"""Sentinel value indicating a qubit borrow is unknown."""
+
+BorrowValue = Basis | _UnknownBorrowSentinel
+
+
 class TypeCheckError(VerifyException):
     """Exception raised when type checking fails."""
 
@@ -124,21 +134,6 @@ class ProjectionBorrows:
             # Different bases conflict
             if self_val != other_val:
                 return qubit
-
-
-class _UnknownBorrowSentinel:
-    """Sentinel value indicating a qubit borrow is unknown (dynamically determined)."""
-
-    name = "unknown basis"
-
-    def __repr__(self) -> str:
-        return "UNKNOWN"
-
-
-UNKNOWN = _UnknownBorrowSentinel()
-"""Sentinel value indicating a qubit borrow is unknown."""
-
-BorrowValue = Basis | _UnknownBorrowSentinel
 
 
 @dataclass
@@ -312,64 +307,29 @@ class TypeChecker:
                 return result
 
             case NotExpr():
-                operand = self.check_expression(node.operand, None, ctx, builder)
-                if operand.type == ProjectionType():
-                    return builder.insert(NotOp(operand)).result
-                elif operand.type == i1:
-                    one = builder.insert(ConstantOp(IntegerAttr(1, 1))).result
-                    return builder.insert(XOrIOp(operand, one)).result
-                else:
-                    raise TypeCheckError(
-                        node.operand.span,
-                        f"Expected projection or boolean for '!' operator,"
-                        f" got {operand.type}",
-                    )
+                operand = self.check_expression(
+                    node.operand, ProjectionType(), ctx, builder, coerce=False
+                )
+                return self._make_not_expr(operand, builder, ctx, node.span)
 
             case BinaryProjExpr():
-                left = self.check_expression(node.left, None, ctx, builder)
-                right = self.check_expression(node.right, None, ctx, builder)
+                left = self.check_expression(
+                    node.left, ProjectionType(), ctx, builder, coerce=False
+                )
+                right = self.check_expression(
+                    node.right, ProjectionType(), ctx, builder, coerce=False
+                )
 
-                if left.type == i1 and right.type == i1:
-                    match node.op:
-                        case BinaryOpKind.AND:
-                            return builder.insert(AndIOp(left, right)).result
-                        case BinaryOpKind.OR:
-                            return builder.insert(OrIOp(left, right)).result
-                        case BinaryOpKind.XOR:
-                            return builder.insert(XOrIOp(left, right)).result
-                else:
-                    left_proj = self.coerce_to(
-                        left,
-                        ProjectionType(),
-                        builder,
-                        node.left.span,
-                        " for left operand",
-                    )
-                    right_proj = self.coerce_to(
-                        right,
-                        ProjectionType(),
-                        builder,
-                        node.right.span,
-                        " for right operand",
-                    )
-                    left_borrows = ctx.borrows.get(left_proj, ProjectionBorrows())
-                    right_borrows = ctx.borrows.get(right_proj, ProjectionBorrows())
-                    conflict = left_borrows.has_conflicting_borrow(right_borrows)
-                    if conflict is not None:
-                        left_val = left_borrows.borrows.get(conflict, UNKNOWN)
-                        right_val = right_borrows.borrows.get(conflict, UNKNOWN)
-                        raise TypeCheckError(
-                            node.span,
-                            f"Cannot combine projections with conflicting borrows: "
-                            f"qubit borrowed in {left_val.name} and {right_val.name}",
-                        )
-                    match node.op:
-                        case BinaryOpKind.AND:
-                            return builder.insert(AndOp(left_proj, right_proj)).result
-                        case BinaryOpKind.OR:
-                            return builder.insert(OrOp(left_proj, right_proj)).result
-                        case BinaryOpKind.XOR:
-                            return builder.insert(XorOp(left_proj, right_proj)).result
+                return self._make_binary_proj(
+                    left,
+                    node.left.span,
+                    right,
+                    node.right.span,
+                    node.op,
+                    builder,
+                    ctx,
+                    node.span,
+                )
 
             case NegAngleExpr():
                 operand = self.check_expression(node.operand, AngleType(), ctx, builder)
@@ -530,40 +490,96 @@ class TypeChecker:
     def check_expression(
         self,
         node: ExprNode,
-        expected: Attribute | None,
+        expected: Attribute,
         ctx: TypingContext,
         builder: Builder,
+        coerce: bool = True,
     ) -> SSAValue:
         """
         Check that an expression has the expected type.
 
-        If expected is None, accepts any non-void type.
+        If expected is AnyType, accepts any non-void type.
         This is the "checking" direction of bidirectional typechecking.
         Infers the type and coerces if necessary.
 
         Args:
             node: CST expression node
-            expected: Expected type attribute, or None to accept any non-void type
+            expected: Expected type attribute, or AnyType to accept any non-void type
             ctx: Typing context with variables and borrows
             builder: Builder for inserting operations
+            coerce: If True (default), insert coercion. If False, only validate
+                    and return the original SSA value (useful for borrow analysis).
 
         Returns:
-            SSA value of the typed expression (possibly coerced)
+            SSA value (coerced if coerce=True, original otherwise)
 
         Raises:
             TypeCheckError: If the expression is void or doesn't match the expected type
         """
-        inferred = self.infer_expression(node, ctx, builder)
-        if inferred is None:
+        # Special handling for binary proj expressions
+        if isinstance(node, BinaryProjExpr):
+            # Validate: expected type must be ≥ proj (i.e., proj ≤ expected)
+            if not self._is_subtype(ProjectionType(), expected):
+                raise TypeCheckError(
+                    node.span,
+                    f"'{node.op.value}' expression incompatible "
+                    f"with expected type {expected}",
+                )
+
+            # Check operands without coercion (for borrow analysis)
+            left = self.check_expression(
+                node.left, expected, ctx, builder, coerce=False
+            )
+            right = self.check_expression(
+                node.right, expected, ctx, builder, coerce=False
+            )
+
+            result = self._make_binary_proj(
+                left,
+                node.left.span,
+                right,
+                node.right.span,
+                node.op,
+                builder,
+                ctx,
+                node.span,
+            )
+
+        # Special handling for not expressions
+        elif isinstance(node, NotExpr):
+            # Validate: expected type must be ≥ proj (i.e., proj ≤ expected)
+            if not self._is_subtype(ProjectionType(), expected):
+                raise TypeCheckError(
+                    node.span,
+                    f"Not expression incompatible with expected type {expected}",
+                )
+
+            # Check operand without coercion (for analysis)
+            operand = self.check_expression(
+                node.operand, expected, ctx, builder, coerce=False
+            )
+
+            result = self._make_not_expr(operand, builder, ctx, node.span)
+
+        # Default: infer expression
+        else:
+            result = self.infer_expression(node, ctx, builder)
+            if result is None:
+                raise TypeCheckError(
+                    node.span,
+                    "Expected value, got void",
+                )
+
+        if coerce:
+            return self.coerce_to(
+                result, expected, builder, node.span, " in expression"
+            )
+        if not self._is_subtype(result.type, expected):
             raise TypeCheckError(
                 node.span,
-                "Expected value, got void",
+                f"Type mismatch: expected {expected}, got {result.type}",
             )
-        if expected is not None:
-            return self.coerce_to(
-                inferred, expected, builder, node.span, " in expression"
-            )
-        return inferred
+        return result
 
     def infer_statement(
         self,
@@ -591,10 +607,15 @@ class TypeChecker:
         """
         match node:
             case LetStmt():
-                expected_type = (
-                    self.check_type(node.type_ann) if node.type_ann else None
-                )
-                value = self.check_expression(node.value, expected_type, ctx, builder)
+                if node.type_ann:
+                    expected = self.check_type(node.type_ann)
+                    value = self.check_expression(node.value, expected, ctx, builder)
+                else:
+                    value = self.infer_expression(node.value, ctx, builder)
+                    if value is None:
+                        raise TypeCheckError(
+                            node.span, f"Cannot bind void to variable {node.name}"
+                        )
                 if node.name in ctx.variables.local_scope:
                     raise TypeCheckError(
                         node.span,
@@ -668,7 +689,7 @@ class TypeChecker:
         node: StmtNode,
         ctx: TypingContext,
         builder: Builder,
-        expected: Attribute | None = None,
+        expected: Attribute,
     ) -> SSAValue:
         """
         Check a statement and return its value.
@@ -680,7 +701,7 @@ class TypeChecker:
             node: CST statement node
             ctx: Typing context with variables and borrows
             builder: Builder for inserting operations
-            expected: Expected type, None for any type
+            expected: Expected type, AnyType for any type
 
         Returns:
             SSA value of the statement
@@ -697,11 +718,7 @@ class TypeChecker:
                 node.span,
                 "Expected statement with value, got void",
             )
-        if expected is not None:
-            return self.coerce_to(
-                result, expected, builder, node.span, " for statement"
-            )
-        return result
+        return self.coerce_to(result, expected, builder, node.span, " for statement")
 
     def infer_block(
         self,
@@ -741,7 +758,7 @@ class TypeChecker:
         node: BlockNode,
         ctx: TypingContext,
         builder: Builder,
-        expected: Attribute | None = None,
+        expected: Attribute,
     ) -> SSAValue:
         """
         Check a block of statements and return its value.
@@ -753,7 +770,7 @@ class TypeChecker:
             node: CST block node
             ctx: Typing context with variables and borrows
             builder: Builder for inserting operations
-            expected: Expected type for the block result, None for any non-void type
+            expected: Expected type for the block result, AnyType for any non-void type
 
         Returns:
             SSA value of the block result (possibly coerced)
@@ -773,6 +790,114 @@ class TypeChecker:
 
         # Check last statement against expected type
         return self.check_statement(node.statements[-1], ctx, builder, expected)
+
+    def _is_subtype(self, sub: Attribute, sup: Attribute) -> bool:
+        """
+        Check if sub ≤ sup in the subtyping lattice.
+
+        Subtyping relation: bool (i1) ≤ proj
+        AnyType is the top type (supertype of everything).
+        """
+        # Reflexivity
+        if sub == sup:
+            return True
+        # bool (i1) ≤ proj
+        if sub == i1 and isinstance(sup, ProjectionType):
+            return True
+        return False
+
+    def _make_binary_proj(
+        self,
+        left: SSAValue,
+        left_span: Span,
+        right: SSAValue,
+        right_span: Span,
+        op: BinaryOpKind,
+        builder: Builder,
+        ctx: TypingContext,
+        span: Span,
+    ) -> SSAValue:
+        """
+        Create a binary projection/boolean operation.
+
+        Performs borrow analysis for projections.
+
+        Args:
+            left: Left operand (must have same type as right)
+            right: Right operand
+            op: Binary operator kind
+            builder: Builder for inserting operations
+            ctx: Typing context for borrow analysis
+            span: Source span for error reporting
+
+        Returns:
+            Result SSA value
+        """
+        if left.type == i1 and right.type == i1:
+            match op:
+                case BinaryOpKind.AND:
+                    return builder.insert(AndIOp(left, right)).result
+                case BinaryOpKind.OR:
+                    return builder.insert(OrIOp(left, right)).result
+                case BinaryOpKind.XOR:
+                    return builder.insert(XOrIOp(left, right)).result
+
+        left = self.coerce_to(left, ProjectionType(), builder, left_span)
+        right = self.coerce_to(right, ProjectionType(), builder, right_span)
+        match op:
+            case BinaryOpKind.AND:
+                result = builder.insert(AndOp(left, right)).result
+            case BinaryOpKind.OR:
+                result = builder.insert(OrOp(left, right)).result
+            case BinaryOpKind.XOR:
+                result = builder.insert(XorOp(left, right)).result
+
+        # Borrow analysis for projections
+        if isinstance(left.type, ProjectionType):
+            left_borrows = ctx.borrows.get(left, ProjectionBorrows())
+            right_borrows = ctx.borrows.get(right, ProjectionBorrows())
+            conflict = left_borrows.has_conflicting_borrow(right_borrows)
+            if conflict is not None:
+                left_val = left_borrows.borrows.get(conflict, UNKNOWN)
+                right_val = right_borrows.borrows.get(conflict, UNKNOWN)
+                raise TypeCheckError(
+                    span,
+                    f"Cannot combine projections with conflicting borrows: "
+                    f"qubit borrowed in {left_val.name} and {right_val.name}",
+                )
+            ctx.borrows[result] = left_borrows.merge(right_borrows)
+
+        return result
+
+    def _make_not_expr(
+        self,
+        operand: SSAValue,
+        builder: Builder,
+        ctx: TypingContext,
+        span: Span,
+    ) -> SSAValue:
+        """
+        Create a negation operation.
+
+        Propagates borrows for projections.
+
+        Args:
+            operand: Operand to negate
+            builder: Builder for inserting operations
+            ctx: Typing context for borrow propagation
+            span: Source span for error reporting
+
+        Returns:
+            Result SSA value
+        """
+        if operand.type == i1:
+            one = builder.insert(ConstantOp(IntegerAttr(1, 1))).result
+            return builder.insert(XOrIOp(operand, one)).result
+
+        result = builder.insert(NotOp(operand)).result
+        operand_borrows = ctx.borrows.get(operand, ProjectionBorrows())
+        ctx.borrows[result] = operand_borrows
+        return result
 
     def coerce_to(
         self,
