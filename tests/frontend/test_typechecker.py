@@ -24,7 +24,7 @@ from projxdsl.dialects.proj import (
     QubitType,
     XorOp,
 )
-from projxdsl.frontend.cst_parser import ProjCSTParser
+from projxdsl.frontend.parser import ProjParser
 from projxdsl.frontend.typechecker import (
     ProjectionBorrows,
     TypeChecker,
@@ -64,7 +64,7 @@ def typecheck_expression(
         variables = {}
 
     # Parse to CST
-    cst_parser = ProjCSTParser(code)
+    cst_parser = ProjParser(code)
     cst_expr = cst_parser.parse_expression()
 
     # Typecheck
@@ -91,7 +91,7 @@ def typecheck_statement(
         variables = {}
 
     # Parse to CST
-    cst_parser = ProjCSTParser(code)
+    cst_parser = ProjParser(code)
     cst_stmt = cst_parser.parse_statement()
 
     # Typecheck
@@ -653,7 +653,7 @@ class TestLetStatement:
         """Test typechecking let with alloc expression."""
         # Note: alloc requires MIXED func_kind
         # Parse and typecheck to verify the variable is added to scope
-        cst_parser = ProjCSTParser("let q = alloc |0>")
+        cst_parser = ProjParser("let q = alloc |0>")
         cst_stmt = cst_parser.parse_statement()
 
         block = Block()
@@ -680,7 +680,7 @@ class TestFuncParsing:
 
     def test_function_return_type_mismatch(self):
         """Test that return type mismatch raises error."""
-        cst_parser = ProjCSTParser("pure fn foo() -> bool { 0 }")
+        cst_parser = ProjParser("pure fn foo() -> bool { 0 }")
         func_def = cst_parser.parse_func()
 
         typechecker = TypeChecker()
@@ -691,7 +691,7 @@ class TestFuncParsing:
     def test_function_missing_return_expression(self):
         """Test that function with return type but no return expression raises error."""
         # Note: no semicolon, CST parser uses newlines
-        cst_parser = ProjCSTParser("pure fn foo() -> bool { let x = true }")
+        cst_parser = ProjParser("pure fn foo() -> bool { let x = true }")
         func_def = cst_parser.parse_func()
 
         typechecker = TypeChecker()
@@ -701,7 +701,7 @@ class TestFuncParsing:
 
     def test_module_function_signatures(self):
         """Test that function signatures are registered in the typechecker."""
-        cst_parser = ProjCSTParser(
+        cst_parser = ProjParser(
             "pure fn foo(a: bool, b: bool) -> bool { a }\n"
             "unitary fn bar(p: proj) -> proj { p }\n"
             "mixed fn baz() { }"
@@ -735,7 +735,7 @@ class TestFuncParsing:
     def test_module_clears_symbol_table(self):
         """Test that symbol table is cleared between module checks."""
         # First module
-        cst_parser1 = ProjCSTParser("pure fn first() { }")
+        cst_parser1 = ProjParser("pure fn first() { }")
         module1 = cst_parser1.parse_module()
 
         typechecker = TypeChecker()
@@ -746,7 +746,7 @@ class TestFuncParsing:
         assert len(typechecker.functions) == 1
 
         # Second module - should clear old symbols
-        cst_parser2 = ProjCSTParser("pure fn second() { }")
+        cst_parser2 = ProjParser("pure fn second() { }")
         module2 = cst_parser2.parse_module()
         typechecker.check_module(module2)
 

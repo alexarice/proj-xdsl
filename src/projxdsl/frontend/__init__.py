@@ -8,7 +8,7 @@ from xdsl.context import Context
 from xdsl.dialects.builtin import ModuleOp
 from xdsl.utils.frontend import Frontend
 
-from projxdsl.frontend.cst_parser import ProjCSTParser
+from projxdsl.frontend.parser import ProjParser
 from projxdsl.frontend.typechecker import TypeChecker
 
 
@@ -23,7 +23,7 @@ class ProjFrontend(Frontend):
         source = input.read().decode("utf-8")
 
         # First pass: Parse to CST
-        cst_parser = ProjCSTParser(source, input_name)
+        cst_parser = ProjParser(source, input_name)
         cst = cst_parser.parse_module()
 
         # Second pass: Type check CST and emit IR

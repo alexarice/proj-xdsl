@@ -31,41 +31,41 @@ from projxdsl.frontend.cst import (
     ScalarMultExpr,
     StateExpr,
 )
-from projxdsl.frontend.cst_parser import ProjCSTParser
+from projxdsl.frontend.parser import ProjParser
 from projxdsl.func_kind import FuncKind
 
 
 def parse_expression(code: str):
     """Helper to parse an expression and return the CST node."""
-    parser = ProjCSTParser(code)
+    parser = ProjParser(code)
     result = parser.parse_expression()
     return result
 
 
 def parse_type(code: str):
     """Helper to parse a type and return the CST node."""
-    parser = ProjCSTParser(code)
+    parser = ProjParser(code)
     result = parser.parse_type()
     return result
 
 
 def parse_statement(code: str):
     """Helper to parse a statement and return the CST node."""
-    parser = ProjCSTParser(code)
+    parser = ProjParser(code)
     result = parser.parse_statement()
     return result
 
 
 def parse_func(code: str):
     """Helper to parse a function and return the CST node."""
-    parser = ProjCSTParser(code)
+    parser = ProjParser(code)
     result = parser.parse_func()
     return result
 
 
 def parse_module(code: str):
     """Helper to parse a module and return the CST node."""
-    parser = ProjCSTParser(code)
+    parser = ProjParser(code)
     result = parser.parse_module()
     return result
 
@@ -94,7 +94,7 @@ class TestTypeParsing:
             parse_type("Invalid")
 
     def test_unexpected_token_after_type(self):
-        parser = ProjCSTParser("qubit foo")
+        parser = ProjParser("qubit foo")
         parser.parse_type()
         with pytest.raises(ParseError, match="Unexpected token"):
             parser.expect_eof()
@@ -180,28 +180,28 @@ class TestFloatParsing:
     """Test parsing of float literals."""
 
     def test_simple_float(self):
-        parser = ProjCSTParser("3.14")
+        parser = ProjParser("3.14")
         result = parser.parse_float()
         assert result == 3.14
 
     def test_float_with_exponent(self):
-        parser = ProjCSTParser("2.5e-3")
+        parser = ProjParser("2.5e-3")
         result = parser.parse_float()
         assert abs(result - 0.0025) < 1e-10
 
     def test_float_in_parser(self):
         """Test parsing a float in the parser."""
-        parser = ProjCSTParser("3.14")
+        parser = ProjParser("3.14")
         result = parser.parse_float()
         assert result == 3.14
 
     def test_optional_float_present(self):
-        parser = ProjCSTParser("2.0")
+        parser = ProjParser("2.0")
         result = parser.parse_optional_float()
         assert result == 2.0
 
     def test_optional_float_absent(self):
-        parser = ProjCSTParser("x")
+        parser = ProjParser("x")
         result = parser.parse_optional_float()
         assert result is None
 
@@ -210,19 +210,19 @@ class TestIntegerParsing:
     """Test parsing of integer literals."""
 
     def test_simple_integer(self):
-        parser = ProjCSTParser("42")
+        parser = ProjParser("42")
         token = parser._consume_token()  # pyright: ignore[reportPrivateUsage]
         assert token.kind.name == "INTEGER"
         assert token.kind.get_integer_value(token.span) == 42
 
     def test_single_digit_integer(self):
-        parser = ProjCSTParser("0")
+        parser = ProjParser("0")
         token = parser._consume_token()  # pyright: ignore[reportPrivateUsage]
         assert token.kind.name == "INTEGER"
         assert token.kind.get_integer_value(token.span) == 0
 
     def test_multi_digit_integer(self):
-        parser = ProjCSTParser("123")
+        parser = ProjParser("123")
         token = parser._consume_token()  # pyright: ignore[reportPrivateUsage]
         assert token.kind.name == "INTEGER"
         assert token.kind.get_integer_value(token.span) == 123

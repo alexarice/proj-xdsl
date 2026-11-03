@@ -52,7 +52,7 @@ from projxdsl.func_kind import FuncKind
 
 
 @dataclass
-class ProjCSTParser(GenericParser[ProjTokenKind]):
+class ProjParser(GenericParser[ProjTokenKind]):
     """
     Recursive descent parser for proj-xdsl surface syntax.
 
