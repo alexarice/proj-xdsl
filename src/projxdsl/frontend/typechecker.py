@@ -359,7 +359,8 @@ class TypeChecker:
                 if ctx.func_kind < FuncKind.MIXED:
                     raise TypeCheckError(
                         node.span,
-                        f"Alloc not allowed in {ctx.func_kind.display_name} context",
+                        f"Alloc operation not allowed in "
+                        f"{ctx.func_kind.display_name} context",
                     )
                 state = self.check_state(node.state)
                 return builder.insert(AllocOp(state)).result
@@ -368,7 +369,8 @@ class TypeChecker:
                 if ctx.func_kind < FuncKind.MIXED:
                     raise TypeCheckError(
                         node.span,
-                        f"Measure not allowed in {ctx.func_kind.display_name} context",
+                        f"Measure operation not allowed in "
+                        f"{ctx.func_kind.display_name} context",
                     )
                 operand = self.check_expression(
                     node.operand, ProjectionType(), ctx, builder
@@ -386,23 +388,29 @@ class TypeChecker:
                 if func_sig.kind > ctx.func_kind:
                     raise TypeCheckError(
                         node.span,
-                        f"Cannot call {func_sig.kind.display_name} function"
-                        f" from {ctx.func_kind.display_name} context",
+                        f"Cannot call {func_sig.kind.display_name} function from "
+                        f"{ctx.func_kind.display_name} context",
                     )
 
                 expected_arg_count = len(func_sig.function_type.inputs.data)
                 if len(node.args) != expected_arg_count:
                     raise TypeCheckError(
                         node.span,
-                        f"Function '{node.name}' expects {expected_arg_count} args,"
-                        f" got {len(node.args)}",
+                        f"Function '{node.name}' expects "
+                        f"{expected_arg_count} argument(s), got {len(node.args)}",
                     )
 
                 arg_values: list[SSAValue] = []
-                for arg, expected_type in zip(
-                    node.args, func_sig.function_type.inputs.data, strict=True
+                for i, (arg, expected_type) in enumerate(
+                    zip(node.args, func_sig.function_type.inputs.data, strict=True)
                 ):
-                    arg_val = self.check_expression(arg, expected_type, ctx, builder)
+                    arg_val = self.check_expression(
+                        arg,
+                        expected_type,
+                        ctx,
+                        builder,
+                        context=f" in argument {i + 1} of function '{node.name}'",
+                    )
                     arg_values.append(arg_val)
 
                 # Borrow analysis for function call
@@ -446,7 +454,7 @@ class TypeChecker:
                     if qubit in ctx.active_borrows.borrows:
                         raise TypeCheckError(
                             node.span,
-                            "Qubit argument conflicts with outer qif borrow",
+                            "Qubit argument conflicts with outer qif condition borrow",
                         )
                 for arg_borrows in projection_borrows:
                     conflict = ctx.active_borrows.has_conflicting_borrow(arg_borrows)
@@ -493,6 +501,7 @@ class TypeChecker:
         ctx: TypingContext,
         builder: Builder,
         coerce: bool = True,
+        context: str = "expression",
     ) -> SSAValue:
         """
         Check that an expression has the expected type.
@@ -507,6 +516,7 @@ class TypeChecker:
             builder: Builder for inserting operations
             coerce: If True (default), insert coercion. If False, only validate
                     and return the original SSA value (useful for borrow analysis).
+            context: Context string for error messages (default: "expression")
 
         Returns:
             SSA value (coerced if coerce=True, original otherwise)
@@ -523,10 +533,10 @@ class TypeChecker:
 
             # Check operands without coercion
             left = self.check_expression(
-                node.left, expected, ctx, builder, coerce=False
+                node.left, expected, ctx, builder, coerce=False, context=context
             )
             right = self.check_expression(
-                node.right, expected, ctx, builder, coerce=False
+                node.right, expected, ctx, builder, coerce=False, context=context
             )
 
             result = self._make_binary_proj(
@@ -540,7 +550,7 @@ class TypeChecker:
 
             # Check operand without coercion (for analysis)
             operand = self.check_expression(
-                node.operand, expected, ctx, builder, coerce=False
+                node.operand, expected, ctx, builder, coerce=False, context=context
             )
 
             result = self._make_not_expr(operand, builder, ctx)
@@ -551,11 +561,11 @@ class TypeChecker:
             if result is None:
                 raise TypeCheckError(
                     node.span,
-                    "Expected value, got void",
+                    f"Expected value, got '()'{context}",
                 )
 
         # Coerce result if needed
-        self.check_subtype(result.type, expected, node.span, "expression")
+        self.check_subtype(result.type, expected, node.span, context)
         if coerce:
             return self.coerce_to(result, expected, builder)
         return result
@@ -607,7 +617,8 @@ class TypeChecker:
                 if ctx.func_kind < FuncKind.UNITARY:
                     raise TypeCheckError(
                         node.span,
-                        f"Phase not allowed in {ctx.func_kind.display_name} context",
+                        f"Phase operation not allowed in "
+                        f"{ctx.func_kind.display_name} context",
                     )
                 angle = self.check_expression(node.angle, AngleType(), ctx, builder)
                 builder.insert(PhaseOp(angle))
@@ -616,7 +627,8 @@ class TypeChecker:
                 if ctx.func_kind < FuncKind.UNITARY:
                     raise TypeCheckError(
                         node.span,
-                        f"Qif not allowed in {ctx.func_kind.display_name} context",
+                        f"Qif operation not allowed in "
+                        f"{ctx.func_kind.display_name} context",
                     )
                 condition = self.check_expression(
                     node.condition, ProjectionType(), ctx, builder
@@ -914,7 +926,7 @@ class TypeChecker:
         # bool (i1) ≤ proj
         if sub == i1 and isinstance(sup, ProjectionType):
             return
-        raise TypeCheckError(span, f"{context}: expected type ≥ {sup}, got {sub}")
+        raise TypeCheckError(span, f"Type mismatch: expected {sup}, got {sub}{context}")
 
     def _make_binary_proj(
         self,

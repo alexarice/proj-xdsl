@@ -40,7 +40,7 @@ pure fn let_coercion_bool_to_proj() -> proj {
     // CHECK: %[[C:.*]] = arith.constant true
     // CHECK: %[[COERCED:.*]] = proj.from_bool %[[C]]
     // CHECK: proj.return %[[COERCED]]
-    let p: proj = true;
+    let p: proj = true
     p
 }
 

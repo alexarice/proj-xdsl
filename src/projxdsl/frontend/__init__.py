@@ -8,7 +8,8 @@ from xdsl.context import Context
 from xdsl.dialects.builtin import ModuleOp
 from xdsl.utils.frontend import Frontend
 
-from projxdsl.frontend.parser import ProjParser
+from projxdsl.frontend.cst_parser import ProjCSTParser
+from projxdsl.frontend.typechecker import TypeChecker
 
 
 @dataclass(frozen=True)
@@ -20,8 +21,14 @@ class ProjFrontend(Frontend):
     def parse(self, ctx: Context, input: IO[bytes], input_name: str) -> ModuleOp:
         """Parse proj-xdsl surface syntax into a ModuleOp."""
         source = input.read().decode("utf-8")
-        parser = ProjParser(source, input_name)
-        return parser.parse_module()
+
+        # First pass: Parse to CST
+        cst_parser = ProjCSTParser(source, input_name)
+        cst = cst_parser.parse_module()
+
+        # Second pass: Type check CST and emit IR
+        typechecker = TypeChecker()
+        return typechecker.check_module(cst)
 
 
 def get_all_frontends() -> dict[str, Callable[[], type[Frontend]]]:

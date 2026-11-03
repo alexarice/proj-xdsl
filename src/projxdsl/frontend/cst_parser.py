@@ -662,9 +662,11 @@ class ProjCSTParser(GenericParser[ProjTokenKind]):
             The parsed module CST node containing all function definitions
         """
         func_defs: list[FuncDef] = []
+        self._skip_newlines()
         while self._current_token.kind != ProjTokenKind.EOF:
             func_def = self.parse_func()
             func_defs.append(func_def)
+            self._skip_newlines()
 
         return Module(
             span=self._current_token.span,
