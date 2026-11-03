@@ -27,6 +27,8 @@ class CSTNode(ABC):
 
     span: Span
 
+    node_name = "node"
+
 
 @dataclass(frozen=True)
 class ExprNode(CSTNode, ABC):
@@ -87,12 +89,16 @@ class IdentExpr(ExprNode):
 
     name: str
 
+    node_name = "identifier"
+
 
 @dataclass(frozen=True)
 class BoolLiteralExpr(ExprNode):
     """Boolean literal: true or false."""
 
     value: bool
+
+    node_name = "boolean literal"
 
 
 @dataclass(frozen=True)
@@ -101,12 +107,16 @@ class StateExpr(ExprNode):
 
     state: State
 
+    node_name = "state literal"
+
 
 @dataclass(frozen=True)
 class ScalarExpr(ExprNode):
     """Scalar literal: 2.0, -1.0, etc."""
 
     value: float
+
+    node_name = "scalar literal"
 
 
 @dataclass(frozen=True)
@@ -115,12 +125,16 @@ class AngleConstantExpr(ExprNode):
 
     kind: AngleConstantKind
 
+    node_name = "angle constant"
+
 
 @dataclass(frozen=True)
 class NotExpr(ExprNode):
     """Negation: !expr."""
 
     operand: ExprNode
+
+    node_name = "negation"
 
 
 @dataclass(frozen=True)
@@ -129,12 +143,16 @@ class MeasureExpr(ExprNode):
 
     operand: ExprNode
 
+    node_name = "measurement"
+
 
 @dataclass(frozen=True)
 class NegAngleExpr(ExprNode):
     """Angle negation: -angle."""
 
     operand: ExprNode
+
+    node_name = "angle negation"
 
 
 @dataclass(frozen=True)
@@ -143,6 +161,8 @@ class ScalarMultExpr(ExprNode):
 
     scalar: ExprNode
     angle: ExprNode
+
+    node_name = "scalar multiplication"
 
 
 @dataclass(frozen=True)
@@ -153,6 +173,8 @@ class BinaryProjExpr(ExprNode):
     left: ExprNode
     right: ExprNode
 
+    node_name = "binary operator"
+
 
 @dataclass(frozen=True)
 class BinaryAngleExpr(ExprNode):
@@ -162,6 +184,8 @@ class BinaryAngleExpr(ExprNode):
     left: ExprNode
     right: ExprNode
 
+    node_name = "angle operator"
+
 
 @dataclass(frozen=True)
 class EqExpr(ExprNode):
@@ -169,6 +193,8 @@ class EqExpr(ExprNode):
 
     qubit: ExprNode
     state: ExprNode
+
+    node_name = "equality"
 
 
 @dataclass(frozen=True)
@@ -178,6 +204,8 @@ class CallExpr(ExprNode):
     name: str
     args: tuple[ExprNode, ...]
 
+    node_name = "function call"
+
 
 @dataclass(frozen=True)
 class AllocExpr(ExprNode):
@@ -185,12 +213,7 @@ class AllocExpr(ExprNode):
 
     state: ExprNode
 
-
-@dataclass(frozen=True)
-class ParenExpr(ExprNode):
-    """Parenthesized expression: (expr)."""
-
-    inner: ExprNode
+    node_name = "allocation"
 
 
 # =============================================================================
@@ -279,28 +302,28 @@ class Module(CSTNode):
 
 
 @dataclass(frozen=True)
-class QubitType(TypeNode):
+class QubitTypeNode(TypeNode):
     """Qubit type."""
 
-    pass
+    node_name = "qubit"
 
 
 @dataclass(frozen=True)
-class ProjType(TypeNode):
+class ProjTypeNode(TypeNode):
     """Projection type."""
 
-    pass
+    node_name = "proj"
 
 
 @dataclass(frozen=True)
-class BoolType(TypeNode):
+class BoolTypeNode(TypeNode):
     """Boolean type."""
 
-    pass
+    node_name = "bool"
 
 
 @dataclass(frozen=True)
-class AngleType(TypeNode):
+class AngleTypeNode(TypeNode):
     """Angle type."""
 
-    pass
+    node_name = "angle"

@@ -18,13 +18,13 @@ from projxdsl.frontend.cst import (
     AngleConstantExpr,
     AngleConstantKind,
     AngleOpKind,
-    AngleType,
+    AngleTypeNode,
     BinaryAngleExpr,
     BinaryOpKind,
     BinaryProjExpr,
     BlockNode,
     BoolLiteralExpr,
-    BoolType,
+    BoolTypeNode,
     CallExpr,
     EqExpr,
     ExprNode,
@@ -37,11 +37,10 @@ from projxdsl.frontend.cst import (
     NegAngleExpr,
     NotExpr,
     Param,
-    ParenExpr,
     PhaseStmt,
-    ProjType,
+    ProjTypeNode,
     QifStmt,
-    QubitType,
+    QubitTypeNode,
     ScalarExpr,
     ScalarMultExpr,
     StateExpr,
@@ -91,13 +90,13 @@ class ProjCSTParser(GenericParser[ProjTokenKind]):
         angle-type ::= "angle"
         """
         if self._parse_optional_token(ProjTokenKind.QUBIT) is not None:
-            return QubitType(span=self._current_token.span)
+            return QubitTypeNode(span=self._current_token.span)
         elif self._parse_optional_token(ProjTokenKind.PROJECTION) is not None:
-            return ProjType(span=self._current_token.span)
+            return ProjTypeNode(span=self._current_token.span)
         elif self._parse_optional_token(ProjTokenKind.BOOL) is not None:
-            return BoolType(span=self._current_token.span)
+            return BoolTypeNode(span=self._current_token.span)
         elif self._parse_optional_token(ProjTokenKind.ANGLE) is not None:
-            return AngleType(span=self._current_token.span)
+            return AngleTypeNode(span=self._current_token.span)
         else:
             self.raise_error(
                 "Expected type (qubit, projection, bool, or angle),"
@@ -530,14 +529,10 @@ class ProjCSTParser(GenericParser[ProjTokenKind]):
             )
 
         if self._parse_optional_token(ProjTokenKind.LPAREN) is not None:
-            paren_start = start_pos
             # Lexer automatically suppresses NEWLINEs inside parentheses
             expr = self.parse_expression(0)
-            rparen = self.parse_punctuation(")", " to close parenthesized expression")
-            return ParenExpr(
-                span=Span(paren_start, rparen.span.end, self._input),
-                inner=expr,
-            )
+            self.parse_punctuation(")", " to close parenthesized expression")
+            return expr
 
         self.raise_error(
             initial_error
