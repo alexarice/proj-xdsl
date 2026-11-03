@@ -341,12 +341,18 @@ class TypeChecker:
                 return builder.insert(ScalarMultOp(-1.0, operand)).result
 
             case ScalarMultExpr():
-                if not isinstance(node.scalar, FloatLiteralExpr):
-                    raise TypeCheckError(
-                        node.scalar.span,
-                        f"Expected float literal, got {node.scalar.node_name}",
-                    )
-                scalar_val = node.scalar.value
+                # Accept both float and integer literals as scalars
+                match node.scalar:
+                    case FloatLiteralExpr():
+                        scalar_val = node.scalar.value
+                    case IntLiteralExpr():
+                        scalar_val = float(node.scalar.value)
+                    case _:
+                        raise TypeCheckError(
+                            node.scalar.span,
+                            "Expected float or integer literal,"
+                            f" got {node.scalar.node_name}",
+                        )
                 angle = self.check_expression(node.angle, AngleType(), ctx, builder)
                 return builder.insert(ScalarMultOp(scalar_val, angle)).result
 

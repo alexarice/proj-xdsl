@@ -384,6 +384,15 @@ class TestAngleExpressions:
         assert isinstance(result.owner, ScalarMultOp)
         assert result.type == AngleType()
 
+    def test_angle_scalar_mult_with_integer(self):
+        """Test typechecking scalar multiplication with integer: 2 * a."""
+        a = make_angle_var()
+        result = typecheck_expression("2 * a", {"a": a})
+        assert isinstance(result.owner, ScalarMultOp)
+        assert result.type == AngleType()
+        # Verify the integer is converted to float in the IR
+        assert result.owner.scalar.value.data == 2.0
+
     def test_angle_scalar_mult_binds_tighter(self):
         """Test that scalar_mult binds tighter than add."""
         a = make_angle_var()
