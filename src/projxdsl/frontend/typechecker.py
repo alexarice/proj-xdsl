@@ -55,6 +55,7 @@ from projxdsl.frontend.cst import (
     EqExpr,
     ExprNode,
     ExprStmt,
+    FloatLiteralExpr,
     FuncDef,
     IdentExpr,
     IntLiteralExpr,
@@ -68,7 +69,6 @@ from projxdsl.frontend.cst import (
     ProjTypeNode,
     QifStmt,
     QubitTypeNode,
-    ScalarExpr,
     ScalarMultExpr,
     StateExpr,
     StmtNode,
@@ -341,10 +341,10 @@ class TypeChecker:
                 return builder.insert(ScalarMultOp(-1.0, operand)).result
 
             case ScalarMultExpr():
-                if not isinstance(node.scalar, ScalarExpr):
+                if not isinstance(node.scalar, FloatLiteralExpr):
                     raise TypeCheckError(
                         node.scalar.span,
-                        f"Expected scalar literal, got {node.scalar.node_name}",
+                        f"Expected float literal, got {node.scalar.node_name}",
                     )
                 scalar_val = node.scalar.value
                 angle = self.check_expression(node.angle, AngleType(), ctx, builder)

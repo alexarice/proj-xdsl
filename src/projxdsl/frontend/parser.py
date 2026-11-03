@@ -27,6 +27,7 @@ from projxdsl.frontend.cst import (
     EqExpr,
     ExprNode,
     ExprStmt,
+    FloatLiteralExpr,
     FuncDef,
     IdentExpr,
     IntLiteralExpr,
@@ -41,7 +42,6 @@ from projxdsl.frontend.cst import (
     ProjTypeNode,
     QifStmt,
     QubitTypeNode,
-    ScalarExpr,
     ScalarMultExpr,
     StateExpr,
     StmtNode,
@@ -458,8 +458,8 @@ class ProjParser(GenericParser[ProjTokenKind]):
             return IntLiteralExpr(span=integer.span, value=value)
 
         if (float_token := self._parse_optional_token(ProjTokenKind.FLOAT)) is not None:
-            # Scalar literal (used in scalar multiplication: `2.0 * angle`)
-            return ScalarExpr(
+            # Float literal (used in scalar multiplication: `2.0 * angle`)
+            return FloatLiteralExpr(
                 span=float_token.span,
                 value=float_token.kind.get_float_value(float_token.span),
             )

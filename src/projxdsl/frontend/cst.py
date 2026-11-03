@@ -113,12 +113,12 @@ class StateExpr(ExprNode):
 
 
 @dataclass(frozen=True)
-class ScalarExpr(ExprNode):
-    """Scalar literal: 2.0, -1.0, etc."""
+class FloatLiteralExpr(ExprNode):
+    """Float literal: 2.0, -1.0, etc."""
 
     value: float
 
-    node_name = "scalar literal"
+    node_name = "float literal"
 
 
 @dataclass(frozen=True)
