@@ -312,12 +312,7 @@ class TypeChecker:
                 return result
 
             case NotExpr():
-                operand = self.infer_expression(node.operand, ctx, builder)
-                if operand is None:
-                    raise TypeCheckError(
-                        node.operand.span,
-                        "Expected projection or boolean for '!' operator, got void",
-                    )
+                operand = self.check_expression(node.operand, None, ctx, builder)
                 if operand.type == ProjectionType():
                     return builder.insert(NotOp(operand)).result
                 elif operand.type == i1:
@@ -326,23 +321,13 @@ class TypeChecker:
                 else:
                     raise TypeCheckError(
                         node.operand.span,
-                        "Expected projection or boolean for '!' operator",
+                        f"Expected projection or boolean for '!' operator,"
+                        f" got {operand.type}",
                     )
 
             case BinaryProjExpr():
-                left = self.infer_expression(node.left, ctx, builder)
-                right = self.infer_expression(node.right, ctx, builder)
-
-                if left is None:
-                    raise TypeCheckError(
-                        node.left.span,
-                        f"Expected value for '{node.op.value}' left operand, got void",
-                    )
-                if right is None:
-                    raise TypeCheckError(
-                        node.right.span,
-                        f"Expected value for '{node.op.value}' right operand, got void",
-                    )
+                left = self.check_expression(node.left, None, ctx, builder)
+                right = self.check_expression(node.right, None, ctx, builder)
 
                 if left.type == i1 and right.type == i1:
                     match node.op:
