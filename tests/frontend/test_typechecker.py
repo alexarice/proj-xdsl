@@ -64,8 +64,8 @@ def typecheck_expression(
         variables = {}
 
     # Parse to CST
-    cst_parser = ProjParser(code)
-    cst_expr = cst_parser.parse_expression()
+    parser = ProjParser(code)
+    expr = parser.parse_expression()
 
     # Typecheck
     block = Block()
@@ -76,7 +76,7 @@ def typecheck_expression(
         borrows=ScopedDict[SSAValue, ProjectionBorrows](local_scope={}),
     )
     typechecker = TypeChecker()
-    result = typechecker.infer_expression(cst_expr, ctx, builder)
+    result = typechecker.infer_expression(expr, ctx, builder)
     assert result is not None, "typecheck_expression returned None in test"
     return result
 
@@ -91,8 +91,8 @@ def typecheck_statement(
         variables = {}
 
     # Parse to CST
-    cst_parser = ProjParser(code)
-    cst_stmt = cst_parser.parse_statement()
+    parser = ProjParser(code)
+    stmt = parser.parse_statement()
 
     # Typecheck
     block = Block()
@@ -103,7 +103,7 @@ def typecheck_statement(
         borrows=ScopedDict[SSAValue, ProjectionBorrows](local_scope={}),
     )
     typechecker = TypeChecker()
-    typechecker.infer_statement(cst_stmt, ctx, builder)
+    typechecker.infer_statement(stmt, ctx, builder)
     return list(block.ops)
 
 
@@ -653,8 +653,8 @@ class TestLetStatement:
         """Test typechecking let with alloc expression."""
         # Note: alloc requires MIXED func_kind
         # Parse and typecheck to verify the variable is added to scope
-        cst_parser = ProjParser("let q = alloc |0>")
-        cst_stmt = cst_parser.parse_statement()
+        parser = ProjParser("let q = alloc |0>")
+        stmt = parser.parse_statement()
 
         block = Block()
         builder = Builder(InsertPoint.at_end(block))
@@ -664,7 +664,7 @@ class TestLetStatement:
             borrows=ScopedDict[SSAValue, ProjectionBorrows](local_scope={}),
         )
         typechecker = TypeChecker()
-        typechecker.infer_statement(cst_stmt, ctx, builder)
+        typechecker.infer_statement(stmt, ctx, builder)
 
         ops = list(block.ops)
         assert len(ops) == 1  # AllocOp inserted
@@ -680,8 +680,8 @@ class TestFuncParsing:
 
     def test_function_return_type_mismatch(self):
         """Test that return type mismatch raises error."""
-        cst_parser = ProjParser("pure fn foo() -> bool { 0 }")
-        func_def = cst_parser.parse_func()
+        parser = ProjParser("pure fn foo() -> bool { 0 }")
+        func_def = parser.parse_func()
 
         typechecker = TypeChecker()
 
@@ -691,8 +691,8 @@ class TestFuncParsing:
     def test_function_missing_return_expression(self):
         """Test that function with return type but no return expression raises error."""
         # Note: no semicolon, CST parser uses newlines
-        cst_parser = ProjParser("pure fn foo() -> bool { let x = true }")
-        func_def = cst_parser.parse_func()
+        parser = ProjParser("pure fn foo() -> bool { let x = true }")
+        func_def = parser.parse_func()
 
         typechecker = TypeChecker()
 
@@ -701,12 +701,12 @@ class TestFuncParsing:
 
     def test_module_function_signatures(self):
         """Test that function signatures are registered in the typechecker."""
-        cst_parser = ProjParser(
+        parser = ProjParser(
             "pure fn foo(a: bool, b: bool) -> bool { a }\n"
             "unitary fn bar(p: proj) -> proj { p }\n"
             "mixed fn baz() { }"
         )
-        module = cst_parser.parse_module()
+        module = parser.parse_module()
 
         typechecker = TypeChecker()
         typechecker.check_module(module)
@@ -735,8 +735,8 @@ class TestFuncParsing:
     def test_module_clears_symbol_table(self):
         """Test that symbol table is cleared between module checks."""
         # First module
-        cst_parser1 = ProjParser("pure fn first() { }")
-        module1 = cst_parser1.parse_module()
+        parser1 = ProjParser("pure fn first() { }")
+        module1 = parser1.parse_module()
 
         typechecker = TypeChecker()
         typechecker.check_module(module1)
@@ -746,8 +746,8 @@ class TestFuncParsing:
         assert len(typechecker.functions) == 1
 
         # Second module - should clear old symbols
-        cst_parser2 = ProjParser("pure fn second() { }")
-        module2 = cst_parser2.parse_module()
+        parser2 = ProjParser("pure fn second() { }")
+        module2 = parser2.parse_module()
         typechecker.check_module(module2)
 
         # Second check should only have 'second', not 'first'

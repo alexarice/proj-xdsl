@@ -23,8 +23,8 @@ class ProjFrontend(Frontend):
         source = input.read().decode("utf-8")
 
         # First pass: Parse to CST
-        cst_parser = ProjParser(source, input_name)
-        cst = cst_parser.parse_module()
+        parser = ProjParser(source, input_name)
+        cst = parser.parse_module()
 
         # Second pass: Type check CST and emit IR
         typechecker = TypeChecker()
