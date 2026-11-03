@@ -310,7 +310,7 @@ class TypeChecker:
                 operand = self.check_expression(
                     node.operand, ProjectionType(), ctx, builder, coerce=False
                 )
-                return self._make_not_expr(operand, builder, ctx, node.span)
+                return self._make_not_expr(operand, builder, ctx)
 
             case BinaryProjExpr():
                 left = self.check_expression(
@@ -321,14 +321,7 @@ class TypeChecker:
                 )
 
                 return self._make_binary_proj(
-                    left,
-                    node.left.span,
-                    right,
-                    node.right.span,
-                    node.op,
-                    builder,
-                    ctx,
-                    node.span,
+                    left, right, node.op, builder, ctx, node.span
                 )
 
             case NegAngleExpr():
@@ -498,13 +491,12 @@ class TypeChecker:
         """
         Check that an expression has the expected type.
 
-        If expected is AnyType, accepts any non-void type.
         This is the "checking" direction of bidirectional typechecking.
         Infers the type and coerces if necessary.
 
         Args:
             node: CST expression node
-            expected: Expected type attribute, or AnyType to accept any non-void type
+            expected: Expected type attribute
             ctx: Typing context with variables and borrows
             builder: Builder for inserting operations
             coerce: If True (default), insert coercion. If False, only validate
@@ -519,14 +511,11 @@ class TypeChecker:
         # Special handling for binary proj expressions
         if isinstance(node, BinaryProjExpr):
             # Validate: expected type must be ≥ proj (i.e., proj ≤ expected)
-            if not self._is_subtype(ProjectionType(), expected):
-                raise TypeCheckError(
-                    node.span,
-                    f"'{node.op.value}' expression incompatible "
-                    f"with expected type {expected}",
-                )
+            self.check_subtype(
+                ProjectionType(), expected, node.span, f"'{node.op.value}' expression"
+            )
 
-            # Check operands without coercion (for borrow analysis)
+            # Check operands without coercion
             left = self.check_expression(
                 node.left, expected, ctx, builder, coerce=False
             )
@@ -535,31 +524,20 @@ class TypeChecker:
             )
 
             result = self._make_binary_proj(
-                left,
-                node.left.span,
-                right,
-                node.right.span,
-                node.op,
-                builder,
-                ctx,
-                node.span,
+                left, right, node.op, builder, ctx, node.span
             )
 
         # Special handling for not expressions
         elif isinstance(node, NotExpr):
             # Validate: expected type must be ≥ proj (i.e., proj ≤ expected)
-            if not self._is_subtype(ProjectionType(), expected):
-                raise TypeCheckError(
-                    node.span,
-                    f"Not expression incompatible with expected type {expected}",
-                )
+            self.check_subtype(ProjectionType(), expected, node.span, "not expression")
 
             # Check operand without coercion (for analysis)
             operand = self.check_expression(
                 node.operand, expected, ctx, builder, coerce=False
             )
 
-            result = self._make_not_expr(operand, builder, ctx, node.span)
+            result = self._make_not_expr(operand, builder, ctx)
 
         # Default: infer expression
         else:
@@ -570,15 +548,10 @@ class TypeChecker:
                     "Expected value, got void",
                 )
 
+        # Coerce result if needed
+        self.check_subtype(result.type, expected, node.span, "expression")
         if coerce:
-            return self.coerce_to(
-                result, expected, builder, node.span, " in expression"
-            )
-        if not self._is_subtype(result.type, expected):
-            raise TypeCheckError(
-                node.span,
-                f"Type mismatch: expected {expected}, got {result.type}",
-            )
+            return self.coerce_to(result, expected, builder)
         return result
 
     def infer_statement(
@@ -701,7 +674,7 @@ class TypeChecker:
             node: CST statement node
             ctx: Typing context with variables and borrows
             builder: Builder for inserting operations
-            expected: Expected type, AnyType for any type
+            expected: Expected type
 
         Returns:
             SSA value of the statement
@@ -718,7 +691,8 @@ class TypeChecker:
                 node.span,
                 "Expected statement with value, got void",
             )
-        return self.coerce_to(result, expected, builder, node.span, " for statement")
+        self.check_subtype(result.type, expected, node.span, "statement")
+        return self.coerce_to(result, expected, builder)
 
     def infer_block(
         self,
@@ -770,7 +744,7 @@ class TypeChecker:
             node: CST block node
             ctx: Typing context with variables and borrows
             builder: Builder for inserting operations
-            expected: Expected type for the block result, AnyType for any non-void type
+            expected: Expected type for the block result
 
         Returns:
             SSA value of the block result (possibly coerced)
@@ -791,27 +765,35 @@ class TypeChecker:
         # Check last statement against expected type
         return self.check_statement(node.statements[-1], ctx, builder, expected)
 
-    def _is_subtype(self, sub: Attribute, sup: Attribute) -> bool:
+    def check_subtype(
+        self, sub: Attribute, sup: Attribute, span: Span, context: str
+    ) -> None:
         """
-        Check if sub ≤ sup in the subtyping lattice.
+        Check that sub ≤ sup in the subtyping lattice, raising an error if not.
 
         Subtyping relation: bool (i1) ≤ proj
-        AnyType is the top type (supertype of everything).
+
+        Args:
+            sub: The subtype to check
+            sup: The supertype to check against
+            span: Source span for error reporting
+            context: Description of the context for error messages
+
+        Raises:
+            TypeCheckError: If sub is not a subtype of sup
         """
         # Reflexivity
         if sub == sup:
-            return True
+            return
         # bool (i1) ≤ proj
         if sub == i1 and isinstance(sup, ProjectionType):
-            return True
-        return False
+            return
+        raise TypeCheckError(span, f"{context}: expected type ≥ {sup}, got {sub}")
 
     def _make_binary_proj(
         self,
         left: SSAValue,
-        left_span: Span,
         right: SSAValue,
-        right_span: Span,
         op: BinaryOpKind,
         builder: Builder,
         ctx: TypingContext,
@@ -842,8 +824,8 @@ class TypeChecker:
                 case BinaryOpKind.XOR:
                     return builder.insert(XOrIOp(left, right)).result
 
-        left = self.coerce_to(left, ProjectionType(), builder, left_span)
-        right = self.coerce_to(right, ProjectionType(), builder, right_span)
+        left = self.coerce_to(left, ProjectionType(), builder)
+        right = self.coerce_to(right, ProjectionType(), builder)
         match op:
             case BinaryOpKind.AND:
                 result = builder.insert(AndOp(left, right)).result
@@ -874,7 +856,6 @@ class TypeChecker:
         operand: SSAValue,
         builder: Builder,
         ctx: TypingContext,
-        span: Span,
     ) -> SSAValue:
         """
         Create a negation operation.
@@ -885,7 +866,6 @@ class TypeChecker:
             operand: Operand to negate
             builder: Builder for inserting operations
             ctx: Typing context for borrow propagation
-            span: Source span for error reporting
 
         Returns:
             Result SSA value
@@ -904,8 +884,6 @@ class TypeChecker:
         value: SSAValue,
         expected: Attribute,
         builder: Builder,
-        span: Span,
-        context_msg: str = "",
     ) -> SSAValue:
         """
         Coerce a value to an expected type.
@@ -914,29 +892,21 @@ class TypeChecker:
         - bool (i1) → proj (via FromBoolOp)
         - T → T (identity, no coercion needed)
 
+        Assumes the caller has already verified the subtype relation.
+
         Args:
             value: SSA value to coerce
-            expected: Expected type
+            expected: Expected type (must be a supertype of value.type)
             builder: Builder for inserting operations
-            span: Source span for error reporting
-            context_msg: Additional context for error messages
 
         Returns:
             SSA value (possibly wrapped in coercion)
-
-        Raises:
-            TypeCheckError: If coercion is not possible
         """
         # Equality check (no coercion needed)
         if value.type == expected:
             return value
 
         # bool → proj
-        if value.type == i1 and expected == ProjectionType():
-            return builder.insert(FromBoolOp(value)).result
-
-        # Coercion not possible
-        raise TypeCheckError(
-            span,
-            f"Type mismatch{context_msg}: expected {expected}, got {value.type}",
-        )
+        assert value.type == i1, f"Can only coerce from i1, got {value.type}"
+        assert expected == ProjectionType(), f"Can only coerce to proj, got {expected}"
+        return builder.insert(FromBoolOp(value)).result
