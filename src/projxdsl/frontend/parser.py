@@ -30,6 +30,7 @@ from projxdsl.frontend.cst import (
     FloatLiteralExpr,
     FuncDef,
     IdentExpr,
+    IfExpr,
     IntLiteralExpr,
     LetStmt,
     MeasureExpr,
@@ -497,6 +498,9 @@ class ProjParser(GenericParser[ProjTokenKind]):
                 operand=operand,
             )
 
+        if self._parse_optional_token(ProjTokenKind.IF) is not None:
+            return self._parse_if_expression(start_pos)
+
         if self._parse_optional_token(ProjTokenKind.LPAREN) is not None:
             # Lexer automatically suppresses NEWLINEs inside parentheses
             expr = self.parse_expression(0)
@@ -540,6 +544,28 @@ class ProjParser(GenericParser[ProjTokenKind]):
             span=Span(start_pos, end_pos, self._input),
             name=func_name,
             args=tuple(args_list),
+        )
+
+    def _parse_if_expression(self, start_pos: int) -> IfExpr:
+        """
+        Parse a classical if expression.
+
+        if-expr ::= "if" expr block ("else" block)?
+        """
+        condition = self.parse_expression()
+        true_body = self._parse_block()
+        end_pos = true_body.span.end
+
+        false_body = None
+        if self._parse_optional_token(ProjTokenKind.ELSE) is not None:
+            false_body = self._parse_block()
+            end_pos = false_body.span.end
+
+        return IfExpr(
+            span=Span(start_pos, end_pos, self._input),
+            condition=condition,
+            true_body=true_body,
+            false_body=false_body,
         )
 
     def parse_func(self) -> FuncDef:

@@ -216,6 +216,17 @@ class AllocExpr(ExprNode):
     node_name = "allocation"
 
 
+@dataclass(frozen=True)
+class IfExpr(ExprNode):
+    """Classical if expression: if cond { block } (else { block })?."""
+
+    condition: ExprNode
+    true_body: BlockNode
+    false_body: BlockNode | None
+
+    node_name = "if expression"
+
+
 # =============================================================================
 # Statement Nodes
 # =============================================================================

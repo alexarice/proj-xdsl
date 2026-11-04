@@ -4,6 +4,7 @@ import pytest
 from xdsl.builder import Builder
 from xdsl.dialects.arith import AndIOp, ConstantOp, OrIOp, XOrIOp
 from xdsl.dialects.builtin import IntegerAttr, i1
+from xdsl.dialects.scf import IfOp as ScfIfOp
 from xdsl.dialects.test import TestOp as XDSLTestOp
 from xdsl.ir import Block, Operation, SSAValue
 from xdsl.rewriter import InsertPoint
@@ -869,3 +870,77 @@ class TestMeasureExpression:
         result = typecheck_expression("measure measure p", {"p": proj_var})
         # Should have nested MeasureOps
         assert isinstance(result.owner, MeasureOp)
+
+
+class TestIfExpression:
+    """Test typechecking of classical if expressions."""
+
+    def test_if_expression_void_branches(self):
+        """Test if expression with void branches."""
+        cond = make_bool_var()
+        # Use ph() statements which are void
+        ops = typecheck_statement("if c { ph(0) } else { ph(0) }", {"c": cond})
+        # Should have scf.if operation
+        assert any(isinstance(op, ScfIfOp) for op in ops)
+
+    def test_if_expression_with_matching_types(self):
+        """Test if expression with matching return types."""
+        cond = make_bool_var()
+        result = typecheck_expression("if c { true } else { false }", {"c": cond})
+        assert result.type == i1
+        assert isinstance(result.owner, ScfIfOp)
+
+    def test_if_expression_without_else_is_void(self):
+        """Test if expression without else is void."""
+        cond = make_bool_var()
+        # Use ph() which is void
+        ops = typecheck_statement("if c { ph(0) }", {"c": cond})
+        # Should have scf.if with no results
+        assert any(isinstance(op, ScfIfOp) for op in ops)
+
+    def test_if_expression_without_else_with_value_is_void(self):
+        """Test if expression without else but with value is void (value discarded)."""
+        cond = make_bool_var()
+        # This should NOT raise - the value is just discarded
+        ops = typecheck_statement("if c { true }", {"c": cond})
+        # Should have scf.if with no results
+        assert any(isinstance(op, ScfIfOp) for op in ops)
+        # The scf.if should have no result types
+        scf_ops = [op for op in ops if isinstance(op, ScfIfOp)]
+        assert len(scf_ops[0].result_types) == 0
+
+    def test_if_expression_void_when_return_expected(self):
+        """Test if expression that is void when function expects return type."""
+        # If with let in else branch makes the else void
+        # The if becomes void, but function expects bool return
+        from projxdsl.frontend.parser import ProjParser
+        from projxdsl.frontend.typechecker import TypeChecker
+
+        code = """
+        pure fn test(c: bool) -> bool {
+            if c {
+                true
+            } else {
+                let x = false
+            }
+        }
+        """
+        with pytest.raises(TypeCheckError, match="Expected value, got"):
+            parser = ProjParser(code)
+            module = parser.parse_module()
+            typechecker = TypeChecker()
+            typechecker.check_module(module)
+
+    def test_if_expression_in_larger_expression(self):
+        """Test if expression as part of larger expression."""
+        cond = make_bool_var()
+        p = make_bool_var()
+        result = typecheck_expression(
+            "p && if c { true } else { false }", {"c": cond, "p": p}
+        )
+        # && on bools returns bool type (i1)
+        assert result.type == i1
+        # The && should be the outer operation (AndIOp for bools)
+        assert isinstance(result.owner, AndIOp)
+        # The right operand should be the if
+        assert isinstance(result.owner.rhs.owner, ScfIfOp)

@@ -17,6 +17,7 @@ from projxdsl.frontend.cst import (
     ExprStmt,
     FuncDef,
     IdentExpr,
+    IfExpr,
     IntLiteralExpr,
     LetStmt,
     MeasureExpr,
@@ -674,6 +675,65 @@ class TestMeasureExpression:
         result = parse_expression("measure q == |0>")
         assert isinstance(result, MeasureExpr)
         assert isinstance(result.operand, EqExpr)
+
+
+class TestIfExpression:
+    """Test parsing of classical if expressions."""
+
+    def test_if_expression_with_else(self):
+        """Test parsing if expression with else branch."""
+        result = parse_expression("if cond { true } else { false }")
+        assert isinstance(result, IfExpr)
+        assert isinstance(result.condition, IdentExpr)
+        assert result.condition.name == "cond"
+        assert len(result.true_body.statements) == 1
+        assert result.false_body is not None
+        assert len(result.false_body.statements) == 1
+
+    def test_if_expression_without_else(self):
+        """Test parsing if expression without else branch."""
+        result = parse_expression("if cond { true }")
+        assert isinstance(result, IfExpr)
+        assert isinstance(result.condition, IdentExpr)
+        assert result.condition.name == "cond"
+        assert len(result.true_body.statements) == 1
+        assert result.false_body is None
+
+    def test_if_expression_with_multiple_statements(self):
+        """Test parsing if expression with multiple statements in blocks."""
+        result = parse_expression("if c { a\nb } else { x\ny }")
+        assert isinstance(result, IfExpr)
+        assert len(result.true_body.statements) == 2
+        assert result.false_body is not None
+        assert len(result.false_body.statements) == 2
+
+    def test_if_expression_with_bool_literal_condition(self):
+        """Test parsing if expression with boolean literal condition."""
+        result = parse_expression("if true { 1 } else { 0 }")
+        assert isinstance(result, IfExpr)
+        assert isinstance(result.condition, BoolLiteralExpr)
+
+    def test_if_expression_nested(self):
+        """Test parsing nested if expressions."""
+        result = parse_expression("if a { if b { x } else { y } } else { z }")
+        assert isinstance(result, IfExpr)
+        # Inside a block, expressions are wrapped in ExprStmt
+        assert isinstance(result.true_body.statements[0], ExprStmt)
+        assert isinstance(result.true_body.statements[0].expr, IfExpr)
+
+    def test_if_expression_in_binary_op(self):
+        """Test parsing if expression as part of larger expression."""
+        result = parse_expression("x && if c { a } else { b }")
+        assert isinstance(result, BinaryProjExpr)
+        assert result.op == BinaryOpKind.AND
+        assert isinstance(result.right, IfExpr)
+
+    def test_if_expression_as_function_argument(self):
+        """Test parsing if expression as function argument."""
+        result = parse_expression("foo(if c { x } else { y })")
+        assert isinstance(result, CallExpr)
+        assert len(result.args) == 1
+        assert isinstance(result.args[0], IfExpr)
 
 
 class TestExpressionStatement:

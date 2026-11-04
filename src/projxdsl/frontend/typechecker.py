@@ -14,7 +14,10 @@ from typing import NamedTuple
 from xdsl.builder import Builder
 from xdsl.dialects.arith import AndIOp, ConstantOp, OrIOp, XOrIOp
 from xdsl.dialects.builtin import FunctionType, IntegerAttr, ModuleOp, i1
-from xdsl.ir import Attribute, BlockArgument, SSAValue, TypeAttribute
+from xdsl.dialects.scf import IfOp as ScfIfOp
+from xdsl.dialects.scf import YieldOp as ScfYieldOp
+from xdsl.ir import Attribute, BlockArgument, Region, SSAValue, TypeAttribute
+from xdsl.rewriter import InsertPoint
 from xdsl.utils.exceptions import VerifyException
 from xdsl.utils.lexer import Span
 from xdsl.utils.scoped_dict import ScopedDict
@@ -58,6 +61,7 @@ from projxdsl.frontend.cst import (
     FloatLiteralExpr,
     FuncDef,
     IdentExpr,
+    IfExpr,
     IntLiteralExpr,
     LetStmt,
     MeasureExpr,
@@ -319,18 +323,44 @@ class TypeChecker:
                 return result
 
             case NotExpr():
-                operand = self.check_expression(
-                    node.operand, ProjectionType(), ctx, builder, coerce=False
-                )
+                operand = self.infer_expression(node.operand, ctx, builder)
+                if operand is None:
+                    raise TypeCheckError(
+                        node.operand.span,
+                        "Expected value for not operand, got void",
+                    )
+                # Validate operand type
+                if operand.type != i1 and not isinstance(operand.type, ProjectionType):
+                    raise TypeCheckError(
+                        node.operand.span,
+                        f"Type mismatch: not expects bool/proj, got {operand.type}",
+                    )
                 return self._make_not_expr(operand, builder, ctx)
 
             case BinaryProjExpr():
-                left = self.check_expression(
-                    node.left, ProjectionType(), ctx, builder, coerce=False
-                )
-                right = self.check_expression(
-                    node.right, ProjectionType(), ctx, builder, coerce=False
-                )
+                left = self.infer_expression(node.left, ctx, builder)
+                right = self.infer_expression(node.right, ctx, builder)
+                if left is None:
+                    raise TypeCheckError(
+                        node.left.span,
+                        "Expected value for binary operand, got void",
+                    )
+                if right is None:
+                    raise TypeCheckError(
+                        node.right.span,
+                        "Expected value for binary operand, got void",
+                    )
+                # Validate operand types
+                if left.type != i1 and not isinstance(left.type, ProjectionType):
+                    raise TypeCheckError(
+                        node.left.span,
+                        f"Type mismatch: binary expects bool/proj, got {left.type}",
+                    )
+                if right.type != i1 and not isinstance(right.type, ProjectionType):
+                    raise TypeCheckError(
+                        node.right.span,
+                        f"Type mismatch: binary expects bool/proj, got {right.type}",
+                    )
 
                 return self._make_binary_proj(
                     left, right, node.op, builder, ctx, node.span
@@ -500,6 +530,80 @@ class TypeChecker:
                         " not yet supported",
                     )
 
+            case IfExpr():
+                # Check condition is bool
+                condition = self.check_expression(
+                    node.condition, i1, ctx, builder, context=" in if condition"
+                )
+
+                # Step 1: Make True region
+                true_result: SSAValue | None = None
+
+                @Builder.region
+                def true_region(inner_builder: Builder):
+                    nonlocal true_result
+                    true_result = self.infer_block(node.true_body, ctx, inner_builder)
+
+                # Step 2: (done above - infer true block in true region)
+
+                # Step 3: If there's a false block, make False region and infer
+                false_region: Region | None = None
+                false_result: SSAValue | None = None
+
+                if node.false_body is not None:
+                    false_body = node.false_body
+
+                    @Builder.region
+                    def _false_region(inner_builder: Builder):
+                        nonlocal false_result
+                        false_result = self.infer_block(false_body, ctx, inner_builder)
+
+                    false_region = _false_region
+
+                # Step 4: If both have results with LUB, coerce and add yields
+                if (
+                    true_result is not None
+                    and false_result is not None
+                    and (result_type := self.lub(true_result.type, false_result.type))
+                    is not None
+                ):
+                    # Coerce both to LUB and add yields
+                    true_block = true_region.blocks.last
+                    true_coerced = self.coerce_to(
+                        true_result,
+                        result_type,
+                        Builder(InsertPoint.at_end(true_block)),
+                    )
+                    true_block.add_op(ScfYieldOp(true_coerced))
+
+                    false_block = false_region.blocks.last
+                    false_coerced = self.coerce_to(
+                        false_result,
+                        result_type,
+                        Builder(InsertPoint.at_end(false_block)),
+                    )
+                    false_block.add_op(ScfYieldOp(false_coerced))
+
+                    # Step 6: Make the op with result type
+                    if_op = builder.insert(
+                        ScfIfOp(condition, [result_type], true_region, false_region)
+                    )
+                    return if_op.results[0]
+
+                # Step 5: Otherwise, add empty yields to the regions and make void op
+                else:
+                    true_block = true_region.blocks.last
+                    if true_block is not None:
+                        true_block.add_op(ScfYieldOp())
+
+                    if false_region is not None:
+                        false_block = false_region.blocks.last
+                        if false_block is not None:
+                            false_block.add_op(ScfYieldOp())
+
+                    # Step 6: Make the op (void)
+                    builder.insert(ScfIfOp(condition, [], true_region, false_region))
+
             case _:
                 raise TypeCheckError(
                     node.span,
@@ -512,75 +616,37 @@ class TypeChecker:
         expected: Attribute,
         ctx: TypingContext,
         builder: Builder,
-        coerce: bool = True,
         context: str = "expression",
     ) -> SSAValue:
         """
         Check that an expression has the expected type.
 
-        This is the "checking" direction of bidirectional typechecking.
-        Infers the type and coerces if necessary.
+        Infers the type, validates it matches expected, and coerces if needed.
 
         Args:
             node: CST expression node
             expected: Expected type attribute
             ctx: Typing context with variables and borrows
             builder: Builder for inserting operations
-            coerce: If True (default), insert coercion. If False, only validate
-                    and return the original SSA value (useful for borrow analysis).
             context: Context string for error messages (default: "expression")
 
         Returns:
-            SSA value (coerced if coerce=True, original otherwise)
+            SSA value (coerced to expected type)
 
         Raises:
             TypeCheckError: If the expression is void or doesn't match the expected type
         """
-        # Special handling for binary proj expressions
-        if isinstance(node, BinaryProjExpr):
-            # Validate: expected type must be ≥ proj (i.e., proj ≤ expected)
-            self.check_subtype(
-                ProjectionType(), expected, node.span, f"'{node.op.value}' expression"
+        # Infer expression naturally
+        result = self.infer_expression(node, ctx, builder)
+        if result is None:
+            raise TypeCheckError(
+                node.span,
+                f"Expected value, got '()'{context}",
             )
 
-            # Check operands without coercion
-            left = self.check_expression(
-                node.left, expected, ctx, builder, coerce=False, context=context
-            )
-            right = self.check_expression(
-                node.right, expected, ctx, builder, coerce=False, context=context
-            )
-
-            result = self._make_binary_proj(
-                left, right, node.op, builder, ctx, node.span
-            )
-
-        # Special handling for not expressions
-        elif isinstance(node, NotExpr):
-            # Validate: expected type must be ≥ proj (i.e., proj ≤ expected)
-            self.check_subtype(ProjectionType(), expected, node.span, "not expression")
-
-            # Check operand without coercion (for analysis)
-            operand = self.check_expression(
-                node.operand, expected, ctx, builder, coerce=False, context=context
-            )
-
-            result = self._make_not_expr(operand, builder, ctx)
-
-        # Default: infer expression
-        else:
-            result = self.infer_expression(node, ctx, builder)
-            if result is None:
-                raise TypeCheckError(
-                    node.span,
-                    f"Expected value, got '()'{context}",
-                )
-
-        # Coerce result if needed
+        # Validate and coerce to expected type
         self.check_subtype(result.type, expected, node.span, context)
-        if coerce:
-            return self.coerce_to(result, expected, builder)
-        return result
+        return self.coerce_to(result, expected, builder)
 
     def infer_statement(
         self,
@@ -1060,3 +1126,28 @@ class TypeChecker:
         assert value.type == i1, f"Can only coerce from i1, got {value.type}"
         assert expected == ProjectionType(), f"Can only coerce to proj, got {expected}"
         return builder.insert(FromBoolOp(value)).result
+
+    def lub(
+        self,
+        type1: Attribute,
+        type2: Attribute,
+    ) -> Attribute | None:
+        """
+        Compute the Least Upper Bound of two types in the subtyping lattice.
+
+        Type lattice:
+        - bool (i1) ≤ proj
+        - angle, qubit are incomparable with bool/proj
+
+        Returns:
+            The LUB of the two types, or None if they have no common upper bound
+        """
+        # Same type - LUB is the type itself
+        if type1 == type2:
+            return type1
+
+        # bool (i1) and proj - LUB is proj
+        if type1 == i1 and isinstance(type2, ProjectionType):
+            return type2
+        if isinstance(type1, ProjectionType) and type2 == i1:
+            return type1
