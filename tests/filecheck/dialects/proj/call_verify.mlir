@@ -106,7 +106,7 @@
   "proj.pure"() <{sym_name = "pure_caller", function_type = () -> ()}> ({
   ^bb0():
     "proj.call"() <{callee = @mixed_func}> : () -> ()
-    // CHECK: Cannot call proj.mixed function from proj.pure function
+    // CHECK: Cannot call mixed function from pure function
     "proj.return"() : () -> ()
   }) : () -> ()
 }) : () -> ()
@@ -122,7 +122,7 @@
   "proj.pure"() <{sym_name = "pure_caller", function_type = () -> ()}> ({
   ^bb0():
     "proj.call"() <{callee = @unitary_func}> : () -> ()
-    // CHECK: Cannot call proj.unitary function from proj.pure function
+    // CHECK: Cannot call unitary function from pure function
     "proj.return"() : () -> ()
   }) : () -> ()
 }) : () -> ()
@@ -138,7 +138,7 @@
   "proj.unitary"() <{sym_name = "unitary_caller", function_type = () -> ()}> ({
   ^bb0():
     "proj.call"() <{callee = @mixed_func}> : () -> ()
-    // CHECK: Cannot call proj.mixed function from proj.unitary function
+    // CHECK: Cannot call mixed function from unitary function
     "proj.return"() : () -> ()
   }) : () -> ()
 }) : () -> ()

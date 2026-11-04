@@ -612,29 +612,19 @@ class CallOpSymbolUserOpInterface(SymbolUserOpInterface):
         # Check function kind compatibility
         # Hierarchy: pure ⊆ unitary ⊆ mixed
         caller_func = op.parent_op()
-        while caller_func is not None and caller_func.name not in (
-            "proj.pure",
-            "proj.unitary",
-            "proj.mixed",
-        ):
+        while caller_func is not None and not isinstance(caller_func, FuncOpBase):
             caller_func = caller_func.parent_op()
 
         if caller_func is not None:
-            callee_kind = found_callee.name
-            caller_kind = caller_func.name
+            callee_kind = found_callee.FUNC_KIND
+            caller_kind = caller_func.FUNC_KIND
 
-            # pure can only call pure
-            # unitary can call pure, unitary
-            # mixed can call pure, unitary, mixed
-            kind_hierarchy = {"proj.pure": 0, "proj.unitary": 1, "proj.mixed": 2}
-            callee_level = kind_hierarchy.get(callee_kind, -1)
-            caller_level = kind_hierarchy.get(caller_kind, -1)
-
-            if callee_level > caller_level:
+            if callee_kind > caller_kind:
                 raise VerifyException(
-                    f"Cannot call {callee_kind} function from {caller_kind} function. "
-                    f"{caller_kind} functions can only call functions of equal or "
-                    "lower privilege level."
+                    f"Cannot call {callee_kind.display_name} function from "
+                    f"{caller_kind.display_name} function. "
+                    f"{caller_kind.display_name} functions can only call functions "
+                    "of equal or lower privilege level."
                 )
 
         if len(found_callee.function_type.inputs) != len(op.arguments):
