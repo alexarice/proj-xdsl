@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import NamedTuple
+from typing import NamedTuple, overload
 
 from xdsl.builder import Builder
 from xdsl.dialects.arith import AndIOp, ConstantOp, OrIOp, XOrIOp
@@ -79,6 +79,27 @@ from projxdsl.frontend.cst import (
     TypeNode,
 )
 from projxdsl.func_kind import FuncKind
+
+
+class _NonVoid:
+    """
+    Sentinel type for bounds checking.
+
+    NonVoid indicates that an expression must have a non-void type,
+    but the specific type is unconstrained.
+
+    Lattice ordering: bool < proj < NonVoid < None
+    where None represents no constraint (top).
+    """
+
+    pass
+
+
+NON_VOID = _NonVoid()
+"""Singleton instance of NonVoid sentinel."""
+
+# Type alias for bounds in type checking
+Bounds = Attribute | _NonVoid | None
 
 
 class _UnknownBorrowSentinel:
@@ -265,33 +286,56 @@ class TypeChecker:
                     f"Expected state literal, got {node.node_name}",
                 )
 
-    def infer_expression(
+    @overload
+    def typecheck_expression(
         self,
         node: ExprNode,
         ctx: TypingContext,
         builder: Builder,
+        bound: Attribute | _NonVoid,
+    ) -> SSAValue: ...
+
+    @overload
+    def typecheck_expression(
+        self,
+        node: ExprNode,
+        ctx: TypingContext,
+        builder: Builder,
+        bound: None = ...,
+    ) -> SSAValue | None: ...
+
+    def typecheck_expression(
+        self,
+        node: ExprNode,
+        ctx: TypingContext,
+        builder: Builder,
+        bound: Bounds = None,
     ) -> SSAValue | None:
         """
-        Infer the type of an expression and return its SSA value.
-
-        This is the "synthesis" direction of bidirectional typechecking.
-        The expression determines its own type.
+        Typecheck an expression with optional bound constraint.
 
         Args:
             node: CST expression node
             ctx: Typing context with variables and borrows
             builder: Builder for inserting operations
+            bound:
+                - None: pure inference, no validation
+                - NonVoid: must be non-void, type unconstrained
+                - TypeAttribute: result.type ≤ bound
 
         Returns:
-            SSA value of the typed expression, or None for void expressions
+            SSA value at its natural type (never coerced),
+            or None if void and bound is None.
 
         Raises:
-            TypeCheckError: If type inference fails
+            TypeCheckError: If typechecking fails or bound is violated.
         """
+        result: SSAValue | None = None
+
         match node:
             case BoolLiteralExpr():
                 value = IntegerAttr(1 if node.value else 0, 1)
-                return builder.insert(ConstantOp(value)).result
+                result = builder.insert(ConstantOp(value)).result
 
             case IntLiteralExpr():
                 # Only 0 is valid as an angle; typechecker validates this
@@ -301,10 +345,10 @@ class TypeChecker:
                         f"Integer literal {node.value} is not a valid angle; "
                         "only 0 is allowed",
                     )
-                return builder.insert(ZeroOp()).result
+                result = builder.insert(ZeroOp()).result
 
             case PiExpr():
-                return builder.insert(PiOp()).result
+                result = builder.insert(PiOp()).result
 
             case IdentExpr():
                 if node.name not in ctx.variables:
@@ -312,63 +356,74 @@ class TypeChecker:
                         node.span,
                         f"Undefined variable: {node.name}",
                     )
-                return ctx.variables[node.name]
+                result = ctx.variables[node.name]
 
             case EqExpr():
-                qubit = self.check_expression(node.qubit, QubitType(), ctx, builder)
+                # Qubit must be qubit type, state must be state literal
+                qubit = self.typecheck_expression(
+                    node.qubit, ctx, builder, bound=QubitType()
+                )
                 state = self.check_state(node.state)
                 result = builder.insert(EqOp(qubit, state)).result
                 basis = state.data.get_basis()
                 ctx.borrows[result] = ProjectionBorrows({qubit: basis})
-                return result
 
             case NotExpr():
-                operand = self.infer_expression(node.operand, ctx, builder)
-                if operand is None:
+                # not produces bool/proj, so bound must be compatible
+                operand_bound = self.glb(ProjectionType(), bound)
+                if operand_bound is None:
                     raise TypeCheckError(
-                        node.operand.span,
-                        "Expected value for not operand, got void",
+                        node.span,
+                        f"not expression has type bool/proj,"
+                        f" cannot satisfy bound {bound}",
                     )
-                # Validate operand type
-                if operand.type != i1 and not isinstance(operand.type, ProjectionType):
-                    raise TypeCheckError(
-                        node.operand.span,
-                        f"Type mismatch: not expects bool/proj, got {operand.type}",
-                    )
-                return self._make_not_expr(operand, builder, ctx)
+                operand = self.typecheck_expression(
+                    node.operand, ctx, builder, bound=operand_bound
+                )
+                result = self._make_not_expr(operand, builder)
+                if result.type != i1:
+                    operand_borrows = ctx.borrows.get(operand, ProjectionBorrows())
+                    ctx.borrows[result] = operand_borrows
 
             case BinaryProjExpr():
-                left = self.infer_expression(node.left, ctx, builder)
-                right = self.infer_expression(node.right, ctx, builder)
-                if left is None:
+                # &&, ||, ^ produce bool/proj, so bound must be compatible
+                operand_bound = self.glb(ProjectionType(), bound)
+                if operand_bound is None:
                     raise TypeCheckError(
-                        node.left.span,
-                        "Expected value for binary operand, got void",
-                    )
-                if right is None:
-                    raise TypeCheckError(
-                        node.right.span,
-                        "Expected value for binary operand, got void",
-                    )
-                # Validate operand types
-                if left.type != i1 and not isinstance(left.type, ProjectionType):
-                    raise TypeCheckError(
-                        node.left.span,
-                        f"Type mismatch: binary expects bool/proj, got {left.type}",
-                    )
-                if right.type != i1 and not isinstance(right.type, ProjectionType):
-                    raise TypeCheckError(
-                        node.right.span,
-                        f"Type mismatch: binary expects bool/proj, got {right.type}",
+                        node.span,
+                        f"Binary operator expression has type bool/proj,"
+                        f" cannot satisfy bound {bound}",
                     )
 
-                return self._make_binary_proj(
-                    left, right, node.op, builder, ctx, node.span
+                left = self.typecheck_expression(
+                    node.left, ctx, builder, bound=operand_bound
+                )
+                right = self.typecheck_expression(
+                    node.right, ctx, builder, bound=operand_bound
                 )
 
+                result = self._make_binary_op(left, right, node.op, builder)
+
+                # Borrow analysis for projections
+                if isinstance(result.type, ProjectionType):
+                    left_borrows = ctx.borrows.get(left, ProjectionBorrows())
+                    right_borrows = ctx.borrows.get(right, ProjectionBorrows())
+                    conflict = left_borrows.has_conflicting_borrow(right_borrows)
+                    if conflict is not None:
+                        left_val = left_borrows.borrows.get(conflict, UNKNOWN)
+                        right_val = right_borrows.borrows.get(conflict, UNKNOWN)
+                        raise TypeCheckError(
+                            node.span,
+                            f"Cannot combine projections with conflicting borrows: "
+                            f"qubit borrowed in {left_val.name} and {right_val.name}",
+                        )
+                    ctx.borrows[result] = left_borrows.merge(right_borrows)
+
             case NegAngleExpr():
-                operand = self.check_expression(node.operand, AngleType(), ctx, builder)
-                return builder.insert(ScalarMultOp(-1.0, operand)).result
+                operand = self.typecheck_expression(
+                    node.operand, ctx, builder, bound=AngleType()
+                )
+                result = builder.insert(ScalarMultOp(-1.0, operand)).result
 
             case ScalarMultExpr():
                 # Accept both float and integer literals as scalars
@@ -383,19 +438,25 @@ class TypeChecker:
                             "Expected float or integer literal,"
                             f" got {node.scalar.node_name}",
                         )
-                angle = self.check_expression(node.angle, AngleType(), ctx, builder)
-                return builder.insert(ScalarMultOp(scalar_val, angle)).result
+                angle = self.typecheck_expression(
+                    node.angle, ctx, builder, bound=AngleType()
+                )
+                result = builder.insert(ScalarMultOp(scalar_val, angle)).result
 
             case BinaryAngleExpr():
-                left = self.check_expression(node.left, AngleType(), ctx, builder)
-                right = self.check_expression(node.right, AngleType(), ctx, builder)
+                left = self.typecheck_expression(
+                    node.left, ctx, builder, bound=AngleType()
+                )
+                right = self.typecheck_expression(
+                    node.right, ctx, builder, bound=AngleType()
+                )
 
                 match node.op:
                     case AngleOpKind.ADD:
-                        return builder.insert(AddOp(left, right)).result
+                        result = builder.insert(AddOp(left, right)).result
                     case AngleOpKind.SUB:
                         neg_right = builder.insert(ScalarMultOp(-1.0, right)).result
-                        return builder.insert(AddOp(left, neg_right)).result
+                        result = builder.insert(AddOp(left, neg_right)).result
 
             case AllocExpr():
                 if ctx.func_kind < FuncKind.MIXED:
@@ -405,7 +466,7 @@ class TypeChecker:
                         f"{ctx.func_kind.display_name} context",
                     )
                 state = self.check_state(node.state)
-                return builder.insert(AllocOp(state)).result
+                result = builder.insert(AllocOp(state)).result
 
             case MeasureExpr():
                 if ctx.func_kind < FuncKind.MIXED:
@@ -414,10 +475,12 @@ class TypeChecker:
                         f"Measure operation not allowed in "
                         f"{ctx.func_kind.display_name} context",
                     )
-                operand = self.check_expression(
-                    node.operand, ProjectionType(), ctx, builder
+                # Measure operand must be ≤ ProjectionType (bool or proj)
+                operand = self.typecheck_expression(
+                    node.operand, ctx, builder, bound=ProjectionType()
                 )
-                return builder.insert(MeasureOp(operand)).result
+                operand = self.coerce_to(operand, ProjectionType(), builder)
+                result = builder.insert(MeasureOp(operand)).result
 
             case CallExpr():
                 if node.name not in self.functions:
@@ -446,13 +509,15 @@ class TypeChecker:
                 for i, (arg, expected_type) in enumerate(
                     zip(node.args, func_sig.function_type.inputs.data, strict=True)
                 ):
-                    arg_val = self.check_expression(
+                    # Function parameter types are always TypeAttribute
+                    arg_val = self.typecheck_expression(
                         arg,
-                        expected_type,
                         ctx,
                         builder,
-                        context=f" in argument {i + 1} of function '{node.name}'",
+                        bound=expected_type,
                     )
+                    # Coerce argument to expected type if needed
+                    arg_val = self.coerce_to(arg_val, expected_type, builder)
                     arg_values.append(arg_val)
 
                 # Borrow analysis for function call
@@ -520,9 +585,9 @@ class TypeChecker:
                     ctx.borrows[call_op.res[0]] = ProjectionBorrows(result_borrows_dict)
 
                 if len(result_types) == 0:
-                    return None
+                    result = None
                 elif len(result_types) == 1:
-                    return call_op.res[0]
+                    result = call_op.res[0]
                 else:
                     raise TypeCheckError(
                         node.span,
@@ -531,36 +596,36 @@ class TypeChecker:
                     )
 
             case IfExpr():
-                # Check condition is bool
-                condition = self.check_expression(
-                    node.condition, i1, ctx, builder, context=" in if condition"
+                # Condition must be bool
+                condition = self.typecheck_expression(
+                    node.condition, ctx, builder, bound=i1
                 )
 
-                # Step 1: Make True region
+                # Typecheck branches - they may have different types, we compute LUB
                 true_result: SSAValue | None = None
+                false_result: SSAValue | None = None
 
                 @Builder.region
                 def true_region(inner_builder: Builder):
                     nonlocal true_result
-                    true_result = self.infer_block(node.true_body, ctx, inner_builder)
+                    true_result = self.typecheck_block(
+                        node.true_body, ctx, inner_builder, bound=bound
+                    )
 
-                # Step 2: (done above - infer true block in true region)
-
-                # Step 3: If there's a false block, make False region and infer
                 false_region: Region | None = None
-                false_result: SSAValue | None = None
-
                 if node.false_body is not None:
                     false_body = node.false_body
 
                     @Builder.region
                     def _false_region(inner_builder: Builder):
                         nonlocal false_result
-                        false_result = self.infer_block(false_body, ctx, inner_builder)
+                        false_result = self.typecheck_block(
+                            false_body, ctx, inner_builder, bound=bound
+                        )
 
                     false_region = _false_region
 
-                # Step 4: If both have results with LUB, coerce and add yields
+                # Compute LUB of branch types for the result
                 if (
                     true_result is not None
                     and false_result is not None
@@ -584,13 +649,12 @@ class TypeChecker:
                     )
                     false_block.add_op(ScfYieldOp(false_coerced))
 
-                    # Step 6: Make the op with result type
                     if_op = builder.insert(
                         ScfIfOp(condition, [result_type], true_region, false_region)
                     )
-                    return if_op.results[0]
+                    result = if_op.results[0]
 
-                # Step 5: Otherwise, add empty yields to the regions and make void op
+                # Void case - add empty yields
                 else:
                     true_block = true_region.blocks.last
                     if true_block is not None:
@@ -601,52 +665,133 @@ class TypeChecker:
                         if false_block is not None:
                             false_block.add_op(ScfYieldOp())
 
-                    # Step 6: Make the op (void)
                     builder.insert(ScfIfOp(condition, [], true_region, false_region))
+                    result = None
 
             case _:
                 raise TypeCheckError(
                     node.span,
-                    f"Cannot infer type for expression: {node.node_name}",
+                    f"Cannot typecheck expression: {node.node_name}",
                 )
 
-    def check_expression(
+        # Validate result against bound
+        self.check_bound(result, bound, node.span)
+        return result
+
+    def typecheck_statement(
         self,
-        node: ExprNode,
-        expected: Attribute,
+        node: StmtNode,
         ctx: TypingContext,
         builder: Builder,
-        context: str = "expression",
-    ) -> SSAValue:
+        bound: Bounds = None,
+    ) -> SSAValue | None:
         """
-        Check that an expression has the expected type.
+        Typecheck a statement with optional bound constraint.
 
-        Infers the type, validates it matches expected, and coerces if needed.
+        Statements are typically void (let, ph, qif), but expression statements
+        without semicolons return their value (used as block results).
 
         Args:
-            node: CST expression node
-            expected: Expected type attribute
+            node: CST statement node
             ctx: Typing context with variables and borrows
             builder: Builder for inserting operations
-            context: Context string for error messages (default: "expression")
+            bound:
+                - None: pure inference, no validation
+                - NonVoid: must be non-void, type unconstrained
+                - TypeAttribute: result.type ≤ bound
 
         Returns:
-            SSA value (coerced to expected type)
+            SSA value if the statement produces one (expression without semicolon),
+            None for void statements
 
         Raises:
-            TypeCheckError: If the expression is void or doesn't match the expected type
+            TypeCheckError: If typechecking fails or bound is violated
         """
-        # Infer expression naturally
-        result = self.infer_expression(node, ctx, builder)
-        if result is None:
-            raise TypeCheckError(
-                node.span,
-                f"Expected value, got '()'{context}",
-            )
+        match node:
+            case LetStmt():
+                # Let bindings must have a value (non-void)
+                if node.type_ann:
+                    expected = self.check_type(node.type_ann)
+                    value = self.typecheck_expression(
+                        node.value, ctx, builder, bound=expected
+                    )
+                else:
+                    value = self.typecheck_expression(
+                        node.value, ctx, builder, bound=NON_VOID
+                    )
+                if node.name in ctx.variables.local_scope:
+                    raise TypeCheckError(
+                        node.span,
+                        f"Variable '{node.name}' is already defined",
+                    )
+                value.name_hint = node.name
+                ctx.variables[node.name] = value
 
-        # Validate and coerce to expected type
-        self.check_subtype(result.type, expected, node.span, context)
-        return self.coerce_to(result, expected, builder)
+            case PhaseStmt():
+                if ctx.func_kind < FuncKind.UNITARY:
+                    raise TypeCheckError(
+                        node.span,
+                        f"Phase operation not allowed in "
+                        f"{ctx.func_kind.display_name} context",
+                    )
+                angle = self.typecheck_expression(
+                    node.angle, ctx, builder, bound=AngleType()
+                )
+                builder.insert(PhaseOp(angle))
+
+            case QifStmt():
+                if ctx.func_kind < FuncKind.UNITARY:
+                    raise TypeCheckError(
+                        node.span,
+                        f"Qif operation not allowed in "
+                        f"{ctx.func_kind.display_name} context",
+                    )
+                condition = self.typecheck_expression(
+                    node.condition, ctx, builder, bound=ProjectionType()
+                )
+                condition_borrows = ctx.borrows.get(condition, ProjectionBorrows())
+                conflict = ctx.active_borrows.has_conflicting_borrow(condition_borrows)
+                if conflict is not None:
+                    raise TypeCheckError(
+                        node.condition.span,
+                        "Qif condition borrows qubit already borrowed by outer qif",
+                    )
+                merged_borrows = ctx.active_borrows.merge(condition_borrows)
+
+                @Builder.region
+                def true_region(inner_builder: Builder):
+                    self.typecheck_block(
+                        node.true_body,
+                        ctx.new_scope(FuncKind.UNITARY, merged_borrows),
+                        inner_builder,
+                        bound=None,
+                    )
+
+                false_region = None
+                if node.false_body is not None:
+                    false_body = node.false_body
+
+                    @Builder.region
+                    def _false_region(inner_builder: Builder):
+                        self.typecheck_block(
+                            false_body,
+                            ctx.new_scope(FuncKind.UNITARY, merged_borrows),
+                            inner_builder,
+                            bound=None,
+                        )
+
+                    false_region = _false_region
+
+                builder.insert(IfOp(condition, true_region, false_region))
+
+            case ExprStmt():
+                return self.typecheck_expression(node.expr, ctx, builder, bound=bound)
+
+            case _:
+                raise TypeCheckError(
+                    node.span,
+                    f"Unknown statement type: {node.node_name}",
+                )
 
     def infer_statement(
         self,
@@ -655,7 +800,7 @@ class TypeChecker:
         builder: Builder,
     ) -> SSAValue | None:
         """
-        Infer the type of a statement and return its SSA value (if any).
+        Infer the type of a statement (legacy wrapper).
 
         Statements are typically void (let, ph, qif), but expression statements
         without semicolons return their value (used as block results).
@@ -672,123 +817,51 @@ class TypeChecker:
         Raises:
             TypeCheckError: If type inference fails
         """
-        match node:
-            case LetStmt():
-                if node.type_ann:
-                    expected = self.check_type(node.type_ann)
-                    value = self.check_expression(node.value, expected, ctx, builder)
-                else:
-                    value = self.infer_expression(node.value, ctx, builder)
-                    if value is None:
-                        raise TypeCheckError(
-                            node.span, f"Cannot bind void to variable {node.name}"
-                        )
-                if node.name in ctx.variables.local_scope:
-                    raise TypeCheckError(
-                        node.span,
-                        f"Variable '{node.name}' is already defined",
-                    )
-                value.name_hint = node.name
-                ctx.variables[node.name] = value
+        return self.typecheck_statement(node, ctx, builder, bound=None)
 
-            case PhaseStmt():
-                if ctx.func_kind < FuncKind.UNITARY:
-                    raise TypeCheckError(
-                        node.span,
-                        f"Phase operation not allowed in "
-                        f"{ctx.func_kind.display_name} context",
-                    )
-                angle = self.check_expression(node.angle, AngleType(), ctx, builder)
-                builder.insert(PhaseOp(angle))
-
-            case QifStmt():
-                if ctx.func_kind < FuncKind.UNITARY:
-                    raise TypeCheckError(
-                        node.span,
-                        f"Qif operation not allowed in "
-                        f"{ctx.func_kind.display_name} context",
-                    )
-                condition = self.check_expression(
-                    node.condition, ProjectionType(), ctx, builder
-                )
-                condition_borrows = ctx.borrows.get(condition, ProjectionBorrows())
-                conflict = ctx.active_borrows.has_conflicting_borrow(condition_borrows)
-                if conflict is not None:
-                    raise TypeCheckError(
-                        node.condition.span,
-                        "Qif condition borrows qubit already borrowed by outer qif",
-                    )
-                merged_borrows = ctx.active_borrows.merge(condition_borrows)
-
-                @Builder.region
-                def true_region(inner_builder: Builder):
-                    self.infer_block(
-                        node.true_body,
-                        ctx.new_scope(FuncKind.UNITARY, merged_borrows),
-                        inner_builder,
-                    )
-
-                false_region = None
-                if node.false_body is not None:
-                    false_body = node.false_body
-
-                    @Builder.region
-                    def _false_region(inner_builder: Builder):
-                        self.infer_block(
-                            false_body,
-                            ctx.new_scope(FuncKind.UNITARY, merged_borrows),
-                            inner_builder,
-                        )
-
-                    false_region = _false_region
-
-                builder.insert(IfOp(condition, true_region, false_region))
-
-            case ExprStmt():
-                return self.infer_expression(node.expr, ctx, builder)
-
-            case _:
-                raise TypeCheckError(
-                    node.span,
-                    f"Unknown statement type: {node.node_name}",
-                )
-
-    def check_statement(
+    def typecheck_block(
         self,
-        node: StmtNode,
+        node: BlockNode,
         ctx: TypingContext,
         builder: Builder,
-        expected: Attribute,
-    ) -> SSAValue:
+        bound: Bounds = None,
+    ) -> SSAValue | None:
         """
-        Check a statement and return its value.
+        Typecheck a block of statements with optional bound constraint.
 
-        This is the "checking" direction - errors if the statement is void.
-        Used for expression statements in block-final position.
+        Intermediate statements can have values (discarded).
+        The last statement determines the block's result.
 
         Args:
-            node: CST statement node
+            node: CST block node
             ctx: Typing context with variables and borrows
             builder: Builder for inserting operations
-            expected: Expected type
+            bound:
+                - None: pure inference, no validation
+                - NonVoid: must be non-void, type unconstrained
+                - TypeAttribute: result.type ≤ bound
 
         Returns:
-            SSA value of the statement
+            SSA value of the final expression (if any), None if block is void
 
         Raises:
-            TypeCheckError: If checking fails, statement is void, or type mismatch
+            TypeCheckError: If typechecking fails or bound is violated
         """
-        if isinstance(node, ExprStmt):
-            return self.check_expression(node.expr, expected, ctx, builder)
+        if not node.statements:
+            if bound is not None:
+                if bound is NON_VOID:
+                    raise TypeCheckError(
+                        node.span,
+                        "Expected block with value, got '()'",
+                    )
+            return None
 
-        result = self.infer_statement(node, ctx, builder)
-        if result is None:
-            raise TypeCheckError(
-                node.span,
-                "Expected statement with value, got void",
-            )
-        self.check_subtype(result.type, expected, node.span, "statement")
-        return self.coerce_to(result, expected, builder)
+        # Intermediate statements: typecheck and discard values
+        for stmt in node.statements[:-1]:
+            self.typecheck_statement(stmt, ctx, builder, bound=None)
+
+        # Last statement determines block result
+        return self.typecheck_statement(node.statements[-1], ctx, builder, bound=bound)
 
     def infer_block(
         self,
@@ -797,7 +870,7 @@ class TypeChecker:
         builder: Builder,
     ) -> SSAValue | None:
         """
-        Infer the type of a block of statements.
+        Infer the type of a block of statements (legacy wrapper).
 
         Intermediate statements can have values (discarded).
         The last statement determines the block's result.
@@ -813,53 +886,7 @@ class TypeChecker:
         Raises:
             TypeCheckError: If type inference fails
         """
-        if not node.statements:
-            return None
-
-        # Intermediate statements: infer and discard values
-        for stmt in node.statements[:-1]:
-            self.infer_statement(stmt, ctx, builder)
-
-        # Last statement determines block result
-        return self.infer_statement(node.statements[-1], ctx, builder)
-
-    def check_block(
-        self,
-        node: BlockNode,
-        ctx: TypingContext,
-        builder: Builder,
-        expected: Attribute,
-    ) -> SSAValue:
-        """
-        Check a block of statements and return its value.
-
-        Intermediate statements can have values (discarded).
-        The last statement is checked against the expected type.
-
-        Args:
-            node: CST block node
-            ctx: Typing context with variables and borrows
-            builder: Builder for inserting operations
-            expected: Expected type for the block result
-
-        Returns:
-            SSA value of the block result (possibly coerced)
-
-        Raises:
-            TypeCheckError: If checking fails, block is void, or type mismatch
-        """
-        if not node.statements:
-            raise TypeCheckError(
-                node.span,
-                "Expected block with value, got void",
-            )
-
-        # Intermediate statements: infer and discard values
-        for stmt in node.statements[:-1]:
-            self.infer_statement(stmt, ctx, builder)
-
-        # Check last statement against expected type
-        return self.check_statement(node.statements[-1], ctx, builder, expected)
+        return self.typecheck_block(node, ctx, builder, bound=None)
 
     def check_func_def(self, node: FuncDef) -> PureOp | UnitaryOp | MixedOp:
         """
@@ -915,11 +942,21 @@ class TypeChecker:
                 block_arg.name_hint = param_name
                 ctx.variables[param_name] = block_arg
 
-            # Check function body using infer_block or check_block
+            # Check function body
             if return_types:
-                # Function has return type - check block against expected type
-                final_result = self.check_block(
-                    node.body, ctx, inner_builder, return_types[0]
+                # Function has return type - check block against return type
+                final_result = self.typecheck_block(
+                    node.body, ctx, inner_builder, bound=return_types[0]
+                )
+                if final_result is None:
+                    raise TypeCheckError(
+                        node.body.span,
+                        "Function body must return a value",
+                    )
+
+                # Coerce result to return type if needed
+                final_result = self.coerce_to(
+                    final_result, return_types[0], inner_builder
                 )
 
                 # Check that returned projection doesn't borrow locally allocated qubits
@@ -935,8 +972,8 @@ class TypeChecker:
 
                 inner_builder.insert(ReturnOp(final_result))
             else:
-                # Void function - infer block (result discarded)
-                self.infer_block(node.body, ctx, inner_builder)
+                # Void function - typecheck block (result discarded)
+                self.typecheck_block(node.body, ctx, inner_builder, bound=None)
                 inner_builder.insert(ReturnOp())
 
         # Create the function operation
@@ -981,48 +1018,87 @@ class TypeChecker:
         # Create the module operation with all functions
         return ModuleOp(func_ops)
 
-    def check_subtype(
-        self, sub: Attribute, sup: Attribute, span: Span, context: str
+    @staticmethod
+    def _display_bound(bound: Bounds) -> str:
+        if bound is NON_VOID:
+            return "value"
+        if bound == ProjectionType():
+            return "proj"
+        if bound == QubitType():
+            return "qubit"
+        if bound == i1:
+            return "bool"
+
+        return str(bound)
+
+    def check_bound(
+        self,
+        result: SSAValue | None,
+        bound: Bounds,
+        span: Span,
     ) -> None:
         """
-        Check that sub ≤ sup in the subtyping lattice, raising an error if not.
+        Check that a result value satisfies a bound constraint, raising an error if not.
 
-        Subtyping relation: bool (i1) ≤ proj
+        Lattice ordering: bool < proj < NonVoid < None
 
         Args:
-            sub: The subtype to check
-            sup: The supertype to check against
+            result: The SSA value to check (or None for void)
+            bound: The bound to check against
+                - None: always satisfied (no constraint)
+                - NonVoid: requires non-void result
+                - TypeAttribute: result.type must be ≤ bound
             span: Source span for error reporting
-            context: Description of the context for error messages
+            context: Optional context description for error messages
 
         Raises:
-            TypeCheckError: If sub is not a subtype of sup
+            TypeCheckError: If the result does not satisfy the bound
         """
+        # None bound is top - always satisfied
+        if bound is None:
+            return
+
+        # Void result can only satisfy None bound
+        if result is None:
+            raise TypeCheckError(
+                span, f"Type mismatch: expected {self._display_bound(bound)}, got '()'"
+            )
+
+        # NonVoid - satisfied by all non-void types (all our types are non-void)
+        if bound is NON_VOID:
+            return
+
+        # Concrete type bound - check subtyping
         # Reflexivity
-        if sub == sup:
+        if result.type == bound:
             return
         # bool (i1) ≤ proj
-        if sub == i1 and isinstance(sup, ProjectionType):
+        if result.type == i1 and isinstance(bound, ProjectionType):
             return
-        raise TypeCheckError(span, f"Type mismatch: expected {sup}, got {sub}{context}")
+        raise TypeCheckError(
+            span,
+            f"Type mismatch: expected {self._display_bound(bound)}, "
+            f"got {self._display_bound(result.type)}",
+        )
 
-    def _make_binary_proj(
+    def _make_binary_op(
         self,
         left: SSAValue,
         right: SSAValue,
         op: BinaryOpKind,
         builder: Builder,
-        ctx: TypingContext,
-        span: Span,
     ) -> SSAValue:
         """
-        Create a binary projection/boolean operation.
+        Create a binary boolean/projection operation.
+
+        Handles type coercion: if one operand is bool and the other is proj,
+        the bool is coerced to proj.
 
         Performs borrow analysis for projections.
 
         Args:
-            left: Left operand (must have same type as right)
-            right: Right operand
+            left: Left operand (bool or proj)
+            right: Right operand (bool or proj)
             op: Binary operator kind
             builder: Builder for inserting operations
             ctx: Typing context for borrow analysis
@@ -1050,28 +1126,12 @@ class TypeChecker:
             case BinaryOpKind.XOR:
                 result = builder.insert(XorOp(left, right)).result
 
-        # Borrow analysis for projections
-        if isinstance(left.type, ProjectionType):
-            left_borrows = ctx.borrows.get(left, ProjectionBorrows())
-            right_borrows = ctx.borrows.get(right, ProjectionBorrows())
-            conflict = left_borrows.has_conflicting_borrow(right_borrows)
-            if conflict is not None:
-                left_val = left_borrows.borrows.get(conflict, UNKNOWN)
-                right_val = right_borrows.borrows.get(conflict, UNKNOWN)
-                raise TypeCheckError(
-                    span,
-                    f"Cannot combine projections with conflicting borrows: "
-                    f"qubit borrowed in {left_val.name} and {right_val.name}",
-                )
-            ctx.borrows[result] = left_borrows.merge(right_borrows)
-
         return result
 
     def _make_not_expr(
         self,
         operand: SSAValue,
         builder: Builder,
-        ctx: TypingContext,
     ) -> SSAValue:
         """
         Create a negation operation.
@@ -1082,17 +1142,17 @@ class TypeChecker:
             operand: Operand to negate
             builder: Builder for inserting operations
             ctx: Typing context for borrow propagation
+            bound: Optional bound to validate result against
 
         Returns:
-            Result SSA value
+            Result SSA value at its natural type (same as operand)
         """
         if operand.type == i1:
             one = builder.insert(ConstantOp(IntegerAttr(1, 1))).result
-            return builder.insert(XOrIOp(operand, one)).result
+            result = builder.insert(XOrIOp(operand, one)).result
+        else:
+            result = builder.insert(NotOp(operand)).result
 
-        result = builder.insert(NotOp(operand)).result
-        operand_borrows = ctx.borrows.get(operand, ProjectionBorrows())
-        ctx.borrows[result] = operand_borrows
         return result
 
     def coerce_to(
@@ -1127,11 +1187,53 @@ class TypeChecker:
         assert expected == ProjectionType(), f"Can only coerce to proj, got {expected}"
         return builder.insert(FromBoolOp(value)).result
 
+    def glb(
+        self,
+        a: Bounds,
+        b: Bounds,
+    ) -> Bounds:
+        """
+        Compute the Greatest Lower Bound of two bounds in the constraint lattice.
+
+        Lattice ordering: bool < proj < NonVoid < None
+        where None is top (no constraint).
+
+        GLB represents the tightest constraint that satisfies both inputs.
+
+        Returns:
+            The GLB of the two bounds, or None if they are incompatible.
+        """
+        # None is top - GLB with top is the other operand
+        if a is None:
+            return b
+        if b is None:
+            return a
+
+        # NonVoid is below None, above concrete types
+        if a is NON_VOID:
+            return b
+        if b is NON_VOID:
+            return a
+
+        # Both are concrete types
+        # Same type - GLB is the type itself
+        if a == b:
+            return a
+
+        # bool (i1) ≤ proj, so GLB(bool, proj) = bool
+        if a == i1 and isinstance(b, ProjectionType):
+            return a
+        if b == i1 and isinstance(a, ProjectionType):
+            return b
+
+        # Incomparable types (e.g., angle vs proj, bool vs angle)
+        return None
+
     def lub(
         self,
-        type1: Attribute,
-        type2: Attribute,
-    ) -> Attribute | None:
+        lhs: TypeAttribute,
+        rhs: TypeAttribute,
+    ) -> TypeAttribute | None:
         """
         Compute the Least Upper Bound of two types in the subtyping lattice.
 
@@ -1140,14 +1242,17 @@ class TypeChecker:
         - angle, qubit are incomparable with bool/proj
 
         Returns:
-            The LUB of the two types, or None if they have no common upper bound
+            The LUB of the two types, or None if they have no common upper bound.
         """
         # Same type - LUB is the type itself
-        if type1 == type2:
-            return type1
+        if lhs == rhs:
+            return lhs
 
         # bool (i1) and proj - LUB is proj
-        if type1 == i1 and isinstance(type2, ProjectionType):
-            return type2
-        if isinstance(type1, ProjectionType) and type2 == i1:
-            return type1
+        if lhs == i1 and isinstance(rhs, ProjectionType):
+            return rhs
+        if isinstance(lhs, ProjectionType) and rhs == i1:
+            return lhs
+
+        # Incomparable types (e.g., angle vs proj, bool vs angle)
+        return None

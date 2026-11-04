@@ -1,6 +1,5 @@
 // RUN: xdsl-opt %s --verify-diagnostics --split-input-file | filecheck %s
 
-// -----
 // Test: Undefined function
 // CHECK: Undefined function: nonexistent
 pure fn caller(q: qubit) -> proj {
@@ -56,7 +55,7 @@ pure fn caller(q: qubit) -> proj {
 
 // -----
 // Test: Type mismatch (proj instead of bool)
-// CHECK: Type mismatch: expected i1, got !proj.projection in argument 1 of function 'expects_bool'
+// CHECK: Type mismatch: expected bool, got proj
 pure fn expects_bool(b: bool) -> bool { b }
 pure fn caller(q: qubit) -> bool {
     let p = q == |0>
@@ -65,7 +64,7 @@ pure fn caller(q: qubit) -> bool {
 
 // -----
 // Test: Type mismatch (qubit instead of proj)
-// CHECK: Type mismatch: expected !proj.projection, got !proj.qubit in argument 1 of function 'expects_proj'
+// CHECK: Type mismatch: expected proj, got qubit
 pure fn expects_proj(p: proj) -> proj { p }
 pure fn caller(q: qubit) -> proj {
     expects_proj(q)
@@ -73,7 +72,7 @@ pure fn caller(q: qubit) -> proj {
 
 // -----
 // Test: Void expression as argument
-// CHECK: Expected value, got '()' in argument 1 of function 'expects_arg'
+// CHECK: Type mismatch: expected proj, got '()'
 pure fn void_fn() { }
 pure fn expects_arg(p: proj) -> proj { p }
 pure fn caller(q: qubit) -> proj {
@@ -83,7 +82,7 @@ pure fn caller(q: qubit) -> proj {
 
 // -----
 // Test: Multiple void arguments (first is void)
-// CHECK: Expected value, got '()' in argument 1 of function 'expects_two'
+// CHECK: Type mismatch: expected proj, got '()'
 pure fn void_fn() { }
 pure fn expects_two(p1: proj, p2: proj) -> proj { p1 && p2 }
 pure fn caller(q: qubit) -> proj {
@@ -93,7 +92,7 @@ pure fn caller(q: qubit) -> proj {
 
 // -----
 // Test: Void expression in middle of argument list
-// CHECK: Expected value, got '()' in argument 2 of function 'expects_three'
+// CHECK: Type mismatch: expected proj, got '()'
 pure fn void_fn() { }
 pure fn expects_three(p1: proj, p2: proj, p3: proj) -> proj { p1 && p2 && p3 }
 pure fn caller(q: qubit) -> proj {

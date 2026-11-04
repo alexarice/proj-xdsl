@@ -1,5 +1,7 @@
 """Tests for the proj-xdsl typechecker."""
 
+import re
+
 import pytest
 from xdsl.builder import Builder
 from xdsl.dialects.arith import AndIOp, ConstantOp, OrIOp, XOrIOp
@@ -77,7 +79,7 @@ def typecheck_expression(
         borrows=ScopedDict[SSAValue, ProjectionBorrows](local_scope={}),
     )
     typechecker = TypeChecker()
-    result = typechecker.infer_expression(expr, ctx, builder)
+    result = typechecker.typecheck_expression(expr, ctx, builder, bound=None)
     assert result is not None, "typecheck_expression returned None in test"
     return result
 
@@ -104,7 +106,7 @@ def typecheck_statement(
         borrows=ScopedDict[SSAValue, ProjectionBorrows](local_scope={}),
     )
     typechecker = TypeChecker()
-    typechecker.infer_statement(stmt, ctx, builder)
+    typechecker.typecheck_statement(stmt, ctx, builder, bound=None)
     return list(block.ops)
 
 
@@ -255,7 +257,7 @@ class TestOrOperator:
         assert result.type == ProjectionType()
 
     def test_or_mixed_bool_projection(self):
-        """Test typechecking p || q where p is boolean and q is projection."""
+        """Test typechecking p || q where p is bool and q is projection."""
         p = make_bool_var()
         q = make_qubit_var()
         result = typecheck_expression("p || (q == |0>)", {"p": p, "q": q})
@@ -294,7 +296,7 @@ class TestXorOperator:
         assert result.type == ProjectionType()
 
     def test_xor_mixed_bool_projection(self):
-        """Test typechecking p ^ q where p is boolean and q is projection."""
+        """Test typechecking p ^ q where p is bool and q is projection."""
         p = make_bool_var()
         q = make_qubit_var()
         result = typecheck_expression("p ^ (q == |0>)", {"p": p, "q": q})
@@ -674,7 +676,7 @@ class TestLetStatement:
             borrows=ScopedDict[SSAValue, ProjectionBorrows](local_scope={}),
         )
         typechecker = TypeChecker()
-        typechecker.infer_statement(stmt, ctx, builder)
+        typechecker.typecheck_statement(stmt, ctx, builder, bound=None)
 
         ops = list(block.ops)
         assert len(ops) == 1  # AllocOp inserted
@@ -706,7 +708,7 @@ class TestFuncParsing:
 
         typechecker = TypeChecker()
 
-        with pytest.raises(TypeCheckError, match="Expected statement with value"):
+        with pytest.raises(TypeCheckError, match="Function body must return a value"):
             typechecker.check_func_def(func_def)
 
     def test_module_function_signatures(self):
@@ -925,7 +927,9 @@ class TestIfExpression:
             }
         }
         """
-        with pytest.raises(TypeCheckError, match="Expected value, got"):
+        with pytest.raises(
+            TypeCheckError, match=re.escape("Type mismatch: expected bool, got '()'")
+        ):
             parser = ProjParser(code)
             module = parser.parse_module()
             typechecker = TypeChecker()
