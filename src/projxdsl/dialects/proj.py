@@ -458,14 +458,14 @@ class MeasureOp(IRDLOperation):
 
 
 @irdl_op_definition
-class IfOp(IRDLOperation):
+class QifOp(IRDLOperation):
     """
-    Conditional operation for projections.
+    Quantum if operation for projections.
     Executes the true region if the condition projection is true.
     Only allowed in unitary and mixed functions.
     """
 
-    name = "proj.if"
+    name = "proj.qif"
 
     condition = operand_def(ProjectionType)
     true_region = region_def("single_block")
@@ -488,7 +488,7 @@ class IfOp(IRDLOperation):
         )
 
     @classmethod
-    def parse(cls, parser: Parser) -> IfOp:
+    def parse(cls, parser: Parser) -> QifOp:
         condition = parser.parse_operand(ProjectionType())
         true_region = parser.parse_region()
         # Ensure true_region has at least one block
@@ -708,7 +708,7 @@ Proj = Dialect(
         EqOp,
         MeasureOp,
         PhaseOp,
-        IfOp,
+        QifOp,
         ReturnOp,
         CallOp,
         PureOp,

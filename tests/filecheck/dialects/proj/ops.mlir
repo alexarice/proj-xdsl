@@ -53,32 +53,32 @@ func.func @test_eq_plus(%arg0: !proj.qubit) -> !proj.projection {
 %angle = angle.zero
 proj.phase %angle
 
-// Test proj.if with true region
+// Test proj.qif with true region
 func.func @test_if(%arg0: !proj.projection) {
-  // CHECK: proj.if %arg0 {
+  // CHECK: proj.qif %arg0 {
   // CHECK-NEXT:   ^bb0:
   // CHECK-NEXT:   }
-  // CHECK-GENERIC: "proj.if"(%[[ARG0:.*]]) ({
+  // CHECK-GENERIC: "proj.qif"(%[[ARG0:.*]]) ({
   // CHECK-GENERIC-NEXT:   ^bb0:
   // CHECK-GENERIC-NEXT:   }) : (!proj.projection) -> ()
-  proj.if %arg0 {
+  proj.qif %arg0 {
   }
   func.return
 }
 
-// Test proj.if with else region
+// Test proj.qif with else region
 func.func @test_if_else(%arg0: !proj.projection) {
-  // CHECK: proj.if %arg0 {
+  // CHECK: proj.qif %arg0 {
   // CHECK-NEXT:   ^bb0:
   // CHECK-NEXT:   } else {
   // CHECK-NEXT:   ^bb0:
   // CHECK-NEXT:   }
-  // CHECK-GENERIC: "proj.if"(%[[ARG0:.*]]) ({
+  // CHECK-GENERIC: "proj.qif"(%[[ARG0:.*]]) ({
   // CHECK-GENERIC-NEXT:   ^bb0:
   // CHECK-GENERIC-NEXT:   }, {
   // CHECK-GENERIC-NEXT:   ^bb0:
   // CHECK-GENERIC-NEXT:   }) : (!proj.projection) -> ()
-  proj.if %arg0 {
+  proj.qif %arg0 {
   } else {
   }
   func.return
@@ -175,28 +175,28 @@ proj.mixed @phase_mixed() {
   proj.return
 }
 
-// Test proj.if in unitary function
+// Test proj.qif in unitary function
 // CHECK: proj.unitary @if_unitary(%arg: !proj.projection) {
-// CHECK-NEXT:   proj.if %arg {
+// CHECK-NEXT:   proj.qif %arg {
 // CHECK-NEXT:   ^bb0:
 // CHECK-NEXT:   }
 // CHECK-NEXT:   proj.return
 // CHECK-NEXT: }
 proj.unitary @if_unitary(%arg: !proj.projection) {
-  proj.if %arg {
+  proj.qif %arg {
   }
   proj.return
 }
 
-// Test proj.if in mixed function
+// Test proj.qif in mixed function
 // CHECK: proj.mixed @if_mixed(%arg: !proj.projection) {
-// CHECK-NEXT:   proj.if %arg {
+// CHECK-NEXT:   proj.qif %arg {
 // CHECK-NEXT:   ^bb0:
 // CHECK-NEXT:   }
 // CHECK-NEXT:   proj.return
 // CHECK-NEXT: }
 proj.mixed @if_mixed(%arg: !proj.projection) {
-  proj.if %arg {
+  proj.qif %arg {
   }
   proj.return
 }

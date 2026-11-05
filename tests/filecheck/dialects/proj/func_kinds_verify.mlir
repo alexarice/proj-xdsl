@@ -49,13 +49,13 @@
   ^bb0():
     %0 = "arith.constant"() <{value = 1 : i1}> : () -> i1
     %1 = "proj.from_bool"(%0) : (i1) -> !proj.projection
-    "proj.if"(%1) ({
+    "proj.qif"(%1) ({
       ^bb0:
     }, {
       ^bb0:
     }) : (!proj.projection) -> ()
     "proj.return"() : () -> ()
-  // CHECK: Operation 'proj.if' is not allowed in pure contexts. Context must be at least unitary
+  // CHECK: Operation 'proj.qif' is not allowed in pure contexts. Context must be at least unitary
 }) : () -> ()
 
 // -----

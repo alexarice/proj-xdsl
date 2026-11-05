@@ -18,12 +18,12 @@ from projxdsl.dialects.proj import (
     AndOp,
     EqOp,
     FromBoolOp,
-    IfOp,
     MeasureOp,
     NotOp,
     OrOp,
     PhaseOp,
     ProjectionType,
+    QifOp,
     QubitType,
     XorOp,
 )
@@ -574,7 +574,7 @@ class TestQifStatement:
 
         ops = typecheck_statement("qif p { ph(pi) }", {"p": proj_var}, FuncKind.UNITARY)
         assert len(ops) == 1
-        assert isinstance(ops[0], IfOp)
+        assert isinstance(ops[0], QifOp)
         assert ops[0].condition is proj_var
 
     def test_qif_else_statement(self):
@@ -585,7 +585,7 @@ class TestQifStatement:
             "qif p { ph(pi) } else { ph(0) }", {"p": proj_var}, FuncKind.UNITARY
         )
         assert len(ops) == 1
-        assert isinstance(ops[0], IfOp)
+        assert isinstance(ops[0], QifOp)
         assert ops[0].condition is proj_var
 
         # Check that both true and false regions exist
@@ -600,7 +600,7 @@ class TestQifStatement:
             "qif p { } else { }", {"p": proj_var}, FuncKind.UNITARY
         )
         assert len(ops) == 1
-        assert isinstance(ops[0], IfOp)
+        assert isinstance(ops[0], QifOp)
 
     def test_nested_qif_statement(self):
         """Test typechecking nested qif statements."""
@@ -610,7 +610,7 @@ class TestQifStatement:
             "qif p { qif p { ph(pi) } }", {"p": proj_var}, FuncKind.UNITARY
         )
         assert len(ops) == 1
-        assert isinstance(ops[0], IfOp)
+        assert isinstance(ops[0], QifOp)
 
     def test_qif_statement_type_error(self):
         """Test that qif with non-projection condition raises error."""
@@ -647,7 +647,7 @@ class TestLetStatement:
             FuncKind.UNITARY,
         )
         assert len(ops) == 1
-        assert isinstance(ops[0], IfOp)
+        assert isinstance(ops[0], QifOp)
 
     def test_let_statement_shadowing_error(self):
         """Test that redefining a variable raises an error."""

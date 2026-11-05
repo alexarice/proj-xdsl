@@ -30,7 +30,6 @@ from projxdsl.dialects.proj import (
     CallOp,
     EqOp,
     FromBoolOp,
-    IfOp,
     MeasureOp,
     MixedOp,
     NotOp,
@@ -38,6 +37,7 @@ from projxdsl.dialects.proj import (
     PhaseOp,
     ProjectionType,
     PureOp,
+    QifOp,
     QubitType,
     ReturnOp,
     StateAttr,
@@ -782,7 +782,7 @@ class TypeChecker:
 
                     false_region = _false_region
 
-                builder.insert(IfOp(condition, true_region, false_region))
+                builder.insert(QifOp(condition, true_region, false_region))
 
             case ExprStmt():
                 return self.typecheck_expression(node.expr, ctx, builder, bound=bound)
