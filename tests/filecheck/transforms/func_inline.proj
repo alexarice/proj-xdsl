@@ -1,0 +1,87 @@
+// RUN: xdsl-opt %s -p func-inline | filecheck %s
+
+// Test: Simple function inlining
+// CHECK-LABEL: proj.pure @caller
+// CHECK-NOT: proj.call
+// CHECK: proj.return %[[VAL:.*]] : i1
+pure fn callee(a: bool) -> bool {
+    a
+}
+
+pure fn caller() -> bool {
+    callee(true)
+}
+
+// Test: Function with multiple calls
+// CHECK-LABEL: proj.pure @multi_call
+// CHECK-NOT: proj.call
+pure fn double(x: bool) -> bool {
+    x
+}
+
+pure fn multi_call() {
+    let a = double(true)
+    let b = double(false)
+}
+
+// Test: Nested function calls
+// CHECK-LABEL: proj.pure @outer
+// CHECK-NOT: proj.call
+pure fn inner(x: bool) -> bool {
+    x
+}
+
+pure fn middle(y: bool) -> bool {
+    inner(y)
+}
+
+pure fn outer() -> bool {
+    middle(true)
+}
+
+// Test: Unitary function inlining
+// CHECK-LABEL: proj.unitary @unitary_caller
+// CHECK-NOT: proj.call
+unitary fn unitary_callee(q: qubit) {
+    qif q == |0> {
+        ph(pi)
+    }
+}
+
+unitary fn unitary_caller(q: qubit) {
+    unitary_callee(q)
+}
+
+// Test: Mixed function inlining
+// CHECK-LABEL: proj.mixed @mixed_caller
+// CHECK-NOT: proj.call
+mixed fn mixed_callee() {
+    let q = alloc |0>
+    let m = measure (q == |0>)
+}
+
+mixed fn mixed_caller() {
+    mixed_callee()
+}
+
+// Test: Function with angle parameters
+// CHECK-LABEL: proj.unitary @angle_caller
+// CHECK-NOT: proj.call
+unitary fn angle_fn(theta: angle) {
+    ph(theta)
+}
+
+unitary fn angle_caller() {
+    angle_fn(pi)
+}
+
+// Test: Void function inlining
+// CHECK-LABEL: proj.pure @void_caller
+// CHECK-NOT: proj.call
+pure fn void_fn() {
+    let x = true
+}
+
+pure fn void_caller() {
+    void_fn()
+}
