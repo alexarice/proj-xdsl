@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from typing import cast
-
 from xdsl.dialects.builtin import Float64Type, FloatAttr
-from xdsl.ir import Attribute, Dialect, ParametrizedAttribute, SSAValue, TypeAttribute
+from xdsl.ir import Dialect, ParametrizedAttribute, SSAValue, TypeAttribute
 from xdsl.irdl import (
     IRDLOperation,
     irdl_attr_definition,
@@ -94,13 +92,11 @@ class ScalarMultOp(IRDLOperation):
     assembly_format = "$scalar `,` $angle attr-dict"
 
     def __init__(self, scalar: float | FloatAttr[Float64Type], angle: SSAValue):
-        if isinstance(scalar, float):
-            scalar_attr: Attribute = FloatAttr(scalar, Float64Type())
-        else:
-            scalar_attr = cast(Attribute, scalar)
+        if isinstance(scalar, int | float):
+            scalar = FloatAttr(scalar, Float64Type())
         super().__init__(
             operands=[angle],
-            properties={"scalar": scalar_attr},
+            properties={"scalar": scalar},
             result_types=[AngleType()],
         )
 

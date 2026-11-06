@@ -78,7 +78,7 @@ proj.pure @identity(%x: i1) -> i1 {
   proj.return %x : i1
 }
 
-// CHECK-LABEL: proj.pure @nested_caller
+// CHECK-LABEL: proj.pure @sequential_caller
 // CHECK-NOT: proj.call
 proj.pure @sequential_caller() -> i1 {
   %0 = arith.constant true
