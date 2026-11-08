@@ -22,7 +22,7 @@ classifiers = [
 ]
 dynamic = [ "version" ]
 dependencies = [
-  "xdsl~=0.74.0",
+  "xdsl~=0.75.0",
 ]
 urls."Issue Tracker" = "https://github.com/alexarice/proj-paper/issues"
 urls."Source Code" = "https://github.com/alexarice/proj-paper"
@@ -45,9 +45,6 @@ docs = [
 
 [tool.hatch]
 version.source = "vcs"
-
-[tool.uv]
-sources.xdsl = { git = "https://github.com/xdslproject/xdsl.git", branch = "alexarice/frontend" }
 
 [tool.ruff]
 # Support Python 3.11+.
