@@ -11,6 +11,12 @@ def get_all_passes() -> dict[str, Callable[[], type[ModulePass]]]:
 
         return FuncInlinePass
 
+    def get_hoist_from_qif():
+        from projxdsl.transforms.hoist_classical import HoistFromQifPass
+
+        return HoistFromQifPass
+
     return {
         "func-inline": get_func_inline,
+        "hoist-from-qif": get_hoist_from_qif,
     }
