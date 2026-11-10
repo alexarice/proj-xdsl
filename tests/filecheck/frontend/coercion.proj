@@ -84,3 +84,26 @@ pure fn no_coercion_proj(q: qubit) -> proj {
     // CHECK: proj.call @expects_proj(%[[EQ]])
     expects_proj(q == |0>)
 }
+
+// -----
+// Test: Coercion in let binding with explicit type annotation (bool → proj)
+// CHECK-LABEL: proj.pure @let_coercion_with_type_ann
+pure fn let_coercion_with_type_ann() -> proj {
+    // CHECK: %[[C:.*]] = arith.constant false
+    // CHECK: %[[COERCED:.*]] = proj.from_bool %[[C]]
+    // CHECK: proj.return %[[COERCED]]
+    let p: proj = false
+    p
+}
+
+// -----
+// Test: Coercion in qif condition (bool → proj)
+// CHECK-LABEL: proj.unitary @qif_condition_coercion
+unitary fn qif_condition_coercion(q: qubit) {
+    // CHECK: %[[C:.*]] = arith.constant true
+    // CHECK: %[[COERCED:.*]] = proj.from_bool %[[C]]
+    // CHECK: proj.qif %[[COERCED]]
+    qif true {
+        ph(0)
+    }
+}

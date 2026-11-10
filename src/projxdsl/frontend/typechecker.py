@@ -712,8 +712,12 @@ class TypeChecker:
                 # Let bindings must have a value (non-void)
                 if node.type_ann:
                     expected = self.check_type(node.type_ann)
-                    value = self.typecheck_expression(
-                        node.value, ctx, builder, bound=expected
+                    value = self.coerce_to(
+                        self.typecheck_expression(
+                            node.value, ctx, builder, bound=expected
+                        ),
+                        expected,
+                        builder,
                     )
                 else:
                     value = self.typecheck_expression(
@@ -746,8 +750,12 @@ class TypeChecker:
                         f"Qif operation not allowed in "
                         f"{ctx.func_kind.display_name} context",
                     )
-                condition = self.typecheck_expression(
-                    node.condition, ctx, builder, bound=ProjectionType()
+                condition = self.coerce_to(
+                    self.typecheck_expression(
+                        node.condition, ctx, builder, bound=ProjectionType()
+                    ),
+                    ProjectionType(),
+                    builder,
                 )
                 condition_borrows = ctx.borrows.get(condition, ProjectionBorrows())
                 conflict = ctx.active_borrows.has_conflicting_borrow(condition_borrows)
