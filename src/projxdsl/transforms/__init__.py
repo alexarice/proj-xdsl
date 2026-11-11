@@ -16,7 +16,13 @@ def get_all_passes() -> dict[str, Callable[[], type[ModulePass]]]:
 
         return HoistFromQifPass
 
+    def get_split_qif():
+        from projxdsl.transforms.split_qif import SplitQifPass
+
+        return SplitQifPass
+
     return {
         "func-inline": get_func_inline,
         "hoist-from-qif": get_hoist_from_qif,
+        "split-qif": get_split_qif,
     }
