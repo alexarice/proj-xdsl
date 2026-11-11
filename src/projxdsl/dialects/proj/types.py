@@ -16,9 +16,3 @@ class QubitType(ParametrizedAttribute, TypeAttribute):
     """Qubit type."""
 
     name = "proj.qubit"
-
-
-__all__ = [
-    "ProjectionType",
-    "QubitType",
-]

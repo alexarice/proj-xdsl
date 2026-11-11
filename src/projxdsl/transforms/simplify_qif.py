@@ -15,7 +15,7 @@ from xdsl.pattern_rewriter import (
 )
 from xdsl.rewriter import InsertPoint
 
-from projxdsl.dialects.proj import NotOp, PhaseOp, QifOp
+from projxdsl.dialects.proj.ops import NotOp, PhaseOp, QifOp
 
 
 def has_only_quantum_ops(region: Region) -> bool:

@@ -339,11 +339,15 @@ class QifOp(IRDLOperation, HasCanonicalizationPatternsInterface):
     def __init__(
         self,
         condition: SSAValue,
-        true_region: Region | Sequence[Block] | Sequence[Operation],
-        false_region: Region | Sequence[Block] | Sequence[Operation] | None = None,
+        true_region: Region | Block,
+        false_region: Region | Block | None = None,
     ):
+        if isinstance(true_region, Block):
+            true_region = Region(true_region)
         if false_region is None:
             false_region = Region()
+        if isinstance(false_region, Block):
+            false_region = Region(false_region)
         super().__init__(
             operands=[condition],
             regions=[true_region, false_region],
@@ -552,24 +556,3 @@ class CallOp(IRDLOperation):
             result_types=[result_types],
             properties={"callee": callee},
         )
-
-
-__all__ = [
-    "AllocOp",
-    "NotOp",
-    "AndOp",
-    "OrOp",
-    "XorOp",
-    "FromBoolOp",
-    "EqOp",
-    "MeasureOp",
-    "PhaseOp",
-    "QifOp",
-    "ReturnOp",
-    "CallOp",
-    "PureOp",
-    "UnitaryOp",
-    "MixedOp",
-    "FuncOpBase",
-    "AllowedInFuncKinds",
-]

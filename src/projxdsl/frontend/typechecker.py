@@ -16,7 +16,7 @@ from xdsl.dialects.arith import AndIOp, ConstantOp, OrIOp, XOrIOp
 from xdsl.dialects.builtin import FunctionType, IntegerAttr, ModuleOp, i1
 from xdsl.dialects.scf import IfOp as ScfIfOp
 from xdsl.dialects.scf import YieldOp as ScfYieldOp
-from xdsl.ir import Attribute, BlockArgument, Region, SSAValue, TypeAttribute
+from xdsl.ir import Attribute, Block, BlockArgument, Region, SSAValue, TypeAttribute
 from xdsl.rewriter import InsertPoint
 from xdsl.utils.exceptions import VerifyException
 from xdsl.utils.lexer import Span
@@ -603,25 +603,27 @@ class TypeChecker:
                 true_result: SSAValue | None = None
                 false_result: SSAValue | None = None
 
-                @Builder.region
-                def true_region(inner_builder: Builder):
-                    nonlocal true_result
-                    true_result = self.typecheck_block(
-                        node.true_body, ctx, inner_builder, bound=bound
-                    )
+                true_block = Block()
+                true_builder = Builder(InsertPoint.at_end(true_block))
 
-                false_region: Region | None = None
+                true_result = self.typecheck_block(
+                    node.true_body,
+                    ctx.new_scope(ctx.func_kind, ctx.active_borrows),
+                    true_builder,
+                    bound=bound,
+                )
+
+                false_block = None
                 if node.false_body is not None:
-                    false_body = node.false_body
+                    false_block = Block()
+                    false_builder = Builder(InsertPoint.at_end(false_block))
 
-                    @Builder.region
-                    def _false_region(inner_builder: Builder):
-                        nonlocal false_result
-                        false_result = self.typecheck_block(
-                            false_body, ctx, inner_builder, bound=bound
-                        )
-
-                    false_region = _false_region
+                    false_result = self.typecheck_block(
+                        node.false_body,
+                        ctx.new_scope(ctx.func_kind, ctx.active_borrows),
+                        false_builder,
+                        bound=bound,
+                    )
 
                 # Compute LUB of branch types for the result
                 if (
@@ -631,7 +633,6 @@ class TypeChecker:
                     is not None
                 ):
                     # Coerce both to LUB and add yields
-                    true_block = true_region.blocks.last
                     true_coerced = self.coerce_to(
                         true_result,
                         result_type,
@@ -639,7 +640,7 @@ class TypeChecker:
                     )
                     true_block.add_op(ScfYieldOp(true_coerced))
 
-                    false_block = false_region.blocks.last
+                    assert false_block is not None
                     false_coerced = self.coerce_to(
                         false_result,
                         result_type,
@@ -648,22 +649,30 @@ class TypeChecker:
                     false_block.add_op(ScfYieldOp(false_coerced))
 
                     if_op = builder.insert(
-                        ScfIfOp(condition, [result_type], true_region, false_region)
+                        ScfIfOp(
+                            condition,
+                            [result_type],
+                            Region(true_block),
+                            Region(false_block),
+                        )
                     )
                     result = if_op.results[0]
 
                 # Void case - add empty yields
                 else:
-                    true_block = true_region.blocks.last
-                    if true_block is not None:
-                        true_block.add_op(ScfYieldOp())
+                    true_block.add_op(ScfYieldOp())
 
-                    if false_region is not None:
-                        false_block = false_region.blocks.last
-                        if false_block is not None:
-                            false_block.add_op(ScfYieldOp())
+                    if false_block is not None:
+                        false_block.add_op(ScfYieldOp())
 
-                    builder.insert(ScfIfOp(condition, [], true_region, false_region))
+                    builder.insert(
+                        ScfIfOp(
+                            condition,
+                            [],
+                            Region(true_block),
+                            Region(false_block) if false_block else Region(),
+                        )
+                    )
                     result = None
 
             case _:
@@ -764,31 +773,27 @@ class TypeChecker:
                     )
                 merged_borrows = ctx.active_borrows.merge(condition_borrows)
 
-                @Builder.region
-                def true_region(inner_builder: Builder):
+                true_block = Block()
+                true_builder = Builder(InsertPoint.at_end(true_block))
+                self.typecheck_block(
+                    node.true_body,
+                    ctx.new_scope(FuncKind.UNITARY, merged_borrows),
+                    true_builder,
+                    bound=None,
+                )
+
+                false_block = None
+                if node.false_body is not None:
+                    false_block = Block()
+                    false_builder = Builder(InsertPoint.at_end(false_block))
                     self.typecheck_block(
-                        node.true_body,
+                        node.false_body,
                         ctx.new_scope(FuncKind.UNITARY, merged_borrows),
-                        inner_builder,
+                        false_builder,
                         bound=None,
                     )
 
-                false_region = Region()
-                if node.false_body is not None:
-                    false_body = node.false_body
-
-                    @Builder.region
-                    def _false_region(inner_builder: Builder):
-                        self.typecheck_block(
-                            false_body,
-                            ctx.new_scope(FuncKind.UNITARY, merged_borrows),
-                            inner_builder,
-                            bound=None,
-                        )
-
-                    false_region = _false_region
-
-                builder.insert(QifOp(condition, true_region, false_region))
+                builder.insert(QifOp(condition, true_block, false_block))
 
             case ExprStmt():
                 return self.typecheck_expression(node.expr, ctx, builder, bound=bound)
@@ -1237,9 +1242,9 @@ class TypeChecker:
 
     def lub(
         self,
-        lhs: TypeAttribute,
-        rhs: TypeAttribute,
-    ) -> TypeAttribute | None:
+        lhs: Attribute,
+        rhs: Attribute,
+    ) -> Attribute | None:
         """
         Compute the Least Upper Bound of two types in the subtyping lattice.
 

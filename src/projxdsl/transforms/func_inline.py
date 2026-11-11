@@ -18,7 +18,7 @@ from xdsl.pattern_rewriter import (
 from xdsl.rewriter import InsertPoint
 from xdsl.traits import SymbolTable
 
-from projxdsl.dialects.proj import CallOp, FuncOpBase, ReturnOp
+from projxdsl.dialects.proj.ops import CallOp, FuncOpBase, ReturnOp
 
 
 class FuncInlinePattern(RewritePattern):

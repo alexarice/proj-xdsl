@@ -35,7 +35,7 @@ class SwapEmptyThenWithElsePattern(RewritePattern):
 
         # Detach the false block and reuse it as the true region
         op.false_region.detach_block(false_block)
-        new_qif = QifOp(not_op.result, [false_block])
+        new_qif = QifOp(not_op.result, false_block)
 
         # Replace the old qif with the new one, inserting not before it
         rewriter.replace(op, new_qif)
