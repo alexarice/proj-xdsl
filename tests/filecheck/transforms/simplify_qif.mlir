@@ -146,23 +146,37 @@ proj.unitary @test_split_and_hoist(%arg0: !proj.projection, %pi1: !angle.type, %
   proj.return
 }
 
-// Nested qif with else - not should be hoisted to top level
+// Nested qif with else - merged with AndOp, not hoisted to top level
 // CHECK-LABEL: proj.unitary @test_nested_else
 // CHECK:      %[[NOT:.*]] = proj.not %arg1
-// CHECK-NEXT: proj.qif %arg0 {
-// CHECK-NEXT:   proj.qif %arg1 {
-// CHECK-NEXT:     proj.phase %a1
-// CHECK-NEXT:   }
+// CHECK-NEXT: %[[AND1:.*]] = proj.and %arg0, %arg1
+// CHECK-NEXT: proj.qif %[[AND1]] {
+// CHECK-NEXT: proj.phase %a1
 // CHECK-NEXT: }
-// CHECK-NEXT: proj.qif %arg0 {
-// CHECK-NEXT:   proj.qif %[[NOT]] {
-// CHECK-NEXT:     proj.phase %a2
+// CHECK-NEXT: %[[AND2:.*]] = proj.and %arg0, %[[NOT]]
+// CHECK-NEXT: proj.qif %[[AND2]] {
+// CHECK-NEXT: proj.phase %a2
 proj.unitary @test_nested_else(%arg0: !proj.projection, %arg1: !proj.projection, %a1: !angle.type, %a2: !angle.type) {
   proj.qif %arg0 {
     proj.qif %arg1 {
       proj.phase %a1
     } else {
       proj.phase %a2
+    }
+  }
+  proj.return
+}
+
+// Merge nested qif (no else) into single qif with AndOp
+// CHECK-LABEL: proj.unitary @test_merge_nested
+// CHECK: %[[AND:.*]] = proj.and %arg0, %arg1
+// CHECK-NEXT: proj.qif %[[AND]] {
+// CHECK-NEXT: proj.phase %a1
+// CHECK-NEXT: }
+proj.unitary @test_merge_nested(%arg0: !proj.projection, %arg1: !proj.projection, %a1: !angle.type) {
+  proj.qif %arg0 {
+    proj.qif %arg1 {
+      proj.phase %a1
     }
   }
   proj.return

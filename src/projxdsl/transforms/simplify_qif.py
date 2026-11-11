@@ -15,7 +15,7 @@ from xdsl.pattern_rewriter import (
 )
 from xdsl.rewriter import InsertPoint
 
-from projxdsl.dialects.proj.ops import NotOp, PhaseOp, QifOp
+from projxdsl.dialects.proj.ops import AndOp, NotOp, PhaseOp, QifOp
 
 
 def has_only_quantum_ops(region: Region) -> bool:
@@ -130,6 +130,38 @@ class HoistClassicalPattern(RewritePattern):
         rewriter.insert(op, insert_point)
 
 
+class MergeNestedQifPattern(RewritePattern):
+    """Merge a qif of a qif into a single qif with conditions joined by AndOp."""
+
+    @op_type_rewrite_pattern
+    def match_and_rewrite(self, op: QifOp, rewriter: PatternRewriter, /):
+        if op.false_region.blocks:
+            return
+
+        block = op.true_region.blocks.first
+        assert block is not None
+
+        if len(block.ops) != 1:
+            return
+
+        inner_qif = block.ops.first
+        if not isinstance(inner_qif, QifOp):
+            return
+
+        if inner_qif.false_region.blocks:
+            return
+
+        inner_block = inner_qif.true_region.blocks.first
+        assert inner_block is not None
+
+        inner_qif.true_region.detach_block(inner_block)
+
+        and_op = rewriter.insert(AndOp(op.condition, inner_qif.condition))
+
+        merged_qif = QifOp(and_op.result, inner_block)
+        rewriter.replace(op, merged_qif)
+
+
 class SimplifyQifPass(ModulePass):
     """Simplify qif statements by splitting and hoisting."""
 
@@ -142,6 +174,7 @@ class SimplifyQifPass(ModulePass):
                     SplitQifElsePattern(),
                     SplitQifNoElsePattern(),
                     HoistClassicalPattern(),
+                    MergeNestedQifPattern(),
                 ]
             ),
             apply_recursively=True,
