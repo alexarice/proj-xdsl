@@ -100,12 +100,12 @@ proj.unitary @test_mixed_ops(%arg0: !proj.projection) {
 
 // Split else and hoist classical (empty qif removed)
 // CHECK-LABEL: proj.unitary @test_else_classical
-// CHECK: %[[AND:.*]] = proj.and %arg0, %arg1
 // CHECK: proj.qif %arg0 {
 // CHECK-NEXT: proj.phase %a1
 // CHECK-NEXT: }
 // CHECK: %[[NOT:.*]] = proj.not %arg0
 // CHECK-NOT: proj.qif %[[NOT]]
+// CHECK: %[[AND:.*]] = proj.and %arg0, %arg1
 proj.unitary @test_else_classical(%arg0: !proj.projection, %arg1: !proj.projection, %a1: !angle.type) {
   proj.qif %arg0 {
     proj.phase %a1

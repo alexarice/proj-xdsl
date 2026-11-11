@@ -53,11 +53,6 @@ class SplitQifElsePattern(RewritePattern):
         if op.false_region is None:
             return
 
-        if not has_only_quantum_ops(op.true_region):
-            return
-        if not has_only_quantum_ops(op.false_region):
-            return
-
         insert_point = InsertPoint.before(op)
 
         true_block = op.true_region.blocks.first
