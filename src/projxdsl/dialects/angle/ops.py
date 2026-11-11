@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from xdsl.dialects.builtin import Float64Type, FloatAttr
-from xdsl.interfaces import HasCanonicalizationPatternsInterface
-from xdsl.ir import ParametrizedAttribute, SSAValue, TypeAttribute
+from xdsl.interfaces import HasCanonicalizationPatternsInterface, HasFolderInterface
+from xdsl.ir import Attribute, ParametrizedAttribute, SSAValue, TypeAttribute
 from xdsl.irdl import (
     IRDLOperation,
     irdl_attr_definition,
@@ -79,7 +81,9 @@ class AddOp(IRDLOperation):
 
 
 @irdl_op_definition
-class ScalarMultOp(IRDLOperation, HasCanonicalizationPatternsInterface):
+class ScalarMultOp(
+    IRDLOperation, HasCanonicalizationPatternsInterface, HasFolderInterface
+):
     """
     Scalar multiplication operation.
     Multiplies an angle by a scalar float value.
@@ -101,6 +105,17 @@ class ScalarMultOp(IRDLOperation, HasCanonicalizationPatternsInterface):
             properties={"scalar": scalar},
             result_types=[AngleType()],
         )
+
+    def fold(self) -> Sequence[SSAValue | Attribute] | None:
+        """
+        Fold: 1.0 * angle = angle (returns the angle operand).
+
+        Note: 0.0 * angle is handled by canonicalization (ScalarMultZeroPattern)
+        since it requires creating a new angle.zero operation.
+        """
+        if self.scalar.value.data == 1.0:
+            return (self.angle,)
+        return None
 
     @classmethod
     def get_canonicalization_patterns(cls) -> tuple[RewritePattern, ...]:
