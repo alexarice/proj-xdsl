@@ -1,14 +1,5 @@
 """
 Simplify qif statements by splitting and hoisting classical operations.
-
-This pass combines two simplification patterns:
-
-1. Split qif/else into separate qifs with negated conditions
-2. Split multi-op qifs into single-op qifs
-3. Hoist classical operations out of qif regions
-
-The patterns are applied iteratively to handle cases where splitting creates
-new opportunities for hoisting (e.g., negated conditions from else-splitting).
 """
 
 from xdsl.context import Context
@@ -16,7 +7,9 @@ from xdsl.dialects.builtin import ModuleOp
 from xdsl.ir import Block, Operation, Region
 from xdsl.passes import ModulePass
 from xdsl.pattern_rewriter import (
+    GreedyRewritePatternApplier,
     PatternRewriter,
+    PatternRewriteWalker,
     RewritePattern,
     op_type_rewrite_pattern,
 )
@@ -148,31 +141,13 @@ class SimplifyQifPass(ModulePass):
     name = "simplify-qif"
 
     def apply(self, ctx: Context, op: ModuleOp) -> None:
-        # Apply all patterns iteratively until no more changes
-        from xdsl.pattern_rewriter import PatternRewriteWalker
-
-        # Keep applying until no changes are made
-        changed = True
-        while changed:
-            changed = False
-
-            walker = PatternRewriteWalker(
-                SplitQifElsePattern(),
-                apply_recursively=True,
-            )
-            if walker.rewrite_module(op):
-                changed = True
-
-            walker = PatternRewriteWalker(
-                SplitQifNoElsePattern(),
-                apply_recursively=True,
-            )
-            if walker.rewrite_module(op):
-                changed = True
-
-            walker = PatternRewriteWalker(
-                HoistClassicalPattern(),
-                apply_recursively=True,
-            )
-            if walker.rewrite_module(op):
-                changed = True
+        PatternRewriteWalker(
+            GreedyRewritePatternApplier(
+                [
+                    SplitQifElsePattern(),
+                    SplitQifNoElsePattern(),
+                    HoistClassicalPattern(),
+                ]
+            ),
+            apply_recursively=True,
+        ).rewrite_module(op)
