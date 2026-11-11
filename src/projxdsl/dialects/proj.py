@@ -18,6 +18,7 @@ from xdsl.dialects.utils import (
     parse_func_op_like,
     print_func_op_like,
 )
+from xdsl.interfaces import HasCanonicalizationPatternsInterface
 from xdsl.ir import (
     Attribute,
     Block,
@@ -45,6 +46,11 @@ from xdsl.irdl import (
     var_result_def,
 )
 from xdsl.parser import AttrParser, Parser
+from xdsl.pattern_rewriter import (
+    PatternRewriter,
+    RewritePattern,
+    op_type_rewrite_pattern,
+)
 from xdsl.printer import Printer
 from xdsl.traits import (
     HasParent,
@@ -458,7 +464,7 @@ class MeasureOp(IRDLOperation):
 
 
 @irdl_op_definition
-class QifOp(IRDLOperation):
+class QifOp(IRDLOperation, HasCanonicalizationPatternsInterface):
     """
     Quantum if operation for projections.
     Executes the true region if the condition projection is true.
@@ -486,6 +492,10 @@ class QifOp(IRDLOperation):
             operands=[condition],
             regions=[true_region, false_region],
         )
+
+    @classmethod
+    def get_canonicalization_patterns(cls) -> tuple[RewritePattern, ...]:
+        return (RemoveEmptyQifPattern(),)
 
     @classmethod
     def parse(cls, parser: Parser) -> QifOp:
@@ -524,6 +534,23 @@ class QifOp(IRDLOperation):
             )
         if bool(self.attributes.keys()):
             printer.print_attr_dict(self.attributes)
+
+
+class RemoveEmptyQifPattern(RewritePattern):
+    """Remove qif operations with empty regions."""
+
+    @op_type_rewrite_pattern
+    def match_and_rewrite(self, op: QifOp, rewriter: PatternRewriter, /):
+        true_block = op.true_region.blocks.first
+        if true_block is None or len(true_block.ops) > 0:
+            return
+
+        if op.false_region is not None:
+            false_block = op.false_region.blocks.first
+            if false_block is not None and len(false_block.ops) > 0:
+                return
+
+        rewriter.erase(op, safe_erase=False)
 
 
 @irdl_op_definition

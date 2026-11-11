@@ -1,4 +1,4 @@
-// RUN: xdsl-opt %s -p simplify-qif | filecheck %s
+// RUN: xdsl-opt %s -p "simplify-qif,canonicalize" | filecheck %s
 
 // Split qif with else region
 // CHECK-LABEL: proj.unitary @test_else_split

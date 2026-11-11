@@ -142,23 +142,6 @@ class HoistClassicalPattern(RewritePattern):
         rewriter.insert(op, insert_point)
 
 
-class RemoveEmptyQifPattern(RewritePattern):
-    """Remove qif operations with empty regions."""
-
-    @op_type_rewrite_pattern
-    def match_and_rewrite(self, op: QifOp, rewriter: PatternRewriter, /):
-        true_block = op.true_region.blocks.first
-        if true_block is None or len(true_block.ops) > 0:
-            return
-
-        if op.false_region is not None:
-            false_block = op.false_region.blocks.first
-            if false_block is not None and len(false_block.ops) > 0:
-                return
-
-        rewriter.erase(op, safe_erase=False)
-
-
 class SimplifyQifPass(ModulePass):
     """Simplify qif statements by splitting and hoisting."""
 
@@ -189,13 +172,6 @@ class SimplifyQifPass(ModulePass):
 
             walker = PatternRewriteWalker(
                 HoistClassicalPattern(),
-                apply_recursively=True,
-            )
-            if walker.rewrite_module(op):
-                changed = True
-
-            walker = PatternRewriteWalker(
-                RemoveEmptyQifPattern(),
                 apply_recursively=True,
             )
             if walker.rewrite_module(op):
