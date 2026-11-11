@@ -14,8 +14,10 @@ from xdsl.irdl import (
     operand_def,
     prop_def,
     result_def,
+    traits_def,
 )
 from xdsl.pattern_rewriter import RewritePattern
+from xdsl.traits import Pure
 
 
 @irdl_attr_definition
@@ -38,6 +40,8 @@ class ZeroOp(IRDLOperation):
 
     result = result_def(AngleType)
 
+    traits = traits_def(Pure())
+
     assembly_format = "attr-dict"
 
     def __init__(self):
@@ -54,6 +58,8 @@ class PiOp(IRDLOperation):
     name = "angle.pi"
 
     result = result_def(AngleType)
+
+    traits = traits_def(Pure())
 
     assembly_format = "attr-dict"
 
@@ -73,6 +79,8 @@ class AddOp(IRDLOperation):
     lhs = operand_def(AngleType)
     rhs = operand_def(AngleType)
     result = result_def(AngleType)
+
+    traits = traits_def(Pure())
 
     assembly_format = "$lhs `,` $rhs attr-dict"
 
@@ -97,6 +105,8 @@ class ScalarMultOp(
 
     assembly_format = "$scalar `,` $angle attr-dict"
 
+    traits = traits_def(Pure())
+
     def __init__(self, scalar: float | FloatAttr[Float64Type], angle: SSAValue):
         if isinstance(scalar, int | float):
             scalar = FloatAttr(scalar, Float64Type())
@@ -119,6 +129,12 @@ class ScalarMultOp(
 
     @classmethod
     def get_canonicalization_patterns(cls) -> tuple[RewritePattern, ...]:
-        from projxdsl.dialects.angle.canonicalize import ScalarMultZeroPattern
+        from projxdsl.dialects.angle.canonicalize import (
+            ScalarMultCombinePattern,
+            ScalarMultZeroPattern,
+        )
 
-        return (ScalarMultZeroPattern(),)
+        return (
+            ScalarMultZeroPattern(),
+            ScalarMultCombinePattern(),
+        )

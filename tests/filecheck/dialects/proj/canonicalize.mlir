@@ -77,10 +77,9 @@ func.func @test_phase_merge(%arg0: !proj.projection, %a1: !angle.type, %a2: !ang
 }
 
 // Test: Hoist phase operations to the end (after angle ops, merged first)
+// Note: angle.pi ops are eliminated by DCE since they're Pure and unused
 // CHECK-LABEL: func.func @test_phase_hoist
-// CHECK: %pi = angle.pi
-// CHECK-NEXT: %pi2 = angle.pi
-// CHECK-NEXT: %[[SUM:.*]] = angle.add
+// CHECK: %[[SUM:.*]] = angle.add
 // CHECK-NEXT: proj.phase %[[SUM]]
 func.func @test_phase_hoist(%arg0: !proj.projection, %a1: !angle.type, %a2: !angle.type) {
   proj.qif %arg0 {
