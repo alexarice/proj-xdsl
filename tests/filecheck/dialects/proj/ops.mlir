@@ -60,6 +60,7 @@ func.func @test_if(%arg0: !proj.projection) {
   // CHECK-NEXT:   }
   // CHECK-GENERIC: "proj.qif"(%[[ARG0:.*]]) ({
   // CHECK-GENERIC-NEXT:   ^bb0:
+  // CHECK-GENERIC-NEXT:   }, {
   // CHECK-GENERIC-NEXT:   }) : (!proj.projection) -> ()
   proj.qif %arg0 {
   }

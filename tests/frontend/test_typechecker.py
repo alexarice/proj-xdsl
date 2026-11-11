@@ -590,7 +590,7 @@ class TestQifStatement:
 
         # Check that both true and false regions exist
         if_op = ops[0]
-        assert if_op.false_region is not None
+        assert if_op.false_region.blocks
 
     def test_qif_else_empty_blocks(self):
         """Test typechecking qif statement with empty else clause."""

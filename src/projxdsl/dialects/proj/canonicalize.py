@@ -18,9 +18,8 @@ class RemoveEmptyQifPattern(RewritePattern):
         if true_block is None or len(true_block.ops) > 0:
             return
 
-        if op.false_region is not None:
-            false_block = op.false_region.blocks.first
-            if false_block is not None and len(false_block.ops) > 0:
-                return
+        false_block = op.false_region.blocks.first
+        if false_block is not None and len(false_block.ops) > 0:
+            return
 
         rewriter.erase(op, safe_erase=False)

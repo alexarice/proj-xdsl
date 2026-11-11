@@ -50,7 +50,7 @@ class SplitQifElsePattern(RewritePattern):
 
     @op_type_rewrite_pattern
     def match_and_rewrite(self, op: QifOp, rewriter: PatternRewriter, /):
-        if op.false_region is None:
+        if not op.false_region.blocks:
             return
 
         insert_point = InsertPoint.before(op)
@@ -80,7 +80,7 @@ class SplitQifNoElsePattern(RewritePattern):
 
     @op_type_rewrite_pattern
     def match_and_rewrite(self, op: QifOp, rewriter: PatternRewriter, /):
-        if op.false_region is not None:
+        if op.false_region.blocks:
             return
 
         if not has_only_quantum_ops(op.true_region):

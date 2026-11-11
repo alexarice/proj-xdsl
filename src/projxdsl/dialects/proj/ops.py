@@ -33,7 +33,6 @@ from xdsl.irdl import (
     irdl_op_definition,
     irdl_to_attr_constraint,
     operand_def,
-    opt_region_def,
     prop_def,
     region_def,
     result_def,
@@ -330,7 +329,7 @@ class QifOp(IRDLOperation, HasCanonicalizationPatternsInterface):
 
     condition = operand_def(ProjectionType)
     true_region = region_def("single_block")
-    false_region = opt_region_def("single_block")
+    false_region = region_def()
 
     traits = traits_def(
         NoTerminator(),
@@ -343,10 +342,17 @@ class QifOp(IRDLOperation, HasCanonicalizationPatternsInterface):
         true_region: Region | Sequence[Block] | Sequence[Operation],
         false_region: Region | Sequence[Block] | Sequence[Operation] | None = None,
     ):
+        if false_region is None:
+            false_region = Region()
         super().__init__(
             operands=[condition],
             regions=[true_region, false_region],
         )
+
+    def verify_(self) -> None:
+        # Verify false_region has at most one block
+        if len(self.false_region.blocks) > 1:
+            raise VerifyException("'false_region' must have at most one block")
 
     @classmethod
     def parse(cls, parser: Parser) -> QifOp:
@@ -359,7 +365,7 @@ class QifOp(IRDLOperation, HasCanonicalizationPatternsInterface):
             if not false_region.blocks:
                 false_region.add_block(Block())
         else:
-            false_region = None
+            false_region = Region()
         parser.parse_optional_attr_dict()
         return cls(condition, true_region, false_region)
 
@@ -372,7 +378,7 @@ class QifOp(IRDLOperation, HasCanonicalizationPatternsInterface):
             print_entry_block_args=False,
             print_block_terminators=True,
         )
-        if self.false_region is not None and bool(self.false_region.blocks):
+        if bool(self.false_region.blocks):
             printer.print_string(" else ")
             printer.print_region(
                 self.false_region,

@@ -775,7 +775,7 @@ class TypeChecker:
                         bound=None,
                     )
 
-                false_region = None
+                false_region = Region()
                 if node.false_body is not None:
                     false_body = node.false_body
 
