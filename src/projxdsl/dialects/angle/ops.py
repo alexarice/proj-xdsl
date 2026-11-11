@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from xdsl.dialects.builtin import Float64Type, FloatAttr
-from xdsl.ir import Dialect, ParametrizedAttribute, SSAValue, TypeAttribute
+from xdsl.interfaces import HasCanonicalizationPatternsInterface
+from xdsl.ir import ParametrizedAttribute, SSAValue, TypeAttribute
 from xdsl.irdl import (
     IRDLOperation,
     irdl_attr_definition,
@@ -12,6 +13,7 @@ from xdsl.irdl import (
     prop_def,
     result_def,
 )
+from xdsl.pattern_rewriter import RewritePattern
 
 
 @irdl_attr_definition
@@ -77,7 +79,7 @@ class AddOp(IRDLOperation):
 
 
 @irdl_op_definition
-class ScalarMultOp(IRDLOperation):
+class ScalarMultOp(IRDLOperation, HasCanonicalizationPatternsInterface):
     """
     Scalar multiplication operation.
     Multiplies an angle by a scalar float value.
@@ -100,16 +102,8 @@ class ScalarMultOp(IRDLOperation):
             result_types=[AngleType()],
         )
 
+    @classmethod
+    def get_canonicalization_patterns(cls) -> tuple[RewritePattern, ...]:
+        from projxdsl.dialects.angle.canonicalize import ScalarMultZeroPattern
 
-Angle = Dialect(
-    "angle",
-    [
-        ZeroOp,
-        PiOp,
-        AddOp,
-        ScalarMultOp,
-    ],
-    [
-        AngleType,
-    ],
-)
+        return (ScalarMultZeroPattern(),)
