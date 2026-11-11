@@ -393,9 +393,14 @@ class QifOp(IRDLOperation, HasCanonicalizationPatternsInterface):
         from projxdsl.dialects.proj.canonicalize import (
             RemoveEmptyQifElsePattern,
             RemoveEmptyQifPattern,
+            SwapEmptyThenWithElsePattern,
         )
 
-        return (RemoveEmptyQifElsePattern(), RemoveEmptyQifPattern())
+        return (
+            SwapEmptyThenWithElsePattern(),
+            RemoveEmptyQifElsePattern(),
+            RemoveEmptyQifPattern(),
+        )
 
 
 @irdl_op_definition

@@ -29,9 +29,10 @@ func.func @test_nonempty_true(%arg0: !proj.projection, %a: !angle.type) {
   func.return
 }
 
-// Test: Don't remove qif with ops in false region
+// Test: Transform qif with empty true and non-empty false to negated condition
 // CHECK-LABEL: func.func @test_nonempty_false
-// CHECK: proj.qif %arg0 {
+// CHECK: %[[NOT:.*]] = proj.not %arg0
+// CHECK: proj.qif %[[NOT]] {
 func.func @test_nonempty_false(%arg0: !proj.projection, %a: !angle.type) {
   proj.qif %arg0 {
   } else {
@@ -40,9 +41,10 @@ func.func @test_nonempty_false(%arg0: !proj.projection, %a: !angle.type) {
   func.return
 }
 
-// Test: Don't remove qif with empty true but non-empty false
+// Test: Transform qif with empty true and non-empty false to negated condition
 // CHECK-LABEL: func.func @test_empty_true_nonempty_false
-// CHECK: proj.qif %arg0 {
+// CHECK: %[[NOT:.*]] = proj.not %arg0
+// CHECK: proj.qif %[[NOT]] {
 func.func @test_empty_true_nonempty_false(%arg0: !proj.projection, %a: !angle.type) {
   proj.qif %arg0 {
   } else {

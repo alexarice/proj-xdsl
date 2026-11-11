@@ -1,22 +1,16 @@
 """Projection dialect package."""
 
-# ruff: noqa: F401
-# pyright: reportUnusedImport=false
-
 from xdsl.ir import Dialect
 
-from projxdsl.dialects.proj.attrs import Basis, State, StateAttr
-from projxdsl.dialects.proj.canonicalize import (
-    RemoveEmptyQifElsePattern,
-    RemoveEmptyQifPattern,
-)
-from projxdsl.dialects.proj.ops import (
+from .attrs import Basis as Basis
+from .attrs import State as State
+from .attrs import StateAttr
+from .ops import (
     AllocOp,
     AndOp,
     CallOp,
     EqOp,
     FromBoolOp,
-    FuncOpBase,
     MeasureOp,
     MixedOp,
     NotOp,
@@ -28,7 +22,8 @@ from projxdsl.dialects.proj.ops import (
     UnitaryOp,
     XorOp,
 )
-from projxdsl.dialects.proj.types import ProjectionType, QubitType
+from .ops import FuncOpBase as FuncOpBase
+from .types import ProjectionType, QubitType
 
 Proj = Dialect(
     "proj",
