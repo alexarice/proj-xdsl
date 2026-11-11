@@ -7,7 +7,8 @@ from xdsl.pattern_rewriter import (
 )
 from xdsl.rewriter import InsertPoint
 
-from projxdsl.dialects.proj.ops import NotOp, QifOp
+from projxdsl.dialects.angle import AddOp as AngleAddOp
+from projxdsl.dialects.proj.ops import NotOp, PhaseOp, QifOp
 
 
 class SwapEmptyThenWithElsePattern(RewritePattern):
@@ -75,3 +76,39 @@ class RemoveEmptyQifPattern(RewritePattern):
             return
 
         rewriter.erase(op, safe_erase=False)
+
+
+class HoistAndMergePhasePattern(RewritePattern):
+    """
+    Move a phase operation to the end of the block,
+    merging with the last phase if present.
+    If there's already a phase at the end, merge with it using angle.add.
+    """
+
+    @op_type_rewrite_pattern
+    def match_and_rewrite(self, op: PhaseOp, rewriter: PatternRewriter, /):
+        from xdsl.traits import IsTerminator
+
+        block = op.parent
+        if block is None:
+            return
+
+        # Find the last non-terminator operation
+        last_op = block.last_op
+        if last_op is None:
+            return
+        if last_op.has_trait(IsTerminator):
+            last_op = last_op.prev_op
+        if last_op is None:
+            return
+
+        if isinstance(last_op, PhaseOp) and last_op != op:
+            # Merge with the phase at the end
+            add_op = AngleAddOp(last_op.angle, op.angle)
+            new_phase = PhaseOp(add_op.result)
+            rewriter.replace(last_op, [new_phase, add_op], [], safe_erase=False)
+            rewriter.erase(op, safe_erase=False)
+        elif last_op != op:
+            # No phase at the end, just move there
+            op.detach()
+            rewriter.insert(op, InsertPoint.after(last_op))

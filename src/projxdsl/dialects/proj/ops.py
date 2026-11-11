@@ -289,7 +289,7 @@ class EqOp(IRDLOperation):
 
 
 @irdl_op_definition
-class PhaseOp(IRDLOperation):
+class PhaseOp(IRDLOperation, HasCanonicalizationPatternsInterface):
     """Phase operation. Only allowed in unitary and mixed functions."""
 
     name = "proj.phase"
@@ -302,6 +302,12 @@ class PhaseOp(IRDLOperation):
 
     def __init__(self, angle: SSAValue):
         super().__init__(operands=[angle])
+
+    @classmethod
+    def get_canonicalization_patterns(cls) -> tuple[RewritePattern, ...]:
+        from projxdsl.dialects.proj.canonicalize import HoistAndMergePhasePattern
+
+        return (HoistAndMergePhasePattern(),)
 
 
 @irdl_op_definition
