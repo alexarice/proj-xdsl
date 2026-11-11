@@ -23,10 +23,10 @@ from xdsl.utils.lexer import Span
 from xdsl.utils.scoped_dict import ScopedDict
 
 from projxdsl.dialects.angle import AddOp, AngleType, PiOp, ScalarMultOp, ZeroOp
-from projxdsl.dialects.proj import (
+from projxdsl.dialects.proj.attrs import Basis, StateAttr
+from projxdsl.dialects.proj.ops import (
     AllocOp,
     AndOp,
-    Basis,
     CallOp,
     EqOp,
     FromBoolOp,
@@ -35,15 +35,13 @@ from projxdsl.dialects.proj import (
     NotOp,
     OrOp,
     PhaseOp,
-    ProjectionType,
     PureOp,
     QifOp,
-    QubitType,
     ReturnOp,
-    StateAttr,
     UnitaryOp,
     XorOp,
 )
+from projxdsl.dialects.proj.types import ProjectionType, QubitType
 from projxdsl.frontend.cst import (
     AllocExpr,
     AngleOpKind,

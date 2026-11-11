@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from xdsl.parser.generic_parser import GenericParser, ParserState
 from xdsl.utils.lexer import Input, Span
 
-from projxdsl.dialects.proj import State
+from projxdsl.dialects.proj.attrs import State
 from projxdsl.frontend.cst import (
     AllocExpr,
     AngleOpKind,

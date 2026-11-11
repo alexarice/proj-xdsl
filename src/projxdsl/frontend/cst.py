@@ -13,7 +13,7 @@ from enum import Enum
 
 from xdsl.utils.lexer import Span
 
-from projxdsl.dialects.proj import State
+from projxdsl.dialects.proj.attrs import State
 from projxdsl.func_kind import FuncKind
 
 # =============================================================================

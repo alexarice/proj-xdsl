@@ -2,8 +2,6 @@
 
 from xdsl.ir import Dialect
 
-from .attrs import Basis as Basis
-from .attrs import State as State
 from .attrs import StateAttr
 from .ops import (
     AllocOp,

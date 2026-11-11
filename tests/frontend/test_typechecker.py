@@ -13,7 +13,7 @@ from xdsl.rewriter import InsertPoint
 from xdsl.utils.scoped_dict import ScopedDict
 
 from projxdsl.dialects.angle import AddOp, AngleType, PiOp, ScalarMultOp, ZeroOp
-from projxdsl.dialects.proj import (
+from projxdsl.dialects.proj.ops import (
     AllocOp,
     AndOp,
     EqOp,
@@ -22,11 +22,10 @@ from projxdsl.dialects.proj import (
     NotOp,
     OrOp,
     PhaseOp,
-    ProjectionType,
     QifOp,
-    QubitType,
     XorOp,
 )
+from projxdsl.dialects.proj.types import ProjectionType, QubitType
 from projxdsl.frontend.parser import ProjParser
 from projxdsl.frontend.typechecker import (
     ProjectionBorrows,

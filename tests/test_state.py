@@ -1,6 +1,6 @@
 """Tests for the State enumeration and basis operations."""
 
-from projxdsl.dialects.proj import Basis, State
+from projxdsl.dialects.proj.attrs import Basis, State
 
 
 class TestStateBasis:
