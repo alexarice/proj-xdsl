@@ -63,13 +63,13 @@ class SplitQifElsePattern(RewritePattern):
         op.true_region.detach_block(true_block)
         op.false_region.detach_block(false_block)
 
-        first_qif = QifOp(op.condition, Region([true_block]))
+        first_qif = QifOp(op.condition, true_block)
         rewriter.insert(first_qif, insert_point)
 
         not_op = NotOp(op.condition)
         rewriter.insert(not_op, insert_point)
 
-        second_qif = QifOp(not_op.result, Region([false_block]))
+        second_qif = QifOp(not_op.result, false_block)
         rewriter.insert(second_qif, insert_point)
 
         rewriter.erase(op, safe_erase=False)
@@ -101,7 +101,7 @@ class SplitQifNoElsePattern(RewritePattern):
             op_to_split.detach()
 
             new_block = Block([op_to_split])
-            new_qif = QifOp(op.condition, Region([new_block]))
+            new_qif = QifOp(op.condition, new_block)
             rewriter.insert(new_qif, insert_point)
 
 
