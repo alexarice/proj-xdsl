@@ -1,7 +1,8 @@
+"""Projection dialect operations."""
+
 from __future__ import annotations
 
 from collections.abc import Sequence
-from enum import auto
 from typing import ClassVar
 
 from xdsl.dialects.builtin import (
@@ -14,7 +15,6 @@ from xdsl.dialects.builtin import (
     i1,
 )
 from xdsl.dialects.utils import (
-    EnumAttribute,
     parse_func_op_like,
     print_func_op_like,
 )
@@ -22,18 +22,14 @@ from xdsl.interfaces import HasCanonicalizationPatternsInterface
 from xdsl.ir import (
     Attribute,
     Block,
-    Dialect,
     Operation,
     OpTrait,
-    ParametrizedAttribute,
     Region,
     SSAValue,
-    TypeAttribute,
     VerifyException,
 )
 from xdsl.irdl import (
     IRDLOperation,
-    irdl_attr_definition,
     irdl_op_definition,
     irdl_to_attr_constraint,
     operand_def,
@@ -45,12 +41,8 @@ from xdsl.irdl import (
     var_operand_def,
     var_result_def,
 )
-from xdsl.parser import AttrParser, Parser
-from xdsl.pattern_rewriter import (
-    PatternRewriter,
-    RewritePattern,
-    op_type_rewrite_pattern,
-)
+from xdsl.parser import Parser
+from xdsl.pattern_rewriter import RewritePattern
 from xdsl.printer import Printer
 from xdsl.traits import (
     HasParent,
@@ -61,109 +53,16 @@ from xdsl.traits import (
     SymbolTable,
     SymbolUserOpInterface,
 )
-from xdsl.utils.str_enum import StrEnum
 
 from projxdsl.dialects.angle import AngleType
+from projxdsl.dialects.proj.attrs import StateAttr
+from projxdsl.dialects.proj.types import ProjectionType, QubitType
 from projxdsl.func_kind import FuncKind
-
-
-class Basis(StrEnum):
-    """
-    Basis enum for qubit borrow annotations.
-    """
-
-    X = auto()
-    Y = auto()
-    Z = auto()
-
-
-class State(StrEnum):
-    """
-    State enum for ket states.
-    """
-
-    ZERO = auto()
-    ONE = auto()
-    PLUS = auto()
-    MINUS = auto()
-    LEFT = auto()
-    RIGHT = auto()
-
-    def get_basis(self) -> Basis:
-        """Get the measurement basis for this state."""
-        match self:
-            case State.ZERO | State.ONE:
-                return Basis.Z
-            case State.PLUS | State.MINUS:
-                return Basis.X
-            case State.LEFT | State.RIGHT:
-                return Basis.Y
-
-
-@irdl_attr_definition
-class StateAttr(EnumAttribute[State]):
-    """
-    State attribute for ket states (|0>, |1>, |+>, |->, |L>, |R>).
-    """
-
-    name = "proj.state"
-
-    @classmethod
-    def ZERO(cls) -> StateAttr:
-        return StateAttr(State.ZERO)
-
-    @classmethod
-    def ONE(cls) -> StateAttr:
-        return StateAttr(State.ONE)
-
-    @classmethod
-    def PLUS(cls) -> StateAttr:
-        return StateAttr(State.PLUS)
-
-    @classmethod
-    def MINUS(cls) -> StateAttr:
-        return StateAttr(State.MINUS)
-
-    @classmethod
-    def LEFT(cls) -> StateAttr:
-        return StateAttr(State.LEFT)
-
-    @classmethod
-    def RIGHT(cls) -> StateAttr:
-        return StateAttr(State.RIGHT)
-
-    @classmethod
-    def parse_parameter(cls, parser: AttrParser) -> State:
-        with parser.in_angle_brackets():
-            return super().parse_parameter(parser)
-
-    def print_parameter(self, printer: Printer) -> None:
-        with printer.in_angle_brackets():
-            super().print_parameter(printer)
-
-
-@irdl_attr_definition
-class ProjectionType(ParametrizedAttribute, TypeAttribute):
-    """
-    Projection type (proj).
-    """
-
-    name = "proj.projection"
-
-
-@irdl_attr_definition
-class QubitType(ParametrizedAttribute, TypeAttribute):
-    """
-    qubit - Qubit type.
-    """
-
-    name = "proj.qubit"
 
 
 class FuncOpBase(IRDLOperation):
     """
-    Base class for function operations.
-    All function kinds share the same structure.
+    Base class for function operations. All function kinds share the same structure.
     """
 
     FUNC_KIND: ClassVar[FuncKind]
@@ -249,25 +148,16 @@ class AllowedInFuncKinds(OpTrait):
     """
 
     def __init__(self, min_kind: FuncKind):
-        """
-        Initialize the trait with a minimum required function kind.
-
-        Args:
-            min_kind: Minimum FuncKind required for this operation
-                     (e.g., FuncKind.MIXED for alloc/measure)
-        """
+        """Initialize the trait with a minimum required function kind."""
         self.min_kind = min_kind
 
     def verify(self, op: Operation) -> None:
         """Verify that the operation appears only in allowed function kinds."""
-
-        # Find the ancestor function operation
         func_op = op.parent_op()
         while func_op is not None and not isinstance(func_op, FuncOpBase):
             func_op = func_op.parent_op()
 
         if func_op is None:
-            # No function ancestor, allow the operation
             return
 
         if func_op.FUNC_KIND < self.min_kind:
@@ -283,10 +173,7 @@ ProjectionConstr = irdl_to_attr_constraint(ProjectionType)
 
 @irdl_op_definition
 class NotOp(IRDLOperation):
-    """
-    Negation operation for projections.
-    Takes a projection (proj) and returns a projection.
-    """
+    """Negation operation for projections."""
 
     name = "proj.not"
 
@@ -301,10 +188,7 @@ class NotOp(IRDLOperation):
 
 @irdl_op_definition
 class AndOp(IRDLOperation):
-    """
-    Conjunction operation for projections.
-    Takes two projections and returns a projection.
-    """
+    """Conjunction operation for projections."""
 
     name = "proj.and"
 
@@ -320,10 +204,7 @@ class AndOp(IRDLOperation):
 
 @irdl_op_definition
 class OrOp(IRDLOperation):
-    """
-    Disjunction operation for projections.
-    Takes two projections and returns a projection.
-    """
+    """Disjunction operation for projections."""
 
     name = "proj.or"
 
@@ -339,10 +220,7 @@ class OrOp(IRDLOperation):
 
 @irdl_op_definition
 class XorOp(IRDLOperation):
-    """
-    Exclusive-or operation for projections.
-    Takes two projections and returns a projection.
-    """
+    """Exclusive-or operation for projections."""
 
     name = "proj.xor"
 
@@ -358,10 +236,7 @@ class XorOp(IRDLOperation):
 
 @irdl_op_definition
 class FromBoolOp(IRDLOperation):
-    """
-    Cast operation from boolean to projection.
-    Takes a boolean (i1) and returns a projection.
-    """
+    """Cast operation from boolean to projection."""
 
     name = "proj.from_bool"
 
@@ -376,11 +251,7 @@ class FromBoolOp(IRDLOperation):
 
 @irdl_op_definition
 class AllocOp(IRDLOperation):
-    """
-    Qubit allocation operation.
-    Allocates a qubit in the specified state.
-    Only allowed in mixed functions.
-    """
+    """Qubit allocation operation. Only allowed in mixed functions."""
 
     name = "proj.alloc"
 
@@ -400,11 +271,7 @@ class AllocOp(IRDLOperation):
 
 @irdl_op_definition
 class EqOp(IRDLOperation):
-    """
-    Projection creation operation.
-    Creates a projection by comparing a qubit to a ket state.
-    The state determines the basis (ZERO/ONE=Z, PLUS/MINUS=X, LEFT/RIGHT=Y).
-    """
+    """Projection creation operation by comparing a qubit to a ket state."""
 
     name = "proj.eq"
 
@@ -424,11 +291,7 @@ class EqOp(IRDLOperation):
 
 @irdl_op_definition
 class PhaseOp(IRDLOperation):
-    """
-    Phase operation.
-    Takes an angle operand.
-    Only allowed in unitary and mixed functions.
-    """
+    """Phase operation. Only allowed in unitary and mixed functions."""
 
     name = "proj.phase"
 
@@ -444,11 +307,7 @@ class PhaseOp(IRDLOperation):
 
 @irdl_op_definition
 class MeasureOp(IRDLOperation):
-    """
-    Measurement operation.
-    Takes a projection and returns a boolean (i1).
-    Only allowed in mixed functions.
-    """
+    """Measurement operation. Only allowed in mixed functions."""
 
     name = "proj.measure"
 
@@ -465,11 +324,7 @@ class MeasureOp(IRDLOperation):
 
 @irdl_op_definition
 class QifOp(IRDLOperation, HasCanonicalizationPatternsInterface):
-    """
-    Quantum if operation for projections.
-    Executes the true region if the condition projection is true.
-    Only allowed in unitary and mixed functions.
-    """
+    """Quantum if operation for projections."""
 
     name = "proj.qif"
 
@@ -494,21 +349,13 @@ class QifOp(IRDLOperation, HasCanonicalizationPatternsInterface):
         )
 
     @classmethod
-    def get_canonicalization_patterns(cls) -> tuple[RewritePattern, ...]:
-        return (RemoveEmptyQifPattern(),)
-
-    @classmethod
     def parse(cls, parser: Parser) -> QifOp:
         condition = parser.parse_operand(ProjectionType())
         true_region = parser.parse_region()
-        # Ensure true_region has at least one block
-        # (required by single_block constraint)
         if not true_region.blocks:
             true_region.add_block(Block())
         if parser.parse_optional_keyword("else"):
             false_region = parser.parse_region()
-            # Ensure false_region has at least one block
-            # (required by single_block constraint)
             if not false_region.blocks:
                 false_region.add_block(Block())
         else:
@@ -535,30 +382,16 @@ class QifOp(IRDLOperation, HasCanonicalizationPatternsInterface):
         if bool(self.attributes.keys()):
             printer.print_attr_dict(self.attributes)
 
+    @classmethod
+    def get_canonicalization_patterns(cls) -> tuple[RewritePattern, ...]:
+        from projxdsl.dialects.proj.canonicalize import RemoveEmptyQifPattern
 
-class RemoveEmptyQifPattern(RewritePattern):
-    """Remove qif operations with empty regions."""
-
-    @op_type_rewrite_pattern
-    def match_and_rewrite(self, op: QifOp, rewriter: PatternRewriter, /):
-        true_block = op.true_region.blocks.first
-        if true_block is None or len(true_block.ops) > 0:
-            return
-
-        if op.false_region is not None:
-            false_block = op.false_region.blocks.first
-            if false_block is not None and len(false_block.ops) > 0:
-                return
-
-        rewriter.erase(op, safe_erase=False)
+        return (RemoveEmptyQifPattern(),)
 
 
 @irdl_op_definition
 class PureOp(FuncOpBase):
-    """
-    Pure classical function operation.
-    Classical computation only - no quantum operations allowed.
-    """
+    """Pure classical function operation."""
 
     name = "proj.pure"
 
@@ -567,10 +400,7 @@ class PureOp(FuncOpBase):
 
 @irdl_op_definition
 class UnitaryOp(FuncOpBase):
-    """
-    Unitary function operation.
-    Quantum operations without measurement or allocation.
-    """
+    """Unitary function operation."""
 
     name = "proj.unitary"
 
@@ -579,10 +409,7 @@ class UnitaryOp(FuncOpBase):
 
 @irdl_op_definition
 class MixedOp(FuncOpBase):
-    """
-    Mixed quantum channel function operation.
-    Full quantum operations including measurement and allocation.
-    """
+    """Mixed quantum channel function operation."""
 
     name = "proj.mixed"
 
@@ -591,10 +418,7 @@ class MixedOp(FuncOpBase):
 
 @irdl_op_definition
 class ReturnOp(IRDLOperation):
-    """
-    Return operation for function operations.
-    Terminates a proj.pure, proj.unitary, or proj.mixed function.
-    """
+    """Return operation for function operations."""
 
     name = "proj.return"
 
@@ -625,8 +449,6 @@ class CallOpSymbolUserOpInterface(SymbolUserOpInterface):
     """Interface for verifying proj.call operations."""
 
     def verify(self, op: Operation) -> None:
-        from projxdsl.dialects.proj import FuncOpBase
-
         assert isinstance(op, CallOp)
 
         found_callee = SymbolTable.lookup_symbol(op, op.callee)
@@ -636,8 +458,6 @@ class CallOpSymbolUserOpInterface(SymbolUserOpInterface):
         if not isinstance(found_callee, FuncOpBase):
             raise VerifyException(f"'{op.callee}' does not reference a valid function")
 
-        # Check function kind compatibility
-        # Hierarchy: pure ⊆ unitary ⊆ mixed
         caller_func = op.parent_op()
         while caller_func is not None and not isinstance(caller_func, FuncOpBase):
             caller_func = caller_func.parent_op()
@@ -689,10 +509,7 @@ class CallOpSymbolUserOpInterface(SymbolUserOpInterface):
 
 @irdl_op_definition
 class CallOp(IRDLOperation):
-    """
-    Function call operation.
-    Calls a function by symbol reference with the given arguments.
-    """
+    """Function call operation."""
 
     name = "proj.call"
 
@@ -723,28 +540,22 @@ class CallOp(IRDLOperation):
         )
 
 
-Proj = Dialect(
-    "proj",
-    [
-        AllocOp,
-        NotOp,
-        AndOp,
-        OrOp,
-        XorOp,
-        FromBoolOp,
-        EqOp,
-        MeasureOp,
-        PhaseOp,
-        QifOp,
-        ReturnOp,
-        CallOp,
-        PureOp,
-        UnitaryOp,
-        MixedOp,
-    ],
-    [
-        StateAttr,
-        QubitType,
-        ProjectionType,
-    ],
-)
+__all__ = [
+    "AllocOp",
+    "NotOp",
+    "AndOp",
+    "OrOp",
+    "XorOp",
+    "FromBoolOp",
+    "EqOp",
+    "MeasureOp",
+    "PhaseOp",
+    "QifOp",
+    "ReturnOp",
+    "CallOp",
+    "PureOp",
+    "UnitaryOp",
+    "MixedOp",
+    "FuncOpBase",
+    "AllowedInFuncKinds",
+]
