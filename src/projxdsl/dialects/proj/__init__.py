@@ -3,7 +3,10 @@
 from xdsl.ir import Dialect
 
 from projxdsl.dialects.proj.attrs import Basis, State, StateAttr
-from projxdsl.dialects.proj.canonicalize import RemoveEmptyQifPattern
+from projxdsl.dialects.proj.canonicalize import (
+    RemoveEmptyQifElsePattern,
+    RemoveEmptyQifPattern,
+)
 from projxdsl.dialects.proj.ops import (
     AllocOp,
     AndOp,
@@ -51,6 +54,7 @@ __all__ = [
     "ProjectionType",
     "QubitType",
     # Canonicalization
+    "RemoveEmptyQifElsePattern",
     "RemoveEmptyQifPattern",
 ]
 

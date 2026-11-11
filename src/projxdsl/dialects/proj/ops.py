@@ -390,9 +390,12 @@ class QifOp(IRDLOperation, HasCanonicalizationPatternsInterface):
 
     @classmethod
     def get_canonicalization_patterns(cls) -> tuple[RewritePattern, ...]:
-        from projxdsl.dialects.proj.canonicalize import RemoveEmptyQifPattern
+        from projxdsl.dialects.proj.canonicalize import (
+            RemoveEmptyQifElsePattern,
+            RemoveEmptyQifPattern,
+        )
 
-        return (RemoveEmptyQifPattern(),)
+        return (RemoveEmptyQifElsePattern(), RemoveEmptyQifPattern())
 
 
 @irdl_op_definition
