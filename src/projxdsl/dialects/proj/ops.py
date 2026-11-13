@@ -53,7 +53,7 @@ from xdsl.traits import (
     SymbolUserOpInterface,
 )
 
-from projxdsl.dialects.angle import AngleType
+from projxdsl.dialects.angle.ops import AngleType
 from projxdsl.dialects.proj.attrs import StateAttr
 from projxdsl.dialects.proj.types import ProjectionType, QubitType
 from projxdsl.func_kind import FuncKind

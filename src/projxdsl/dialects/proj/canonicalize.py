@@ -7,7 +7,7 @@ from xdsl.pattern_rewriter import (
 )
 from xdsl.rewriter import InsertPoint
 
-from projxdsl.dialects.angle import AddOp as AngleAddOp
+from projxdsl.dialects.angle.ops import AddOp as AngleAddOp
 from projxdsl.dialects.proj.ops import NotOp, PhaseOp, QifOp
 
 

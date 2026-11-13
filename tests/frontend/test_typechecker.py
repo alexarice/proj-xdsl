@@ -12,7 +12,7 @@ from xdsl.ir import Block, Operation, SSAValue
 from xdsl.rewriter import InsertPoint
 from xdsl.utils.scoped_dict import ScopedDict
 
-from projxdsl.dialects.angle import AddOp, AngleType, PiOp, ScalarMultOp, ZeroOp
+from projxdsl.dialects.angle.ops import AddOp, AngleType, PiOp, ScalarMultOp, ZeroOp
 from projxdsl.dialects.proj.ops import (
     AllocOp,
     AndOp,

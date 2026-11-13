@@ -22,7 +22,7 @@ from xdsl.utils.exceptions import VerifyException
 from xdsl.utils.lexer import Span
 from xdsl.utils.scoped_dict import ScopedDict
 
-from projxdsl.dialects.angle import AddOp, AngleType, PiOp, ScalarMultOp, ZeroOp
+from projxdsl.dialects.angle.ops import AddOp, AngleType, PiOp, ScalarMultOp, ZeroOp
 from projxdsl.dialects.proj.attrs import Basis, StateAttr
 from projxdsl.dialects.proj.ops import (
     AllocOp,
